@@ -135,13 +135,25 @@ internal sealed class EngineHost : IDisposable
             arguments[2] = options["method"]?.GetValue<int>() ?? 5;           // R8D  (FSR)
             arguments[3] = options["subtype"]?.GetValue<int>() ?? 0;          // R9D
             arguments[4] = ToScaled(options["scaleFactor"]?.GetValue<double>() ?? 1.5);  // RSP+0x28
-            arguments[6] = ToScaled(options["sharpness"]?.GetValue<double>() ?? 0.5);
+            arguments[5] = 0;                                                  // Vrs
+            arguments[6] = ToScaled(options["sharpness"]?.GetValue<double>() ?? 0.0);
             arguments[7] = 1;                                                  // ResizeBeforeScale
             arguments[8] = options["frameGeneration"]?.GetValue<int>() ?? 0;
             arguments[9] = 0;                                                  // FrameGenerationSize
             arguments[10] = options["fgMode"]?.GetValue<int>() ?? 0;
             arguments[11] = options["multiplier"]?.GetValue<int>() ?? 2;
             arguments[12] = options["targetFps"]?.GetValue<int>() ?? 0;
+            arguments[13] = ToScaled(options["flowScale"]?.GetValue<double>() ?? 1.0);
+            arguments[14] = 0;                                                 // ClipCursor
+            arguments[15] = 1;                                                 // CursorSensitivity
+            arguments[16] = 0;                                                 // HideCursor
+            arguments[17] = 0;                                                 // ScaleCursor
+            arguments[18] = options["syncMode"]?.GetValue<int>() ?? 0;
+            arguments[19] = options["maxFrameLatency"]?.GetValue<int>() ?? 1;
+            arguments[20] = 0;                                                 // GsyncSupport
+            arguments[21] = 0;                                                 // HdrSupport
+            arguments[22] = options["captureApi"]?.GetValue<int>() ?? 0;
+            arguments[23] = options["queueTarget"]?.GetValue<int>() ?? 1;
 
             for (int i = 0; i < arguments.Length; i++)
             {

@@ -1678,11 +1678,11 @@
 
                   <span style="font-size:11px;font-weight:700;color:var(--text3)">FPS alvo</span>
 
-                  <span style="font-size:13px;font-weight:900;color:var(--purple);font-family:'JetBrains Mono',monospace" id="ls-target-val">60</span>
+                  <span style="font-size:13px;font-weight:900;color:var(--purple);font-family:'JetBrains Mono',monospace" id="ls-target-val">100</span>
 
                 </div>
 
-                <input type="range" id="ls-target-fps" min="30" max="240" step="5" value="60"
+                <input type="range" id="ls-target-fps" min="30" max="300" step="1" value="100"
 
                   oninput="document.getElementById('ls-target-val').textContent=this.value"
 
@@ -1726,7 +1726,7 @@
 
               </div>
 
-              <input type="range" id="ls-flow-scale" min="0.25" max="1.0" step="0.05" value="1.0"
+              <input type="range" id="ls-flow-scale" min="0.5" max="2.0" step="0.1" value="1.0"
 
                 oninput="document.getElementById('ls-flow-val').textContent=parseFloat(this.value).toFixed(1)"
 
@@ -1791,6 +1791,26 @@
               </div>
 
               <div style="font-size:10px;color:var(--text3)">1 = menor latência · 2 = mais estável com GPU pesada</div>
+
+            </div>
+
+            <!-- Max Frame Latency: quanto o motor pode segurar antes de apresentar.
+                 1 = resposta imediata; 16 = mais suave, porém com atraso. -->
+            <div style="margin-top:12px">
+
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+
+                <span style="font-size:11px;font-weight:700;color:var(--text3)">Latência máxima</span>
+
+                <span style="font-size:13px;font-weight:900;color:var(--purple);font-family:'JetBrains Mono',monospace" id="ls-latency-val">1</span>
+
+              </div>
+
+              <input type="range" id="ls-latency" min="1" max="16" step="1" value="1"
+                oninput="document.getElementById('ls-latency-val').textContent=this.value"
+                style="width:100%">
+
+              <div style="font-size:10px;color:var(--text3)">Quadros que o motor pode segurar. 1 responde mais rápido.</div>
 
             </div>
 
@@ -1862,11 +1882,11 @@
 
                 <span style="font-size:11px;font-weight:700;color:var(--text3)">Nitidez</span>
 
-                <span style="font-size:13px;font-weight:900;color:var(--purple);font-family:'JetBrains Mono',monospace" id="ls-sharp-val">50</span>
+                <span style="font-size:13px;font-weight:900;color:var(--purple);font-family:'JetBrains Mono',monospace" id="ls-sharp-val">0</span>
 
               </div>
 
-              <input type="range" id="ls-sharpness" min="0" max="100" value="50"
+              <input type="range" id="ls-sharpness" min="0" max="100" value="0"
 
                 oninput="document.getElementById('ls-sharp-val').textContent=this.value"
 
@@ -3819,7 +3839,7 @@
 
       lsfg3Multiplier: parseInt(document.getElementById('ls-multiplier')?.value || '2'),
 
-      lsfg3Target:    parseInt(document.getElementById('ls-target-fps')?.value || '60'),
+      lsfg3Target:    parseInt(document.getElementById('ls-target-fps')?.value || '100'),
 
       lsfg2Mode:      g('ls-lsfg2-mode'),
 
@@ -3831,11 +3851,13 @@
 
       queueTarget:    parseInt(document.getElementById('ls-queue-val')?.textContent || '1'),
 
+      maxFrameLatency: parseInt(document.getElementById('ls-latency')?.value || '1'),
+
       scaleType:      g('ls-scale-type'),
 
       fsrType:        g('ls-fsr-type'),
 
-      sharpness:      parseInt(document.getElementById('ls-sharpness')?.value || '50'),
+      sharpness:      parseInt(document.getElementById('ls-sharpness')?.value || '0'),
 
       scaleMode:      g('ls-scale-mode'),
 
