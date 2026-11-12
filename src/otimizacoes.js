@@ -708,20 +708,49 @@
   // Copiado de src/plano.js da referência: cada página listada aqui exige uma feature na conta
   // do usuário. Páginas fora do mapa (desempenho, inputlag, memoria, limpeza, live, tweaks,
   // scaling) são livres para todo mundo.
+  // ── Páginas que exigem plano ──
+  //
+  // Regra da referência: medir é grátis, aplicar é pago.
+  //   Grátis: Painel, Gargalo, Informações do PC, Verificar hardware, Sobre
+  //   Pago:   as páginas de otimização (Desempenho, Mouse e teclado, Memória, Limpeza,
+  //           Programas, Internet e live, Windows, Inicialização, Meus jogos, DLSS/FSR,
+  //           Medidor de FPS)
+  //   Livre para todos, fora do mapa: VL Scaling
+  //
+  // Os ids abaixo são os do NOSSO app (conferidos no menu lateral do dashboard rodando).
   const PAGE_FEATURE = {
-    dashboard: 'painel', jogos: 'jogos', fps: 'fps', gargalo: 'gargalo', hardware: 'hardware',
-    pcinfo: 'hardware', inicializacao: 'inicializacao', sobre: 'sobre',
+    desempenho: 'otimizar',
+    inputlag: 'otimizar',
+    memoria: 'otimizar',
+    limpeza: 'otimizar',
+    programas: 'otimizar',
+    live: 'otimizar',
+    tweaks: 'otimizar',
+    inicializacao: 'otimizar',
+    jogos: 'otimizar',
+    opti: 'otimizar',
+    fps: 'otimizar',
   };
+
+  // Páginas sempre liberadas, mesmo sem estar no mapa (documentando a intenção)
+  const PAGINAS_LIVRES = ['dashboard', 'gargalo', 'pcinfo', 'hardware', 'sobre'];
 
   // Libera a página quando: a conta tem ['*'], ou tem a feature que a página pede.
   // Sem login e sem Supabase configurado, st.conta.semLogin é true e tudo é liberado.
   function allowed(page) {
     const ct = st.conta;
+    // Sem login (ou app sem Supabase) nada é travado.
     if (!ct || ct.semLogin) return true;
     const fs2 = Array.isArray(ct.features) ? ct.features : [];
+    // Plano completo libera tudo.
     if (fs2.includes('*')) return true;
+
     const need = PAGE_FEATURE[page];
-    return !!need && fs2.includes(need);
+    // Página fora do mapa é livre: medir, ver gargalo e ver o PC continuam grátis,
+    // como na referência ("medir o PC continua grátis").
+    if (!need) return true;
+
+    return fs2.includes(need);
   }
 
 
