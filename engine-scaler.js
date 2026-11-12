@@ -205,6 +205,52 @@ function mountScaler(ex) {
     }
   };
 
+// ── canais ls-launch / ls-stop ──
+  // A tela do VL Scaling chama 'ls-launch' (nome do GDZ) e nao 'gdz-scaling-apply'.
+  // Aqui o destino e o motor que acompanha o pacote, entao o cliente nao precisa ter o
+  // Lossless instalado na Steam. Sobrescreve o ex.lsLaunch do engine-extras, que procurava
+  // a instalacao da Steam e falhava quando ela nao existia.
+  ex.lsLaunch = async (cfg) => {
+    const c = cfg && typeof cfg === 'object' ? cfg : {};
+    const result = engine.accepts({
+      scaleType: c.scaleType,
+      fsrType: c.fsrType,
+      scaleFactor: c.scaleFactor,
+      sharpness: c.sharpness,
+      frameGeneration: c.fgType || c.frameGeneration,
+      multiplier: c.lsfg3Multiplier || 2,
+      targetFps: c.lsfg3Target,
+      flowScale: c.flowScale,
+      queueTarget: c.queueTarget,
+      maxFrameLatency: c.maxFrameLatency,
+      syncMode: c.syncMode,
+      captureApi: c.captureApi,
+      lsfg3Mode: c.lsfg3Mode,
+      resizeBefore: !!c.resizeBefore,
+      hdrCompat: !!c.hdrCompat,
+      scaleCursor: !!c.scaleCursor,
+      vrs: c.vrs !== false,
+      autoScale: !!c.autoScale,
+      autoDelay: c.autoDelay,
+    });
+    if (!result.ok) return { success: false, error: result.error || result.message };
+    // dispara o atalho que faz o Lossless comecar a capturar
+    const hotkey = pressStartHotkey();
+    return {
+      success: true,
+      engine: 'lossless',
+      message: result.message + (hotkey ? ' Captura disparada.' : ' Aperte Ctrl+Alt+S no jogo.'),
+    };
+  };
+
+  ex.lsStop = async () => {
+    const r = engine.stop();
+    return { success: true, message: r.message };
+  };
+
+  ex.lsConfig = async () => engine.lerGravado();
+  ex.lsStatus = async () => engine.status();
+
   return ex;
 }
 

@@ -22,6 +22,12 @@ const EXE = path.join(APP_DIR, 'LosslessScaling.exe');
 const SETTINGS_DIR = path.join(process.env.LOCALAPPDATA || os.tmpdir(), 'Lossless Scaling');
 const SETTINGS = path.join(SETTINGS_DIR, 'Settings.xml');
 
+// Editor do Settings.xml: lê o bloco <Profile> que o Lossless já criou e troca só os campos
+// pedidos. Reescrever o arquivo do zero não funciona porque o Lossless valida cada valor contra
+// o enum dele e descarta o arquivo inteiro quando não reconhece (era o que acontecia: a tela
+// mandava LS1/2x/LSFG3 e o Lossless abria com Off/1.5/165).
+const editSettings = require('./escrever-settings');
+
 // Nomes que a interface usa → valores que o Settings.xml aceita.
 const SCALING_TYPE = {
   off: 'Off', desligado: 'Off',
@@ -146,15 +152,18 @@ function available() {
   catch (e) { return false; }
 }
 
-// Grava o Settings.xml com backup do original, para poder restaurar depois.
+// Grava a configuração EDITANDO o Settings.xml que o Lossless já criou.
+//
+// Reescrever o arquivo do zero não funciona: o Lossless valida cada campo contra o enum dele e,
+// ao encontrar um valor que não conhece ('OFF' em vez de 'Off', 'ANIME4K' em vez de 'Anime4K'),
+// descarta o arquivo e mantém a configuração que estava na memória. Era por isso que a tela
+// mandava LS1/2x/LSFG3 e o Lossless abria com Off/1.5/165.
+//
+// O editor abaixo (escrever-settings.js) faz o que o GDZ faz: lê o bloco <Profile> existente e
+// troca só os campos pedidos, usando os enums exatos do binário.
 function writeSettings(config) {
-  fs.mkdirSync(SETTINGS_DIR, { recursive: true });
-  try {
-    if (fs.existsSync(SETTINGS) && !fs.existsSync(SETTINGS + '.vl-backup')) {
-      fs.copyFileSync(SETTINGS, SETTINGS + '.vl-backup');
-    }
-  } catch (e) { /* sem backup não impede gravar */ }
-  fs.writeFileSync(SETTINGS, buildSettings(config), 'utf8');
+  const r = editSettings.gravar(config);
+  if (!r.ok) throw new Error(r.error);
   return SETTINGS;
 }
 
@@ -215,14 +224,7 @@ function fecharInstancia() {
 
 // Le o Settings.xml que esta no disco agora, para conferir se o motor aceitou o arquivo.
 function lerGravado() {
-  try {
-    const xml = fs.readFileSync(SETTINGS, 'utf8');
-    const campos = {};
-    const re = /<([A-Za-z0-9_]+)>([^<]*)<\/\1>/g;
-    let m;
-    while ((m = re.exec(xml)) !== null) campos[m[1]] = m[2];
-    return campos;
-  } catch (e) { return null; }
+  return editSettings.ler();
 }
 
 // Fluxo completo, igual ao do GDZ:
@@ -233,16 +235,30 @@ function lerGravado() {
 function accepts(config) {
   if (!available()) return { ok: false, error: 'LosslessScaling.exe não encontrado.' };
 
+  // A ORDEM É CRÍTICA. O Lossless, ao fechar, grava a configuração que está na memória dele por
+  // cima do Settings.xml. Se eu gravar antes de fechar, ele sobrescreve o meu arquivo com os
+  // valores antigos, e o resultado é a configuração "não pegar" (era o que acontecia: a tela
+  // mandava LSFG3 e o arquivo ficava Off).
+  //  1. fecha a instância antiga (e espera ela sumir)
+  //  2. só então grava o Settings.xml
+  //  3. abre de novo, agora lendo o arquivo que acabei de escrever
+  const fechou = fecharInstancia();
+  if (fechou) {
+    // espera o processo sair de verdade antes de tocar no arquivo
+    for (let i = 0; i < 25; i++) {
+      if (!running()) break;
+      try { require('child_process').execFileSync('timeout', ['/t', '1', '/nobreak'], { windowsHide: true, stdio: 'ignore', timeout: 3000 }); }
+      catch (e) { }
+    }
+    // margem para o Lossless terminar de salvar a configuracao dele
+    try { require('child_process').execFileSync('timeout', ['/t', '1', '/nobreak'], { windowsHide: true, stdio: 'ignore', timeout: 3000 }); }
+    catch (e) { }
+  }
+
+  // Agora sim: com o processo fora, nada sobrescreve o arquivo.
   let settings;
   try { settings = writeSettings(config); }
   catch (e) { return { ok: false, error: 'Não foi possível gravar a configuração: ' + e.message }; }
-
-  const fechou = fecharInstancia();
-  if (fechou) {
-    // dar tempo de o processo sair e liberar o arquivo antes de abrir de novo
-    try { require('child_process').execFileSync('timeout', ['/t', '2', '/nobreak'], { windowsHide: true, stdio: 'ignore', timeout: 5000 }); }
-    catch (e) { }
-  }
 
   const started = launch();
   if (!started.ok) return started;
