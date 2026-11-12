@@ -325,7 +325,7 @@ const TWEAKS = [
     reg: [{ path: HKLM + '\\SOFTWARE\\Policies\\Microsoft\\Windows\\LocationAndSensors', name: 'DisableLocation', type: 'DWord', on: 1, off: 0 }],
   }),
   // — Windows: praticidade
-  T('end-task', { rec: true,
+  T('end-task', { premium: true, rec: true,
     cat: 'tweaks', title: 'Encerrar tarefa no botão direito', tags: ['Praticidade'],
     desc: 'Botão "Finalizar tarefa" direto no menu da barra de tarefas.',
     reg: [{ path: ADV, name: 'TaskbarEndTask', type: 'DWord', on: 1, off: 0 }],
@@ -345,7 +345,7 @@ const TWEAKS = [
     desc: 'O Explorador começa em Este PC, não em Acesso rápido.',
     reg: [{ path: ADV, name: 'LaunchTo', type: 'DWord', on: 1, off: 2 }],
   }),
-  T('classic-menu', {
+  T('classic-menu', { premium: true,
     cat: 'tweaks', title: 'Menu de contexto clássico', restart: 'explorer', tags: ['Praticidade'],
     desc: 'O botão direito volta a mostrar todas as opções de uma vez (Windows 11).',
     reg: [],
@@ -366,7 +366,7 @@ const TWEAKS = [
     desc: 'Tira o botão de visão de tarefas da barra.',
     reg: [{ path: ADV, name: 'ShowTaskViewButton', type: 'DWord', on: 0, off: 1 }],
   }),
-  T('taskbar-left', {
+  T('taskbar-left', { premium: true,
     cat: 'tweaks', title: 'Barra de tarefas à esquerda', tags: ['Visual'],
     desc: 'Botão Iniciar e ícones no canto esquerdo, como no Windows 10.',
     note: 'Só existe no Windows 11.',
@@ -470,7 +470,7 @@ const ACTIONS = {
     detect: `if ((Get-Val '${HKLM}\\SYSTEM\\CurrentControlSet\\Control\\GraphicsDrivers' 'HwSchMode') -eq 2) { Write-Output '1' } else { Write-Output '0' }`,
     revert: `Set-Val '${HKLM}\\SYSTEM\\CurrentControlSet\\Control\\GraphicsDrivers' 'HwSchMode' 1 'DWord'; Write-Output 'ok'`,
   },
-  'Jogos em Janela Otimizados': {
+  'Jogos em Janela Otimizados': { premium: true,
     tag: 'desempenho', rec: true, title: 'Jogos em janela e sem bordas otimizados',
     desc: 'Jogos em janela ou tela cheia sem bordas passam a usar a apresentação moderna: menos atraso, G-Sync/FreeSync e Auto HDR.',
     regs: [{ path: HKCU + '\\Software\\Microsoft\\DirectX\\GraphicsSettings', name: 'SwapEffectUpgradeEnable', type: 'DWord', on: 1, off: 0 }],

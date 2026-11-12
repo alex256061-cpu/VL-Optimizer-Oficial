@@ -1,0 +1,39 @@
+/* login-theme.css — ajustes da tela de login no tema do VL Optimizer.
+   O login.html ja traz o essencial no <style>; este arquivo existe para o tema
+   escuro/claro e para o que a tela de login compartilha com o resto do app. */
+
+:root {
+  --vl-vermelho: #ff1f2e;
+  --vl-vermelho-escuro: #c00c1a;
+  --vl-fundo: #050308;
+  --vl-painel: #0a0710;
+  --vl-borda: rgba(255, 255, 255, 0.07);
+  --vl-texto: #f5f5f7;
+  --vl-texto-fraco: #8b87a0;
+}
+
+/* Tema claro: mantém a mesma estrutura, só inverte as superfícies. */
+[data-theme="light"] {
+  --vl-fundo: #f7f5fb;
+  --vl-painel: #ffffff;
+  --vl-borda: rgba(20, 10, 30, 0.09);
+  --vl-texto: #1b1024;
+  --vl-texto-fraco: #5f5a73;
+}
+
+[data-theme="light"] body { background: var(--vl-fundo); }
+[data-theme="light"] .painel { background: var(--vl-painel); border-left-color: var(--vl-borda); }
+[data-theme="light"] .marca-nome,
+[data-theme="light"] .centro h1,
+[data-theme="light"] .prova b { color: var(--vl-texto); }
+[data-theme="light"] .centro p,
+[data-theme="light"] .esqueci,
+[data-theme="light"] .termos { color: var(--vl-texto-fraco); }
+[data-theme="light"] .campo input {
+  background: rgba(20, 10, 30, 0.04);
+  border-color: var(--vl-borda);
+  color: var(--vl-texto);
+}
+[data-theme="light"] .abas { background: rgba(20, 10, 30, 0.05); }
+[data-theme="light"] .aba { color: var(--vl-texto-fraco); }
+[data-theme="light"] .verificando { background: var(--vl-fundo); color: var(--vl-texto-fraco); }

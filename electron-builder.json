@@ -15,6 +15,7 @@
                   "engine-scaler.js",
                   "engine-bridge.js",
                   "updater.js",
+                  "supabase.js",
                   "lossless-official.js",
                   "escrever-settings.js",
                   "gdz-launch.js",

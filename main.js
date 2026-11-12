@@ -29,6 +29,7 @@ const core = require('./engine');
 const ex = require('./engine-extras');
 const feat = require('./features');
 const updater = require('./updater');
+const conta = require('./supabase');
 require('./engine-scaler').mountScaler(ex);
 
 // Em modos de teste, usa um perfil isolado: evita conflito com a instância elevada
@@ -67,7 +68,18 @@ function createWindow() {
       contextIsolation: true, nodeIntegration: false, sandbox: false, spellcheck: false,
     },
   });
-  win.loadFile(path.join(__dirname, 'src', 'dashboard.html'), process.argv.includes('--shots') ? { query: { shot: '1' } } : undefined);
+  // Com o login configurado, quem nao tem sessao valida passa pela tela de entrada.
+  // Sem as chaves do Supabase o app abre direto, para nao travar quem ja usa.
+  (async () => {
+    let logado = false;
+    if (conta.configurado()) {
+      try { const s = await conta.sessao(); logado = !!(s && s.valid); } catch (e) { }
+    } else {
+      logado = true;
+    }
+    const pagina = logado ? 'dashboard.html' : 'login.html';
+    win.loadFile(path.join(__dirname, 'src', pagina), process.argv.includes('--shots') ? { query: { shot: '1' } } : undefined);
+  })();
   win.once('ready-to-show', () => {
     if (isSmoke) return;
     win.show();
@@ -351,10 +363,24 @@ function startTicker() {
 // ── IPC ──
 const H = (name, fn) => ipcMain.handle(name, (e, arg) => fn(arg));
 
-H('get-user', () => ex.getUser());
-H('check-session', () => ({ valid: true }));
-H('login', () => ({ success: true, user: ex.getUser() }));
-H('register', () => ({ success: true }));
+H('get-user', () => conta.usuario());
+H('check-session', () => conta.sessao());
+H('login', (a) => conta.entrar(a && a.email, a && a.password));
+H('register', (a) => conta.registrar(a && a.name, a && a.email, a && a.password));
+H('logout', () => conta.sair());
+H('ir-para-login', () => { conta.sair(); if (win && !win.isDestroyed()) win.loadFile(path.join(__dirname, 'src', 'login.html')); return { success: true }; });
+H('recuperar-senha', (a) => conta.recuperar(a && a.email));
+H('conta-status', () => ({ configurado: conta.configurado() }));
+// Plano do usuario logado: 'premium' libera os itens trancados; 'free' mantem o cadeado.
+// Sem as chaves do Supabase, devolve premium para nao bloquear quem ja usa o app.
+H('conta-plano', async () => {
+  if (!conta.configurado()) return { plano: 'premium', ilimitado: true };
+  try {
+    const s = await conta.sessao();
+    if (!s || !s.valid) return { plano: 'free' };
+    return { plano: s.user.plan, ate: s.user.premiumUntil, nome: s.user.name, email: s.user.email };
+  } catch (e) { return { plano: 'free', erro: e.message }; }
+});
 H('update-status', () => {
   // Estado do auto-update (GitHub Releases). Sem rede ou sem release publicado, devolve o estado
   // atual com error preenchido: a tela mostra o aviso em vez de quebrar.

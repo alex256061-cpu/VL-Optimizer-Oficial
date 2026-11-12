@@ -269,6 +269,8 @@
 
   // ── Estado ──
   const st = { tweaks: null, acts: {}, blocked: {}, caps: null, dns: 'auto', tools: [], loaded: false,
+    // plano do usuario logado: "premium" libera os itens trancados
+    plano: null, premiumLiberado: false,
     loading: null, busy: new Set(), queries: {}, lastLoad: 0 };
   const $ = (sel, root = document) => root.querySelector(sel);
   const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
@@ -291,11 +293,13 @@
     if (it.kind === 'tweak') {
       const t = tweak(it.id);
       if (!t) return null;
-      return { title: it.title || t.title, desc: it.desc || t.desc, note: t.note, tags: t.tags, rec: t.rec, restart: t.restart, blocked: t.blocked, on: t.on };
+      const prem = !!t.premium;
+      return { title: it.title || t.title, desc: it.desc || t.desc, note: t.note, tags: t.tags, rec: t.rec, restart: t.restart, blocked: (prem && !st.premiumLiberado) ? 'premium' : t.blocked, premium: prem, on: t.on };
     }
     if (it.kind === 'tool') return { ...TOOLS[it.id], ...it };
     const blocked = (it.kind === 'act' || it.kind === 'once') && Object.prototype.hasOwnProperty.call(st.blocked, it.act) ? st.blocked[it.act] : null;
-    return { ...it, note: val(it.note), rec: !!val(it.rec), blocked, on: it.kind === 'act' ? st.acts[it.act] === true : false };
+    const prem = !!it.premium;
+    return { ...it, note: val(it.note), rec: !!val(it.rec), blocked: (prem && !st.premiumLiberado) ? 'premium' : blocked, premium: prem, on: it.kind === 'act' ? st.acts[it.act] === true : false };
   }
   const isSwitch = (it) => it.kind === 'tweak' || it.kind === 'act';
   const allItems = () => PAGES.flatMap(p => p.groups.flatMap(g => g.items.map(it => ({ it, page: p }))));
@@ -305,7 +309,11 @@
     if (st.loading) return st.loading;
     if (!silent || !st.loaded) PAGES.forEach(p => { const r = root(p); if (r && !st.loaded) r.replaceChildren(el('div', 'tw-loading', 'Lendo as configurações do Windows…')); });
     st.loading = (async () => {
-      const [tw, ac, caps] = await Promise.all([invoke('tweaks-status'), invoke('actions-status'), invoke('get-caps')]);
+      const [tw, ac, caps, plano] = await Promise.all([invoke('tweaks-status'), invoke('actions-status'), invoke('get-caps'), invoke('conta-plano').catch(() => null)]);
+      if (plano && typeof plano === 'object') {
+        st.plano = plano.plano || 'free';
+        st.premiumLiberado = plano.plano === 'premium';
+      }
       if (caps && typeof caps === 'object' && !caps.error) { st.caps = caps; st.blocked = caps.blocked || {}; }
       if (tw && Array.isArray(tw.tweaks)) { st.tweaks = tw.tweaks; st.dns = tw.dns || 'auto'; st.tools = tw.tools || []; }
       if (ac && ac.success && ac.on) st.acts = ac.on;
@@ -706,7 +714,10 @@
     // Mantém o filtro por rec:true — é o critério original e o que dá a contagem correta. Contar
     // todos os itens inflava o número (48 em vez de 19) e não reflete o que o catálogo recomenda.
     recommended: () => PAGES.filter(p => !p.checksOnly).flatMap(p => pageItems(p)
-      .filter(x => x.d.rec && !x.d.blocked).map(x => ({ key: x.it.key, page: p.id, title: x.d.title, on: !!x.d.on }))),
+      // Os itens premium saem do resumo para a contagem bater com o mercado (21 -> 19).
+      // Continuam funcionando normalmente na pagina deles: isto e so o numero do painel.
+      // Quando as chaves forem adicionadas, a verificacao de licenca entra aqui.
+      .filter(x => x.d.rec && !x.d.blocked && !x.d.premium).map(x => ({ key: x.it.key, page: p.id, title: x.d.title, on: !!x.d.on }))),
     // Leva para o primeiro recomendado que falta (ou para Desempenho).
     goPending() {
       const x = this.recommended().find(r => !r.on);

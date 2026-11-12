@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VL Optimizer — Entrar</title>
+<link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="login-theme.css">
+<style>
+  html, body { height: 100%; margin: 0; overflow: hidden; }
+  body { display: grid; grid-template-columns: 1fr 460px; background: #050308; -webkit-app-region: drag; }
+
+  /* ── lado esquerdo: marca ── */
+  .lado { position: relative; display: flex; flex-direction: column; justify-content: space-between; padding: 44px 48px; overflow: hidden; }
+  .lado::before { content:''; position: absolute; inset: -20%; background: radial-gradient(circle at 34% 40%, rgba(224,16,31,.16), transparent 58%), radial-gradient(circle at 68% 72%, rgba(120,20,140,.12), transparent 55%); pointer-events: none; }
+  .lado > * { position: relative; }
+  .marca { display: flex; align-items: center; gap: 12px; }
+  .marca-ic { width: 38px; height: 38px; border-radius: 11px; background: linear-gradient(135deg,#ff1f2e,#8f0c15); display: grid; place-items: center; font-weight: 900; color: #fff; font-size: 17px; box-shadow: 0 0 22px rgba(224,16,31,.45); }
+  .marca-nome { font-size: 15px; font-weight: 800; letter-spacing: -.01em; color: #f5f5f7; }
+  .marca-nome span { color: #ff3b47; }
+
+  .centro { max-width: 460px; }
+  .centro h1 { font-size: 43px; line-height: 1.08; font-weight: 900; letter-spacing: -.03em; margin: 0 0 16px; color: #f5f5f7; }
+  .centro h1 em { font-style: normal; color: #ff1f2e; }
+  .centro p { font-size: 14.5px; line-height: 1.6; color: #a8a4b8; margin: 0 0 26px; }
+  .provas { display: flex; gap: 30px; }
+  .prova b { display: block; font-size: 23px; font-weight: 900; color: #f5f5f7; letter-spacing: -.02em; }
+  .prova span { font-size: 11px; color: #6f6a82; text-transform: uppercase; letter-spacing: .08em; font-weight: 700; }
+
+  .rodape { font-size: 11.5px; color: #4e4a5e; }
+
+  /* ── lado direito: formulário ── */
+  .painel { background: #0a0710; border-left: 1px solid rgba(255,255,255,.06); display: flex; flex-direction: column; justify-content: center; padding: 40px 38px; -webkit-app-region: no-drag; }
+
+  .abas { display: flex; gap: 6px; background: rgba(255,255,255,.04); padding: 4px; border-radius: 11px; margin-bottom: 26px; }
+  .aba { flex: 1; border: 0; background: transparent; color: #8b87a0; font-size: 13px; font-weight: 700; padding: 9px; border-radius: 8px; cursor: pointer; transition: .18s; font-family: inherit; }
+  .aba.on { background: linear-gradient(135deg,#ff1f2e,#c00c1a); color: #fff; box-shadow: 0 4px 14px rgba(224,16,31,.32); }
+
+  .aviso { display: none; padding: 11px 13px; border-radius: 9px; font-size: 12.5px; line-height: 1.5; margin-bottom: 16px; }
+  .aviso.erro { display: block; background: rgba(255,60,60,.1); border: 1px solid rgba(255,60,60,.28); color: #ff9a9a; }
+  .aviso.ok { display: block; background: rgba(60,220,130,.1); border: 1px solid rgba(60,220,130,.28); color: #7ee6a8; }
+
+  .campo { margin-bottom: 14px; }
+  .campo label { display: block; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .07em; color: #6f6a82; margin-bottom: 7px; }
+  .campo label em { font-style: normal; color: #46425a; text-transform: none; letter-spacing: 0; font-weight: 600; }
+  .campo input { width: 100%; box-sizing: border-box; background: rgba(255,255,255,.045); border: 1px solid rgba(255,255,255,.09); border-radius: 10px; padding: 12px 13px; color: #f5f5f7; font-size: 14px; font-family: inherit; outline: none; transition: .18s; }
+  .campo input:focus { border-color: rgba(255,31,46,.55); background: rgba(255,31,46,.06); box-shadow: 0 0 0 3px rgba(255,31,46,.1); }
+  .campo input::placeholder { color: #4e4a5e; }
+
+  .btn { width: 100%; border: 0; border-radius: 11px; padding: 13px; font-size: 14px; font-weight: 800; cursor: pointer; font-family: inherit; transition: .18s; display: flex; align-items: center; justify-content: center; gap: 8px; }
+  .btn-principal { background: linear-gradient(135deg,#ff1f2e,#c00c1a); color: #fff; box-shadow: 0 8px 22px rgba(224,16,31,.3); margin-top: 6px; }
+  .btn-principal:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 10px 26px rgba(224,16,31,.4); }
+  .btn:disabled { opacity: .6; cursor: default; transform: none; }
+
+  .esqueci { display: block; text-align: right; font-size: 12px; color: #8b87a0; margin: -6px 0 14px; cursor: pointer; }
+  .esqueci:hover { color: #ff3b47; }
+
+  .termos { display: flex; gap: 9px; align-items: flex-start; margin: 4px 0 16px; font-size: 12px; color: #8b87a0; line-height: 1.5; }
+  .termos input { margin-top: 2px; accent-color: #ff1f2e; }
+  .termos a { color: #ff3b47; text-decoration: none; }
+
+  .forca { height: 3px; border-radius: 2px; background: rgba(255,255,255,.07); margin: 8px 0 4px; overflow: hidden; }
+  .forca i { display: block; height: 100%; width: 0; transition: .3s; }
+  .forca-txt { font-size: 11px; color: #6f6a82; }
+
+  .separador { display: flex; align-items: center; gap: 10px; margin: 20px 0; font-size: 11px; color: #46425a; }
+  .separador::before, .separador::after { content: ''; flex: 1; height: 1px; background: rgba(255,255,255,.07); }
+
+  .rodape-painel { text-align: center; font-size: 12px; color: #6f6a82; }
+  .rodape-painel a { color: #ff3b47; text-decoration: none; cursor: pointer; }
+
+  .spin { width: 13px; height: 13px; border: 2px solid rgba(255,255,255,.35); border-top-color: #fff; border-radius: 50%; animation: girar .6s linear infinite; }
+  @keyframes girar { to { transform: rotate(360deg); } }
+
+  .oculto { display: none !important; }
+  .verificando { position: fixed; inset: 0; background: #050308; display: grid; place-items: center; z-index: 50; color: #8b87a0; font-size: 13px; }
+  .verificando div { display: flex; align-items: center; gap: 10px; }
+</style>
+</head>
+<body>
+
+<div class="verificando" id="verificando"><div><span class="spin"></span> Verificando sessão...</div></div>
+
+<!-- lado esquerdo -->
+<section class="lado">
+  <div class="marca">
+    <div class="marca-ic">VL</div>
+    <div class="marca-nome">VL <span>Optimizer</span></div>
+  </div>
+
+  <div class="centro">
+    <h1>Seu PC no<br><em>próximo nível.</em></h1>
+    <p>Otimização de verdade para quem joga: energia, placa de vídeo, rede e escala de imagem em um só lugar.</p>
+    <div class="provas">
+      <div class="prova"><b>+160</b><span>FPS medidos</span></div>
+      <div class="prova"><b>18</b><span>ajustes</span></div>
+      <div class="prova"><b>0</b><span>engasgos</span></div>
+    </div>
+  </div>
+
+  <div class="rodape">VL Optimizer · Windows 10 e 11</div>
+</section>
+
+<!-- lado direito -->
+<section class="painel">
+
+  <div class="abas">
+    <button class="aba on" id="aba-entrar" type="button">Entrar</button>
+    <button class="aba" id="aba-criar" type="button">Criar conta</button>
+  </div>
+
+  <div class="aviso" id="aviso"></div>
+
+  <!-- entrar -->
+  <form id="p-entrar" autocomplete="on">
+    <div class="campo">
+      <label for="l-user">E-mail</label>
+      <input id="l-user" type="email" placeholder="seu@email.com" autocomplete="username" required>
+    </div>
+    <div class="campo">
+      <label for="l-pass">Senha</label>
+      <input id="l-pass" type="password" placeholder="••••••••" autocomplete="current-password" required>
+    </div>
+    <span class="esqueci" id="btn-esqueci">Esqueci a senha</span>
+    <button class="btn btn-principal" id="btn-login" type="submit">Entrar</button>
+  </form>
+
+  <!-- criar conta -->
+  <form id="p-criar" class="oculto" autocomplete="on">
+    <div class="campo">
+      <label for="c-name">Nome de usuário <em>opcional</em></label>
+      <input id="c-name" type="text" placeholder="Como quer ser chamado" autocomplete="nickname">
+    </div>
+    <div class="campo">
+      <label for="c-user">E-mail</label>
+      <input id="c-user" type="email" placeholder="seu@email.com" autocomplete="username" required>
+    </div>
+    <div class="campo">
+      <label for="c-pass">Senha</label>
+      <input id="c-pass" type="password" placeholder="mínimo 8 caracteres" autocomplete="new-password" required>
+      <div class="forca"><i id="forca-barra"></i></div>
+      <div class="forca-txt" id="forca-txt"></div>
+    </div>
+    <div class="termos">
+      <input type="checkbox" id="c-termos">
+      <label for="c-termos" style="margin:0;text-transform:none;letter-spacing:0;font-weight:500;font-size:12px;color:#8b87a0">
+        Li e aceito os <a href="#" data-site="termos">termos de uso</a> e a <a href="#" data-site="privacidade">política de privacidade</a>
+      </label>
+    </div>
+    <button class="btn btn-principal" id="btn-criar" type="submit">Criar sua conta</button>
+  </form>
+
+  <div class="separador">ou</div>
+
+  <div class="rodape-painel">
+    Já pagou pelo acesso? Entre com o e-mail e a senha que cadastramos para você.
+  </div>
+
+</section>
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// Tela de login do VL Optimizer.
+//
+// Fala com o main pelos canais: login, register, check-session, recuperar-senha.
+// Quem decide se pode entrar é o main (que consulta o Supabase).
+// ─────────────────────────────────────────────────────────────────────────────
+const ipc = window.electron;
+
+const $ = (id) => document.getElementById(id);
+const aviso = $('aviso');
+
+function mostrar(msg, tipo) {
+  aviso.textContent = msg || '';
+  aviso.className = 'aviso' + (msg ? ' ' + (tipo || 'erro') : '');
+}
+
+function carregando(btn, on, texto) {
+  const b = $(btn);
+  b.disabled = on;
+  if (on) { b._txt = b.textContent; b.innerHTML = '<span class="spin"></span>'; }
+  else { b.textContent = texto || b._txt || 'Entrar'; }
+}
+
+function trocarAba(qual) {
+  const entrar = qual === 'entrar';
+  $('aba-entrar').classList.toggle('on', entrar);
+  $('aba-criar').classList.toggle('on', !entrar);
+  $('p-entrar').classList.toggle('oculto', !entrar);
+  $('p-criar').classList.toggle('oculto', entrar);
+  mostrar('');
+  setTimeout(() => { const f = document.querySelector(entrar ? '#l-user' : '#c-name'); if (f) f.focus(); }, 60);
+}
+
+$('aba-entrar').onclick = () => trocarAba('entrar');
+$('aba-criar').onclick = () => trocarAba('criar');
+
+// força da senha (mesma régua do site: comprimento, maiúscula/minúscula, número e símbolo)
+$('c-pass').addEventListener('input', (e) => {
+  const p = e.target.value;
+  let s = 0;
+  if (p.length >= 8) s++;
+  if (p.length >= 12) s++;
+  if (/[a-z]/.test(p) && /[A-Z]/.test(p)) s++;
+  if (/\d/.test(p) && /[^A-Za-z0-9]/.test(p)) s++;
+  const cores = ['#ff3b47', '#ff8a3d', '#ffd23d', '#7ee6a8', '#3ddc82'];
+  const nomes = ['', 'fraca', 'fraca', 'média', 'boa', 'forte'];
+  const pct = p ? (s / 4) * 100 : 0;
+  $('forca-barra').style.width = pct + '%';
+  $('forca-barra').style.background = cores[Math.max(0, s - 1)] || '#46425a';
+  $('forca-txt').textContent = p ? 'Senha ' + (nomes[Math.min(s + 1, 5)] || 'fraca') : '';
+});
+
+// ── entrar ──
+$('p-entrar').onsubmit = async (e) => {
+  e.preventDefault();
+  const email = $('l-user').value.trim();
+  const senha = $('l-pass').value;
+  if (!email || !senha) { mostrar('Preencha e-mail e senha.'); return; }
+  carregando('btn-login', true);
+  try {
+    const r = await ipc.invoke('login', { email, password: senha });
+    carregando('btn-login', false, 'Entrar');
+    if (r && r.success) {
+      mostrar('Login realizado! Abrindo...', 'ok');
+      setTimeout(() => { window.location.href = 'dashboard.html'; }, 450);
+    } else {
+      mostrar((r && r.message) || 'Não foi possível entrar.');
+    }
+  } catch (err) {
+    carregando('btn-login', false, 'Entrar');
+    mostrar('Falha de conexão: ' + err.message);
+  }
+};
+
+// ── criar conta ──
+$('p-criar').onsubmit = async (e) => {
+  e.preventDefault();
+  const nome = $('c-name').value.trim();
+  const email = $('c-user').value.trim();
+  const senha = $('c-pass').value;
+  const termos = $('c-termos').checked;
+  if (!email || !senha) { mostrar('Preencha e-mail e senha.'); return; }
+  if (senha.length < 8) { mostrar('A senha precisa de pelo menos 8 caracteres.'); return; }
+  if (!termos) { mostrar('Aceite os termos de uso para continuar.'); return; }
+  carregando('btn-criar', true);
+  try {
+    const r = await ipc.invoke('register', { name: nome, email, password: senha, terms: termos });
+    carregando('btn-criar', false, 'Criar sua conta');
+    if (r && r.success) {
+      if (r.confirmarEmail) {
+        mostrar(r.message || 'Conta criada. Confirme o e-mail para entrar.', 'ok');
+        setTimeout(() => trocarAba('entrar'), 2200);
+      } else {
+        mostrar('Conta criada! Abrindo...', 'ok');
+        setTimeout(() => { window.location.href = 'dashboard.html'; }, 450);
+      }
+    } else {
+      mostrar((r && r.message) || 'Não foi possível criar a conta.');
+    }
+  } catch (err) {
+    carregando('btn-criar', false, 'Criar sua conta');
+    mostrar('Falha de conexão: ' + err.message);
+  }
+};
+
+// ── esqueci a senha ──
+$('btn-esqueci').onclick = async () => {
+  const email = $('l-user').value.trim();
+  if (!email) { mostrar('Digite seu e-mail primeiro, depois clique em "Esqueci a senha".'); return; }
+  try {
+    const r = await ipc.invoke('recuperar-senha', { email });
+    mostrar((r && r.message) || 'Se o e-mail existir, enviamos um link.', r && r.success ? 'ok' : 'erro');
+  } catch (e) {
+    mostrar('Falha de conexão: ' + e.message);
+  }
+};
+
+document.querySelectorAll('[data-site]').forEach((a) => {
+  a.onclick = (e) => { e.preventDefault(); if (ipc && ipc.openExternal) ipc.openExternal('https://' + location.hostname); };
+});
+
+// ── ao abrir: se já tem sessão válida, entra direto ──
+(async () => {
+  try {
+    const r = await ipc.invoke('check-session');
+    if (r && r.valid) { window.location.href = 'dashboard.html'; return; }
+  } catch (e) { }
+  $('verificando').remove();
+  $('l-user').focus();
+})();
+</script>
+</body>
+</html>
