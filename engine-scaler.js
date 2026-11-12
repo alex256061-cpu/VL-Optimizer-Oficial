@@ -26,12 +26,17 @@ function normalizeType(value) {
   return 'fsr';
 }
 
+// A tela manda os nomes do GDZ: lsfg31, lsfg23, lsfg11. Preservar o sufixo importa, porque
+// lsfg31 e lsfg3 nao sao a mesma coisa no Settings.xml do Lossless (LSFG3 vs LSFG3).
 function normalizeFrameGeneration(value) {
   const key = String(value || '').toLowerCase().replace(/[\s_-]+/g, '');
   if (key === '' || key === 'none' || key === 'desligado' || key === 'off') return 'off';
-  if (key.includes('3')) return 'lsfg3';
-  if (key.includes('2')) return 'lsfg2';
-  if (key.includes('1')) return 'lsfg1';
+  if (key === 'lsfg31' || key === 'lsfg3') return 'lsfg31';
+  if (key === 'lsfg23' || key === 'lsfg2') return 'lsfg23';
+  if (key === 'lsfg11' || key === 'lsfg1') return 'lsfg11';
+  if (key.includes('3')) return 'lsfg31';
+  if (key.includes('2')) return 'lsfg23';
+  if (key.includes('1')) return 'lsfg11';
   return 'off';
 }
 
@@ -82,7 +87,7 @@ function mountScaler(ex) {
           ? 'Motor Lossless disponível (LS1, FSR, NIS, Anime4K, XBR, geração de quadros).'
           : 'Motor não encontrado.',
         modes: ['ls1', 'fsr', 'nis', 'anime4k', 'xbr', 'integer', 'nearest', 'bicubic'],
-        frameGeneration: ['lsfg1', 'lsfg2', 'lsfg3'],
+        frameGeneration: ['lsfg11', 'lsfg23', 'lsfg31'],
       };
     } catch (e) {
       return { ok: false, embedded: true, engines: [], reason: e.message, message: e.message };

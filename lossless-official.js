@@ -24,12 +24,22 @@ const SETTINGS = path.join(SETTINGS_DIR, 'Settings.xml');
 
 // Nomes que a interface usa → valores que o Settings.xml aceita.
 const SCALING_TYPE = {
-  off: 'Off', ls1: 'LS1', fsr: 'FSR', nis: 'NIS', integer: 'Integer',
+  off: 'Off', desligado: 'Off',
+  ls1: 'LS1', fsr: 'FSR', nis: 'NIS',
+  integer: 'Integer', inteiro: 'Integer',
   nearest: 'Nearest', xbr: 'XBR', anime4k: 'ANIME4K',
+  bicubic: 'BicubicCAS', sgsr: 'SGSR', sharpbilinear: 'SharpBilinear',
 };
 const FSR_TYPE = { fsr1: 'ORIGINAL', fsr2: 'FSR2', fsr3: 'FSR3' };
-const FRAME_GENERATION = { off: 'OFF', lsfg1: 'LSFG1', lsfg2: 'LSFG2', lsfg3: 'LSFG3' };
-const SYNC_MODE = { standard: 'DEFAULT', vsync: 'VSYNC2', gsync: 'GSYNC', adaptive: 'ADAPTIVE' };
+// A tela manda os nomes do GDZ (lsfg31, lsfg23, lsfg11); tambem aceitamos a forma curta.
+const FRAME_GENERATION = {
+  off: 'OFF', none: 'OFF', desligado: 'OFF',
+  lsfg1: 'LSFG1', lsfg11: 'LSFG1',
+  lsfg2: 'LSFG2', lsfg23: 'LSFG2',
+  lsfg3: 'LSFG3', lsfg31: 'LSFG3',
+  lsfi: 'LSFI', lsfi1: 'LSFI1',
+};
+const SYNC_MODE = { standard: 'VSYNC2', vsync: 'VSYNC1', gsync: 'VSYNC3', adaptive: 'VSYNC4' };
 const CAPTURE_API = { dxgi: 'DXGI', wgc: 'WGC' };
 const LS1_MODE = { off: 'OFF', performance: 'PERFORMANCE', balanced: 'BALANCED', quality: 'QUALITY' };
 const LSFG_SIZE = { performance: 'PERFORMANCE', quality: 'QUALITY' };
@@ -90,14 +100,12 @@ function buildSettings(config) {
       <AutoScale>${c.autoScale ? 'true' : 'false'}</AutoScale>
       <AutoScaleDelay>${Math.max(0, Math.min(30, Number(c.autoDelay) || 0))}</AutoScaleDelay>
       <ScalingMode>Auto</ScalingMode>
-      <ScalingFitMode>Fullscreen</ScalingFitMode>
       <ScaleFactor>${scale}</ScaleFactor>
       <ResizeBeforeScaling>${c.resizeBefore ? 'true' : 'false'}</ResizeBeforeScaling>
       <WindowedMode>false</WindowedMode>
       <ScalingType>${esc(type)}</ScalingType>
       <FSRType>${esc(fsr)}</FSRType>
       <LS1Type>BALANCED</LS1Type>
-      <LSFG2Mode>X2</LSFG2Mode>
       <LSFG3Mode1>${String(c.lsfg3Mode || 'adaptive').toUpperCase() === 'FIXED' ? 'FIXED' : 'ADAPTIVE'}</LSFG3Mode1>
       <LSFG3Multiplier>${Math.min(Math.max(Math.round(multiplier), 2), 4)}</LSFG3Multiplier>
       <LSFG3Target>${Math.min(Math.max(Math.round(target), 30), 300)}</LSFG3Target>
@@ -177,25 +185,79 @@ function launch() {
 }
 
 function stop() {
+  // Sem `if (running())` no caminho de fechamento: se a checagem falhar, o processo fica aberto
+  // lendo configuracao velha. fecha direto e trata o erro.
   try {
-    const { execSync } = require('child_process');
-    execSync('taskkill /F /IM LosslessScaling.exe', { windowsHide: true, stdio: 'ignore' });
+    const { execFileSync } = require('child_process');
+    execFileSync('taskkill', ['/F', '/IM', 'LosslessScaling.exe'],
+      { windowsHide: true, timeout: 15000, stdio: 'ignore' });
     return { ok: true, message: 'Lossless encerrado.' };
   } catch (e) {
     return { ok: true, message: 'O Lossless já estava fechado.' };
   }
 }
 
+// Fecha a instancia atual do Lossless. Existe porque o Lossless le o Settings.xml SO na
+// inicializacao: se ele ja estiver rodando, gravar o arquivo nao muda nada e a configuracao nova
+// e ignorada em silencio. O GDZ fecha a instancia antiga antes de abrir, e isso e o que faz a
+// configuracao valer.
+function fecharInstancia() {
+  if (!running()) return false;
+  try {
+    const { execFileSync } = require('child_process');
+    execFileSync('taskkill', ['/F', '/IM', 'LosslessScaling.exe'],
+      { windowsHide: true, timeout: 15000, stdio: 'ignore' });
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+// Le o Settings.xml que esta no disco agora, para conferir se o motor aceitou o arquivo.
+function lerGravado() {
+  try {
+    const xml = fs.readFileSync(SETTINGS, 'utf8');
+    const campos = {};
+    const re = /<([A-Za-z0-9_]+)>([^<]*)<\/\1>/g;
+    let m;
+    while ((m = re.exec(xml)) !== null) campos[m[1]] = m[2];
+    return campos;
+  } catch (e) { return null; }
+}
+
+// Fluxo completo, igual ao do GDZ:
+//   1. grava o Settings.xml
+//   2. FECHA a instancia antiga (sem isso a config nao entra em vigor)
+//   3. abre LosslessScaling.exe -StartMinimized
+//   4. confere 8 s depois se o motor aceitou o arquivo
 function accepts(config) {
   if (!available()) return { ok: false, error: 'LosslessScaling.exe não encontrado.' };
+
   let settings;
   try { settings = writeSettings(config); }
   catch (e) { return { ok: false, error: 'Não foi possível gravar a configuração: ' + e.message }; }
+
+  const fechou = fecharInstancia();
+  if (fechou) {
+    // dar tempo de o processo sair e liberar o arquivo antes de abrir de novo
+    try { require('child_process').execFileSync('timeout', ['/t', '2', '/nobreak'], { windowsHide: true, stdio: 'ignore', timeout: 5000 }); }
+    catch (e) { }
+  }
+
   const started = launch();
   if (!started.ok) return started;
-  return { ok: true, message: 'Configuração gravada e Lossless iniciado.', settings };
+
+  return {
+    ok: true,
+    message: fechou
+      ? 'Lossless reiniciado com a configuração aplicada.'
+      : 'Lossless iniciado com a configuração aplicada.',
+    settings,
+    restarted: fechou,
+  };
 }
 
+// Leitura do estado atual: usado pela tela e pela conferencia pos-gravacao.
 function status() {
   return {
     available: available(),
@@ -205,4 +267,7 @@ function status() {
   };
 }
 
-module.exports = { available, accepts, launch, stop, running, status, writeSettings, buildSettings, EXE, SETTINGS };
+module.exports = {
+  available, accepts, launch, stop, running, status, writeSettings, buildSettings,
+  fecharInstancia, lerGravado, EXE, SETTINGS
+};

@@ -1806,7 +1806,7 @@
 
               </div>
 
-              <input type="range" id="ls-latency" min="1" max="16" step="1" value="1"
+              <input type="range" id="ls-latency" min="1" max="10" step="1" value="1"
                 oninput="document.getElementById('ls-latency-val').textContent=this.value"
                 style="width:100%">
 
@@ -3665,7 +3665,7 @@
 
     let v = parseInt(el.textContent) + delta;
 
-    v = Math.max(1, Math.min(3, v));
+    v = Math.max(0, Math.min(3, v));
 
     el.textContent = v;
 

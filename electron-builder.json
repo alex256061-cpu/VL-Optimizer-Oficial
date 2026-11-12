@@ -16,6 +16,7 @@
                   "engine-bridge.js",
                   "updater.js",
                   "lossless-official.js",
+                  "gdz-launch.js",
                   "features.js",
                   "assets/**/*",
                   "src/**/*",
