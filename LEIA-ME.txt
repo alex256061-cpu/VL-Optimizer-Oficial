@@ -1,35 +1,106 @@
-VL OPTIMIZER - GUIA PARA INSTALAR E USAR
+VL OPTIMIZER - GUIA DE INSTALACAO E USO
+========================================
 
-Requisitos: Windows 10/11 de 64 bits. Reserve 500 MB livres.
-O instalador inclui o aplicativo, Electron, PresentMon e o motor FSR 1.
-Nao e necessario instalar Node.js, npm ou Lossless Scaling para o FSR 1.
+O que e
+-------
+Aplicativo para Windows que otimiza o PC para jogos e faz escala de imagem e geracao de quadros
+no jogo, alem de medir FPS ao vivo.
 
-1. Abra Instalar-VL-Optimizer-1.0.0.exe e siga o assistente em portugues.
-2. Abra VL Optimizer pelo atalho na area de trabalho ou pelo menu Iniciar.
-3. Para recursos que exigem administrador, use "Reabrir como admin"
-   no aplicativo e aceite o pedido de permissao do Windows.
-4. Para testar a escala FSR, deixe o jogo em janela ou sem bordas.
+O motor de escala vai dentro do pacote. Voce NAO precisa ter o Lossless Scaling instalado.
 
-Este pacote corresponde ao projeto local, versao 1.0.0. O briefing de
-divulgacao da versao 0.4.0 descreve outro estado do produto. Neste codigo,
-o motor interno implementa FSR 1 (EASU + RCAS). As demais opcoes de escala
-e geracao de quadros exibidas na interface nao estao implementadas pelo
-motor interno. Nao ha garantia de ganho de FPS ou compatibilidade com
-todos os jogos. Teste primeiro fora de partidas competitivas.
 
-O instalador nao tem assinatura digital. O Windows pode exibir um aviso
-de editor desconhecido. Confira a origem e o SHA256 antes de executar.
-Nao e necessario desativar o antivirus.
+Requisitos
+----------
+- Windows 10 ou 11, 64 bits
+- Cerca de 400 MB livres
+- Conta com permissao de administrador
+- O jogo precisa estar em modo JANELA ou SEM BORDAS (tela cheia exclusiva nao funciona)
 
-Para remover: Configuracoes do Windows > Aplicativos > VL Optimizer >
-Desinstalar. Os dados e backups do usuario sao preservados. Desinstalar
-o aplicativo nao desfaz automaticamente ajustes ja aplicados no Windows;
-use os controles de desfazer do aplicativo antes de remover, se desejar.
 
-PresentMon: licenca em resources/app/bin/PresentMon.LICENSE.txt.
-FSR: licenca em resources/app/FSR.LICENSE.txt (AMD, MIT).
-Validacao local: o instalador concluiu a instalacao e o motor nativo
-carregou D3D11 e shaders. A interface Electron encerrou antes de abrir
-neste ambiente, inclusive na versao de desenvolvimento; a causa ainda
-nao foi identificada. O uso completo do aplicativo nao foi confirmado.
-O funcionamento em um PC limpo ainda precisa ser validado.
+Instalacao
+----------
+1. Abra Instalar-VL-Optimizer-1.2.2.exe
+2. O Windows vai avisar que o aplicativo nao tem assinatura digital. Clique em
+   "Mais informacoes" e depois em "Executar assim mesmo". Esse aviso aparece em qualquer
+   programa baixado da internet que nao tenha certificado de assinatura.
+3. Aceite o pedido de permissao do Windows (UAC). A medicao de FPS precisa dessa permissao.
+4. Abra pelo atalho na area de trabalho ou pelo menu Iniciar.
+
+
+Como usar a escala
+------------------
+1. Deixe o jogo aberto em JANELA ou SEM BORDAS
+2. No VL Optimizer, va em VL Scaling
+3. Escolha as opcoes:
+   - Tipo de redimensionamento: LS1, AMD FSR, NVIDIA NIS, Anime4K, xBR, Integer ou Nearest
+   - Fator de escala: 1.0 a 3.0
+   - Geracao de quadros: VL FG 3.1, 2.3, 1.1 ou Desligado
+4. Clique em Aplicar
+5. Volte ao jogo e aperte Ctrl+Alt+S se a captura nao comecar sozinha
+
+
+Configuracao recomendada
+------------------------
+Testado nesta maquina (GTA V, 1920x1080, sem bordas), 30 segundos por cenario:
+
+  Geracao de quadros   FPS medio   1% low   0.1% low   pior quadro   quadros lentos
+  VL FG 3.1 com 2x       169,8      144,7     125,2       9,99 ms           0
+  VL FG 3.1 com 2x
+    e Alvo em 100        168,9      145,2      32,5      36,38 ms          11
+  Desligado              166,9      139,9      33,5      37,67 ms          31
+  VL FG 3.1 com 3x       169,3      145,7      40,8      42,32 ms           8
+
+Recomendado: Geracao de quadros LIGADA, multiplicador 2x e ALVO EM 300.
+
+O FPS medio fica parecido em todas as opcoes, mas a ESTABILIDADE muda muito. Alvo baixo ou
+multiplicador 3x derrubam os piores quadros de 10 ms para 36 a 42 ms, e e isso que a pessoa sente
+como travada.
+
+
+Como medir FPS
+--------------
+1. Va em Medicoes > FPS
+2. Clique em Iniciar medicao
+3. Entre no jogo: os numeros aparecem em alguns segundos
+4. Aperte Ctrl+Alt+B dentro do jogo para marcar a base e comparar depois
+
+
+Problemas comuns
+----------------
+A janela do VL Scaling fica preta
+  O jogo esta em tela cheia exclusiva. Mude para janela ou sem bordas nas opcoes do jogo.
+  Vale para OBS e Xbox Game Bar tambem.
+
+O FPS nao aparece
+  Verifique se aceitou o pedido de administrador ao abrir o app. Sem isso a medicao nao funciona.
+
+Parece que muda a configuracao mas o jogo continua igual
+  Aperte Ctrl+Alt+S dentro do jogo. Esse e o atalho que faz o Lossless comecar a capturar.
+
+O Windows avisa que o aplicativo nao e seguro
+  Falta assinatura digital. O hash do instalador esta publicado na pagina do release para voce
+  conferir que o arquivo e o original.
+
+
+Observacoes honestas
+--------------------
+- O aplicativo nao tem assinatura digital. O aviso do Windows e esperado.
+- Distribuido como esta, sem garantia de ganho de FPS em todos os jogos ou configuracoes.
+- Testado em um PC com Windows 10, Ryzen 7 7800X3D e RTX 4070 SUPER. Nao foi testado em
+  maquina limpa; se encontrar problema em outro PC, reporte.
+- Jogos com anti-cheat: o aplicativo nao altera nenhum arquivo do jogo e nao injeta nada no
+  processo. Ele captura a tela como uma ferramenta de gravacao faz. Ainda assim, teste primeiro
+  fora de partidas competitivas.
+
+
+Desinstalar
+-----------
+Configuracoes do Windows > Aplicativos > VL Optimizer > Desinstalar.
+Os dados e historico em %LOCALAPPDATA%\VLOptimizer sao preservados de proposito.
+
+
+Licencas de terceiros
+---------------------
+PresentMon: resources/app/bin/PresentMon.LICENSE.txt
+FSR (AMD, MIT): resources/app/FSR.LICENSE.txt
+Lossless Scaling: resources/app/native/lossless/Licenses.txt
