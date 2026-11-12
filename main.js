@@ -361,14 +361,53 @@ function startTicker() {
 }
 
 // ── IPC ──
-const H = (name, fn) => ipcMain.handle(name, (e, arg) => fn(arg));
+// ── Guarda de sessão (mesmo papel do requireAuth do GDZ) ───────────────────
+//
+// A tela de login impede o uso normal sem conta, mas os canais IPC continuariam acessíveis
+// para quem chamasse o IPC direto. Este guarda fecha esse caminho.
+//
+// Canais sempre liberados: os da própria conta, os de janela e os de atualização.
+const CANAIS_LIVRES = new Set([
+  'login', 'register', 'check-session', 'logout', 'recuperar-senha',
+  'get-user', 'conta-status', 'conta-plano', 'ir-para-login',
+  'minimize-window', 'maximize-window', 'close-window',
+  'update-status', 'update-install', 'update-check', 'update-open-page',
+  'open-site', 'open-scaling-window',
+  'gs-minimize', 'gs-maximize', 'gs-close',
+]);
+
+// Cache curto: não consulta o banco a cada clique, mas percebe o logout em até 15 segundos.
+let _sessaoCache = { valor: null, quando: 0 };
+
+async function sessaoAtiva() {
+  // Sem as chaves do Supabase, o app não tem login e tudo é liberado (não travar quem já usa).
+  if (!conta.configurado()) return true;
+  const agora = Date.now();
+  if (_sessaoCache.valor !== null && agora - _sessaoCache.quando < 15000) return _sessaoCache.valor;
+  let ok = false;
+  try {
+    const s = await conta.sessao();
+    ok = !!(s && s.valid);
+  } catch (e) { ok = false; }
+  _sessaoCache = { valor: ok, quando: agora };
+  return ok;
+}
+
+function esquecerSessao() { _sessaoCache = { valor: null, quando: 0 }; }
+
+const H = (name, fn) => ipcMain.handle(name, async (e, arg) => {
+  if (!CANAIS_LIVRES.has(name) && !(await sessaoAtiva())) {
+    return { success: false, error: 'Faça login para usar esta função.', code: 'no_session' };
+  }
+  return fn(arg);
+});
 
 H('get-user', () => conta.usuario());
 H('check-session', () => conta.sessao());
-H('login', (a) => conta.entrar(a && a.email, a && a.password));
+H('login', async (a) => { const r = await conta.entrar(a && a.email, a && a.password); esquecerSessao(); return r; });
 H('register', (a) => conta.registrar(a && a.name, a && a.email, a && a.password));
-H('logout', () => conta.sair());
-H('ir-para-login', () => { conta.sair(); if (win && !win.isDestroyed()) win.loadFile(path.join(__dirname, 'src', 'login.html')); return { success: true }; });
+H('logout', () => { const r = conta.sair(); esquecerSessao(); return r; });
+H('ir-para-login', () => { conta.sair(); esquecerSessao(); if (win && !win.isDestroyed()) win.loadFile(path.join(__dirname, 'src', 'login.html')); return { success: true }; });
 H('recuperar-senha', (a) => conta.recuperar(a && a.email));
 H('conta-status', () => ({ configurado: conta.configurado() }));
 // Plano do usuario logado: 'premium' libera os itens trancados; 'free' mantem o cadeado.

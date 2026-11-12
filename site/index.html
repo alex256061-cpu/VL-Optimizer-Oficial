@@ -81,7 +81,11 @@
     <a href="#precos">Preço</a>
     <a href="#suporte">Suporte</a>
     <a href="#faq">Dúvidas</a>
+    <a href="entrar.html" id="navEntrar">Entrar</a>
+    <a href="https://github.com/alex256061-cpu/VL-Optimizer-Oficial/releases/latest">Baixar</a>
   </nav>
+  <a class="btn btn-primary nav-cta" id="navBaixar" href="https://github.com/alex256061-cpu/VL-Optimizer-Oficial/releases/latest" style="margin-right:8px">Baixar</a>
+  <a class="btn btn-ghost nav-cta" href="entrar.html" style="margin-right:8px">Entrar</a>
   <a class="btn btn-primary nav-cta" href="#precos">Comprar</a>
   <button class="menu-btn" id="menuBtn" aria-label="Abrir menu" aria-expanded="false"><span></span><span></span><span></span></button>
 </header>
@@ -94,9 +98,11 @@
       <p class="lead">Ajustes que mostram o que fazem e voltam com um clique. Limpeza que mostra o tamanho real. FPS ao vivo, gargalo e um painel de scaling — tudo num lugar só, vermelho e preto.</p>
       <div class="hero-actions">
         <a class="btn btn-primary btn-lg" href="#precos">Quero o VL Optimizer <svg viewBox="0 0 24 24" width="18" height="18" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+        <a class="btn btn-ghost btn-lg" href="https://github.com/alex256061-cpu/VL-Optimizer-Oficial/releases/latest">Baixar grátis</a>
         <a class="btn btn-ghost btn-lg" href="#prints">Ver por dentro</a>
       </div>
       <ul class="micro">
+        <li>Sem cartão para testar</li>
         <li>Pagamento único</li>
         <li>7 dias de garantia</li>
         <li>Cancele quando quiser</li>
@@ -214,19 +220,33 @@
   <section id="precos" class="section pricing">
     <div class="section-head reveal">
       <span class="kicker">Preço</span>
-      <h2>Escolha como pagar.</h2>
-      <p>Mensal para testar sem compromisso, vitalício para ficar de vez. Os dois têm exatamente o mesmo app, sem função bloqueada.</p>
+      <h2>Pague uma vez. <em>Ou mês a mês.</em></h2>
+      <p>Medir o PC continua grátis para sempre. Os planos pagos liberam as otimizações e o scaling.</p>
     </div>
 
     <div class="plans reveal">
+
+      <article class="plan">
+        <div class="plan-tag">Grátis</div>
+        <div class="plan-price"><small>R$</small><b data-price="free">0</b><span>,00</span></div>
+        <p class="plan-sub">para sempre · sem cartão</p>
+        <ul class="price-list">
+          <li>Score de PC de 0 a 100</li>
+          <li>Gargalo real medido em jogo</li>
+          <li>Lista do que resolve cada trava</li>
+        </ul>
+        <a class="btn btn-ghost btn-block" href="criar-conta.html">Criar conta grátis</a>
+      </article>
+
       <article class="plan">
         <div class="plan-tag">Mensal</div>
         <div class="plan-price"><small>R$</small><b data-price="monthly">40</b><span>,00</span><i>/mês</i></div>
         <p class="plan-sub">renova sozinho · cancele quando quiser</p>
         <ul class="price-list">
-          <li>Todos os recursos do painel</li>
-          <li>Atualizações enquanto assinar</li>
-          <li>Suporte no Discord</li>
+          <li>Tudo do Grátis</li>
+          <li>Todas as otimizações liberadas</li>
+          <li>VL Scaling e otimização por jogo</li>
+          <li>Modo Live e Input Lag</li>
         </ul>
         <a class="btn btn-ghost btn-block" data-buy="monthly" href="#">Assinar mensal</a>
       </article>
@@ -237,20 +257,22 @@
         <div class="plan-price"><small>R$</small><b data-price="lifetime">99</b><span>,00</span></div>
         <p class="plan-sub">pagamento único · sem renovação</p>
         <ul class="price-list">
-          <li>Todos os recursos do painel</li>
-          <li>Atualizações da versão 1.x</li>
+          <li>Tudo liberado para sempre</li>
+          <li>Continua depois de formatar</li>
+          <li>Todas as atualizações futuras</li>
           <li>7 dias de garantia</li>
           <li>Suporte no Discord</li>
         </ul>
         <a class="btn btn-primary btn-block" data-buy="lifetime" href="#">Comprar vitalício</a>
-        <p class="pay">Pix · cartão · boleto</p>
+        <p class="pay">Pix · cartão · liberado na hora</p>
       </article>
+
     </div>
 
     <div class="plans-included reveal">
-      <b>Nos dois planos:</b> ajustes com backup e desfazer · limpeza sem corte · FPS, 1% low e overlay · VL Scaling em português · OptiScaler com anti-cheat bloqueado · PC Info e gargalo.
+      <b>Conta em todos os planos:</b> a mesma conta do aplicativo. Otimizações com backup e desfazer · limpeza sem corte · FPS, 1% low e overlay · VL Scaling em português · OptiScaler com anti-cheat bloqueado · PC Info e gargalo.
     </div>
-    <p class="plans-note reveal">O <b>VL Scaling</b> é um painel de configuração para o <b>Lossless Scaling</b>, vendido separadamente na Steam. O VL não redistribui nem inclui o Lossless.</p>
+    <p class="plans-note reveal">O <b>VL Scaling</b> é um painel de configuração para o <b>Lossless Scaling</b>, vendido separadamente na Steam. O VL não altera a BIOS, não mexe em arquivo de jogo e não injeta nada em processo de anti-cheat.</p>
   </section>
 
   <section id="compromisso" class="section promises">
@@ -391,5 +413,6 @@
 <div class="mobile-buy"><b>R$ <span data-mobile-price>99</span><small>vitalício · ou R$ 40/mês</small></b><a class="btn btn-primary" href="#precos">Comprar</a></div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <script src="app.js"></script>
+<script src="checkout.js"></script>
 </body>
 </html>

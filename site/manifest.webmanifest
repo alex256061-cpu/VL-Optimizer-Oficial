@@ -1,0 +1,14 @@
+{
+  "version": 3,
+  "name": "VL Optimizer",
+  "description": "O otimizador de PC do VL: mede o gargalo, ajusta o Windows e desfaz tudo em um clique.",
+  "short_name": "VL Optimizer",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#07030a",
+  "theme_color": "#07030a",
+  "icons": [
+    { "src": "/assets/icon.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/assets/icon.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

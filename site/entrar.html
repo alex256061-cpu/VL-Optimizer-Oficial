@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Entrar · VL Optimizer</title>
+<meta name="description" content="Entre na sua conta do VL Optimizer. É a mesma conta que você usa no aplicativo.">
+<meta name="robots" content="noindex">
+<link rel="icon" href="assets/icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="conta.css">
+</head>
+<body>
+
+<div class="auth-carregando" id="carregando"><div><span class="auth-spin"></span> Verificando sessão...</div></div>
+
+<div class="auth-wrap">
+
+  <section class="auth-lado">
+    <a class="auth-marca" href="/">
+      <img src="assets/icon.png" alt="">
+      <b>VL <span>Optimizer</span></b>
+    </a>
+
+    <div class="auth-centro">
+      <h1>Entre na<br><em>sua conta</em></h1>
+      <p>É a mesma conta que você usa no aplicativo. Medir o PC continua grátis.</p>
+
+      <ul class="auth-lista">
+        <li><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg> Score de PC de 0 a 100</li>
+        <li><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg> Gargalo real medido em jogo</li>
+        <li><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg> Lista do que resolve cada trava</li>
+      </ul>
+    </div>
+
+    <div class="auth-rodape">VL Optimizer · Windows 10 e 11</div>
+  </section>
+
+  <section class="auth-painel">
+    <div class="auth-abas">
+      <button class="auth-aba on" id="aba-entrar" type="button">Entrar</button>
+      <a class="auth-aba" id="aba-criar" href="/criar-conta" style="text-align:center;text-decoration:none;line-height:1.4">Criar conta</a>
+    </div>
+
+    <div class="auth-aviso" id="aviso"></div>
+
+    <form id="form-entrar" autocomplete="on">
+      <div class="auth-campo">
+        <label for="email">E-mail</label>
+        <input id="email" name="email" type="email" placeholder="seu@email.com" autocomplete="username" required>
+      </div>
+
+      <div class="auth-campo">
+        <label for="senha">Senha</label>
+        <input id="senha" name="senha" type="password" placeholder="••••••••" autocomplete="current-password" required>
+      </div>
+
+      <div class="auth-linha">
+        <label><input type="checkbox" id="lembrar" checked> Continuar conectado</label>
+        <a id="esqueci">Esqueci a senha</a>
+      </div>
+
+      <button class="auth-btn auth-btn-principal" id="btn-entrar" type="submit">Entrar</button>
+    </form>
+
+    <div class="auth-sep">ou</div>
+
+    <div class="auth-pe">
+      Ainda não tem conta? <a href="/criar-conta">Criar agora</a>
+    </div>
+  </section>
+
+</div>
+
+<script src="supabase-client.js"></script>
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// Página de entrada do site.
+// Fala com o Supabase pela supabase-client.js.
+// ─────────────────────────────────────────────────────────────────────────────
+const $ = (id) => document.getElementById(id);
+const aviso = $('aviso');
+
+function mostrar(msg, tipo) {
+  aviso.textContent = msg || '';
+  aviso.className = 'auth-aviso' + (msg ? ' ' + (tipo || 'erro') : '');
+}
+
+function carregando(id, on, texto) {
+  const b = $(id);
+  b.disabled = on;
+  if (on) { b._t = b.textContent; b.innerHTML = '<span class="auth-spin"></span>'; }
+  else b.textContent = texto || b._t || 'Entrar';
+}
+
+$('form-entrar').onsubmit = async (e) => {
+  e.preventDefault();
+  const email = $('email').value.trim();
+  const senha = $('senha').value;
+  const lembrar = $('lembrar').checked;
+
+  if (!email || !senha) { mostrar('Preencha e-mail e senha.'); return; }
+
+  carregando('btn-entrar', true);
+  try {
+    const r = await SUPABASE.entrar(email, senha, lembrar);
+    carregando('btn-entrar', false, 'Entrar');
+
+    if (r.success) {
+      mostrar('Login realizado. Abrindo...', 'ok');
+      const voltar = new URLSearchParams(location.search).get('voltar');
+      setTimeout(() => { location.href = voltar || '/conta'; }, 500);
+    } else {
+      mostrar(r.message || 'Não foi possível entrar.');
+    }
+  } catch (err) {
+    carregando('btn-entrar', false, 'Entrar');
+    mostrar('Falha de conexão: ' + err.message);
+  }
+};
+
+$('esqueci').onclick = async () => {
+  const email = $('email').value.trim();
+  if (!email) { mostrar('Digite seu e-mail primeiro, depois clique em "Esqueci a senha".'); return; }
+  try {
+    const r = await SUPABASE.recuperar(email);
+    mostrar(r.message || 'Se o e-mail existir, enviamos o link.', r.success ? 'ok' : 'erro');
+  } catch (e) {
+    mostrar('Falha de conexão: ' + e.message);
+  }
+};
+
+// Ao abrir: se já tem sessão, vai direto para a conta.
+(async () => {
+  try {
+    const s = await SUPABASE.sessaoValida();
+    if (s) { location.href = '/conta'; return; }
+  } catch (e) { }
+  $('carregando').remove();
+  $('email').focus();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Minha conta · VL Optimizer</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="assets/icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="conta.css">
+</head>
+<body>
+
+<div class="auth-carregando" id="carregando"><div><span class="auth-spin"></span> Carregando sua conta...</div></div>
+
+<div class="conta-wrap" id="conteudo" style="display:none">
+
+  <a class="conta-voltar" href="/">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>
+    Voltar ao site
+  </a>
+
+  <div class="conta-topo">
+    <div class="conta-avatar" id="avatar">V</div>
+    <div>
+      <h1 id="nome">—</h1>
+      <p id="email">—</p>
+    </div>
+  </div>
+
+  <div class="conta-cards">
+
+    <div class="conta-card">
+      <h2>Seu plano</h2>
+      <div class="conta-plano">
+        <div>
+          <div class="conta-plano-nome" id="plano-nome">Grátis</div>
+          <div class="conta-plano-sub" id="plano-sub">Score de PC, gargalo e lista de travas</div>
+        </div>
+        <span class="conta-tag free" id="plano-tag">Grátis</span>
+      </div>
+      <div class="conta-acoes" style="margin-top:20px">
+        <a class="btn btn-primary" href="/planos" id="btn-plano">Ver os planos</a>
+      </div>
+    </div>
+
+    <div class="conta-card">
+      <h2>Computadores</h2>
+      <ul class="conta-pcs" id="pcs"></ul>
+      <p style="font-size:12.5px;color:var(--muted);margin:14px 0 0;line-height:1.6" id="pcs-nota"></p>
+    </div>
+
+    <div class="conta-card">
+      <h2>Conta</h2>
+      <div class="conta-acoes">
+        <button class="btn btn-ghost" id="btn-sair">Sair da conta</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script src="supabase-client.js"></script>
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// Minha conta: mostra plano, computadores vinculados e permite sair.
+// ─────────────────────────────────────────────────────────────────────────────
+const $ = (id) => document.getElementById(id);
+
+function data(iso) {
+  if (!iso) return '—';
+  try { return new Date(iso).toLocaleDateString('pt-BR'); } catch (e) { return '—'; }
+}
+
+(async () => {
+  const s = await SUPABASE.sessaoValida();
+  if (!s) { location.href = '/entrar?voltar=/conta'; return; }
+
+  const p = await SUPABASE.perfil();
+  if (!p) { SUPABASE.sair(); location.href = '/entrar'; return; }
+
+  // cabeçalho
+  $('nome').textContent = p.name || 'Minha conta';
+  $('email').textContent = p.email || '';
+  $('avatar').textContent = String(p.name || 'V').charAt(0).toUpperCase();
+
+  // plano
+  if (p.plan === 'pro') {
+    $('plano-nome').textContent = p.lifetime ? 'Vitalício' : 'Mensal';
+    $('plano-sub').textContent = p.lifetime
+      ? 'Todas as otimizações liberadas para sempre'
+      : 'Todas as otimizações liberadas' + (p.validade ? ' até ' + data(p.validade) : '');
+    $('plano-tag').textContent = 'Ativo';
+    $('plano-tag').className = 'conta-tag pro';
+    $('btn-plano').textContent = 'Renovar';
+  } else {
+    $('plano-nome').textContent = 'Grátis';
+    $('plano-sub').textContent = 'Score de PC, gargalo e lista de travas';
+    $('plano-tag').textContent = 'Grátis';
+    $('plano-tag').className = 'conta-tag free';
+    $('btn-plano').textContent = 'Ver os planos';
+  }
+
+  // computadores
+  const pcs = await SUPABASE.meusPcs();
+  const ul = $('pcs');
+  if (pcs.length) {
+    pcs.forEach((d) => {
+      const li = document.createElement('li');
+      li.innerHTML =
+        '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="4" width="20" height="14" rx="2"/><path d="M8 21h8M12 18v3"/></svg>' +
+        '<div><b>' + (d.device_name || 'PC sem nome') + '</b><br>' +
+        '<small>vinculado em ' + data(d.first_seen) + ' · último acesso ' + data(d.last_seen) + '</small></div>';
+      ul.appendChild(li);
+    });
+    $('pcs-nota').textContent = 'Cada conta pode ser usada em ' + (pcs.length > 1 ? 'mais de um PC' : '1 PC') + '. Formatou ou trocou de máquina? Fale com o suporte.';
+  } else {
+    ul.innerHTML = '<li style="opacity:.6"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="4" width="20" height="14" rx="2"/><path d="M8 21h8M12 18v3"/></svg><div>Nenhum PC vinculado ainda. Abra o aplicativo e entre com esta conta.</div></li>';
+    $('pcs-nota').textContent = '';
+  }
+
+  $('btn-sair').onclick = () => {
+    SUPABASE.sair();
+    location.href = '/';
+  };
+
+  $('carregando').remove();
+  $('conteudo').style.display = '';
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Criar conta · VL Optimizer</title>
+<meta name="description" content="Crie sua conta do VL Optimizer. Não pedimos cartão. Medir o seu PC não custa nada.">
+<meta name="robots" content="noindex">
+<link rel="icon" href="assets/icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="conta.css">
+</head>
+<body>
+
+<div class="auth-carregando" id="carregando"><div><span class="auth-spin"></span> Verificando sessão...</div></div>
+
+<div class="auth-wrap">
+
+  <section class="auth-lado">
+    <a class="auth-marca" href="/">
+      <img src="assets/icon.png" alt="">
+      <b>VL <span>Optimizer</span></b>
+    </a>
+
+    <div class="auth-centro">
+      <h1>Criar sua<br><em>conta</em></h1>
+      <p>Leva 30 segundos. Medir o seu PC não custa nada.</p>
+
+      <ul class="auth-lista">
+        <li><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg> Não pedimos cartão</li>
+        <li><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg> A mesma conta do aplicativo</li>
+        <li><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg> Score de PC, gargalo e lista de travas</li>
+      </ul>
+    </div>
+
+    <div class="auth-rodape">VL Optimizer · Windows 10 e 11</div>
+  </section>
+
+  <section class="auth-painel">
+    <div class="auth-abas">
+      <a class="auth-aba" href="/entrar" style="text-align:center;text-decoration:none;line-height:1.4">Entrar</a>
+      <button class="auth-aba on" id="aba-criar" type="button">Criar conta</button>
+    </div>
+
+    <div class="auth-aviso" id="aviso"></div>
+
+    <form id="form-criar" autocomplete="on">
+      <div class="auth-campo">
+        <label for="usuario">Nome de usuário <em>opcional</em></label>
+        <input id="usuario" name="usuario" type="text" placeholder="Como quer ser chamado" autocomplete="nickname">
+      </div>
+
+      <div class="auth-campo">
+        <label for="email">E-mail</label>
+        <input id="email" name="email" type="email" placeholder="seu@email.com" autocomplete="username" required>
+      </div>
+
+      <div class="auth-campo">
+        <label for="senha">Senha</label>
+        <input id="senha" name="senha" type="password" placeholder="mínimo 8 caracteres" autocomplete="new-password" required>
+        <div class="auth-forca"><i id="forca"></i></div>
+        <div class="auth-forca-txt" id="forca-txt"></div>
+      </div>
+
+      <div class="auth-termos">
+        <input type="checkbox" id="termos">
+        <label for="termos">Li e aceito os <a href="/termos">termos de uso</a> e a política de privacidade.</label>
+      </div>
+
+      <button class="auth-btn auth-btn-principal" id="btn-criar" type="submit">Criar conta</button>
+    </form>
+
+    <div class="auth-sep">ou</div>
+
+    <div class="auth-pe">
+      Já tem conta? <a href="/entrar">Entrar</a>
+    </div>
+  </section>
+
+</div>
+
+<script src="supabase-client.js"></script>
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// Criação de conta no site.
+// ─────────────────────────────────────────────────────────────────────────────
+const $ = (id) => document.getElementById(id);
+const aviso = $('aviso');
+
+function mostrar(msg, tipo) {
+  aviso.textContent = msg || '';
+  aviso.className = 'auth-aviso' + (msg ? ' ' + (tipo || 'erro') : '');
+}
+
+function carregando(id, on, texto) {
+  const b = $(id);
+  b.disabled = on;
+  if (on) { b._t = b.textContent; b.innerHTML = '<span class="auth-spin"></span>'; }
+  else b.textContent = texto || b._t || 'Criar conta';
+}
+
+// força da senha: comprimento, maiúscula/minúscula, número e símbolo
+$('senha').addEventListener('input', (e) => {
+  const p = e.target.value;
+  let s = 0;
+  if (p.length >= 8) s++;
+  if (p.length >= 12) s++;
+  if (/[a-z]/.test(p) && /[A-Z]/.test(p)) s++;
+  if (/\d/.test(p) && /[^A-Za-z0-9]/.test(p)) s++;
+  const cores = ['#ff3b47', '#ff8a3d', '#ffd23d', '#7ee6a8', '#3ddc82'];
+  const nomes = ['', 'fraca', 'fraca', 'média', 'boa', 'forte'];
+  $('forca').style.width = p ? (s / 4) * 100 + '%' : '0';
+  $('forca').style.background = cores[Math.max(0, s - 1)] || '#46425a';
+  $('forca-txt').textContent = p ? 'Senha ' + (nomes[Math.min(s + 1, 5)] || 'fraca') : '';
+});
+
+$('form-criar').onsubmit = async (e) => {
+  e.preventDefault();
+  const nome = $('usuario').value.trim();
+  const email = $('email').value.trim();
+  const senha = $('senha').value;
+  const termos = $('termos').checked;
+
+  if (!email || !senha) { mostrar('Preencha e-mail e senha.'); return; }
+  if (senha.length < 8) { mostrar('A senha precisa de pelo menos 8 caracteres.'); return; }
+  if (!termos) { mostrar('Aceite os termos de uso para continuar.'); return; }
+
+  carregando('btn-criar', true);
+  try {
+    const r = await SUPABASE.criarConta(nome, email, senha);
+    carregando('btn-criar', false, 'Criar conta');
+
+    if (r.success) {
+      if (r.confirmarEmail) {
+        mostrar(r.message || 'Conta criada. Confirme o e-mail para entrar.', 'ok');
+        setTimeout(() => { location.href = '/entrar'; }, 2500);
+      } else {
+        mostrar('Conta criada. Abrindo...', 'ok');
+        setTimeout(() => { location.href = '/conta'; }, 500);
+      }
+    } else {
+      mostrar(r.message || 'Não foi possível criar a conta.');
+    }
+  } catch (err) {
+    carregando('btn-criar', false, 'Criar conta');
+    mostrar('Falha de conexão: ' + err.message);
+  }
+};
+
+// Ao abrir: se já tem sessão, vai para a conta.
+(async () => {
+  try {
+    const s = await SUPABASE.sessaoValida();
+    if (s) { location.href = '/conta'; return; }
+  } catch (e) { }
+  $('carregando').remove();
+  $('usuario').focus();
+})();
+</script>
+</body>
+</html>

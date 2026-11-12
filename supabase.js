@@ -17,8 +17,8 @@ const hwid = require('./hwid');
 // (a chave anon vai no app de qualquer forma); o que protege os dados é a regra de
 // segurança no banco, não o sigilo dessas duas strings.
 const CONFIG = {
-  url: process.env.VL_SUPABASE_URL || '',
-  anonKey: process.env.VL_SUPABASE_ANON_KEY || '',
+  url: process.env.VL_SUPABASE_URL || 'https://wsmropvlmnyegpvmyndn.supabase.co',
+  anonKey: process.env.VL_SUPABASE_ANON_KEY || 'sb_publishable_7yffHvepz_e7LCm3BvL55w_euYmiX6o',
 };
 
 const DIR = path.join(process.env.APPDATA || os.homedir(), 'VL Optimizer');
