@@ -110,7 +110,7 @@
 
 
 /* ── Logo VL em destaque no centro do giroscópio ── */
-.gy-core { width: 100px; height: 100px; margin: -50px 0 0 -50px; }
+.gy-core { width: 78px; height: 78px; margin: -39px 0 0 -39px; }
 .gy-core > * { border-radius: 50%; }
 .gy-core i:nth-child(1) {
   transform: translateZ(-12px);
@@ -121,8 +121,11 @@
 .gy-core i:nth-child(2) { transform: translateZ(-6px); background: #4a0409; }
 .gy-core i:nth-child(3) { background: #120305; }
 .gy-core img {
-  transform: translateZ(40px) scale(1.12);
-  filter: drop-shadow(0 0 9px rgba(255, 31, 46, 0.85)) drop-shadow(0 4px 12px rgba(0, 0, 0, 0.55));
+  transform: translateZ(6px) scale(1.06);
+  /* box-shadow no lugar de filter: drop-shadow. O filter sairia da GPU e seria rasterizado na CPU
+     a cada quadro; o box-shadow fica no compositor. */
+  box-shadow: 0 0 9px rgba(255, 31, 46, 0.55), 0 4px 12px rgba(0, 0, 0, 0.35);
+  border-radius: 50%;
 }
 [data-theme="light"] .gy-core i:nth-child(1) {
   background: radial-gradient(circle at 50% 36%, #ffffff 0%, #ffe6e8 58%, #ffd4d8 100%);

@@ -1220,70 +1220,39 @@ function overlayPayload() {
 
 let lastSys = { cpu: null, cpuTemp: null, gpu: null, gpuTemp: null, ramUsed: null, ramTotal: null };
 async function sysSample() {
-  const [r, gpus] = await Promise.all([
-    core.ps(`
-      $cpu = (Get-CimInstance Win32_PerfFormattedData_PerfOS_Processor -Filter "Name='_Total'").PercentProcessorTime
-      $ram = Get-CimInstance Win32_OperatingSystem
-      Write-Output (Json @{ cpu=[int]$cpu; ramUsed=[math]::Round(($ram.TotalVisibleMemorySize - $ram.FreePhysicalMemory)/1MB,1); ramTotal=[math]::Round($ram.TotalVisibleMemorySize/1MB) })`, 15000),
-    nvQuery(),
-  ]);
+  // CPU e RAM vem do proprio Node: neste Windows os contadores de performance respondem
+  // "nenhum contador valido" para \Processor(_Total).
   try {
-    const j = JSON.parse(r.out);
-    lastSys.cpu = j.cpu; lastSys.ramUsed = j.ramUsed; lastSys.ramTotal = j.ramTotal;
-  } catch (e) {}
-  if (gpus.length) {
-    lastSys.gpu = gpus[0].usage != null ? Math.round(gpus[0].usage) : lastSys.gpu;
-    lastSys.gpuTemp = gpus[0].temp != null ? Math.round(gpus[0].temp) : null;
-    lastSys.gpuPower = gpus[0].power;
-  }
-}
+    const cpus = os.cpus() || [];
+    let idle = 0, total = 0;
+    for (const x of cpus) {
+      const t = x.times;
+      idle += t.idle;
+      total += t.user + t.nice + t.sys + t.irq + t.idle;
+    }
+    if (sysAmostra) {
+      const di = idle - sysAmostra.idle;
+      const dt = total - sysAmostra.total;
+      if (dt > 0) lastSys.cpu = Math.max(0, Math.min(100, Math.round((1 - di / dt) * 100)));
+    }
+    sysAmostra = { idle, total };
+    const tot = os.totalmem(), liv = os.freemem();
+    lastSys.ramTotal = Math.round(tot / 1048576);
+    lastSys.ramUsed = Math.round((tot - liv) / 1048576);
+  } catch (e) { }
 
-// Captura paralela (sessão própria do PresentMon) só para montar a lista de FPS por processo.
-const listCap = { proc: null, apps: new Map(), lastPoll: 0 };
-function startListCapture() {
-  if (listCap.proc) return;
+  // GPU pelo nvidia-smi (~120 ms).
   try {
-    const p = spawn(PM, ['--output_stdout', '--no_console_stats', '--session_name', 'LOPT_LIST', '--stop_existing_session'], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
-    listCap.proc = p;
-    listCap.denied = false;
-    try { p.stderr.on('data', (d) => { if (/access denied|elevated privilege|administrative/i.test(String(d))) listCap.denied = true; }); } catch (e) {}
-    try { p.stderr.on('data', (d) => { if (/access denied|elevated privilege|administrative/i.test(String(d))) listCap.denied = true; }); } catch (e) {}
-    let buf = '', header = null, ftIdx = -1, appIdx = 0;
-    p.stdout.on('data', (d) => {
-      buf += d.toString();
-      const lines = buf.split(/\r?\n/);
-      buf = lines.pop();
-      for (const line of lines) {
-        if (!header) {
-          if (/Application|ProcessID/i.test(line)) {
-            header = line.split(',');
-            appIdx = header.findIndex((h) => /^Application$/i.test(h));
-            if (appIdx < 0) appIdx = 0;
-            ftIdx = header.findIndex((h) => /MsBetweenPresents|MsBetweenDisplayChange/i.test(h));
-          }
-          continue;
-        }
-        const cols = line.split(',');
-        if (cols.length < 3) continue;
-        const app = String(cols[appIdx] || '').trim();
-        if (!app) continue;
-        const ft = parseFloat(cols[ftIdx >= 0 ? ftIdx : cols.length - 1]);
-        if (!isFinite(ft) || ft <= 0) continue;
-        const now = Date.now();
-        const rec = listCap.apps.get(app) || { frames: [] };
-        rec.frames.push({ t: now, ft });
-        while (rec.frames.length && now - rec.frames[0].t > 2500) rec.frames.shift();
-        if (rec.frames.length > 400) rec.frames.shift();
-        const avg = rec.frames.reduce((a, b) => a + b.ft, 0) / (rec.frames.length || 1);
-        rec.fps = Math.round(1000 / avg);
-        listCap.apps.set(app, rec);
-      }
-    });
-    p.on('exit', () => { if (listCap.proc === p) listCap.proc = null; });
-    p.on('error', () => { if (listCap.proc === p) listCap.proc = null; });
-  } catch (e) { listCap.proc = null; }
-}
+    const g = await nvQuery();
+    if (g && g.length) {
+      lastSys.gpu = Math.round(g[0].usage || 0);
+      if (g[0].temp != null) lastSys.gpuTemp = g[0].temp;
+    }
+  } catch (e) { }
 
+  return lastSys;
+}
+let sysAmostra = null;
 ex.fpsStatus = async () => {
   if (!fps.proc && !fps.targetPid) {
     // auto-alvo: só um jogo conhecido, nunca o primeiro processo que aparecer

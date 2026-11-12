@@ -1,5 +1,26 @@
 // main.js — VL Optimizer (Electron)
 const { app, BrowserWindow, ipcMain, shell, screen, nativeTheme, globalShortcut } = require('electron');
+
+// Rastreio de janelas (temporario): registra toda janela criada e toda pagina carregada.
+try {
+  const fsLog = require('fs');
+  const LOGF = "C:\\VLTemp\\janela-log3.txt";
+  const registrar = (linha) => {
+    try { fsLog.appendFileSync(LOGF, linha + '\n'); } catch (e) { }
+  };
+  app.on('browser-window-created', (_e, w) => {
+    const pilha = (new Error().stack || '').split('\n').slice(2, 7).map(s => s.trim().replace(/^at /, '')).join(' <- ');
+    registrar('CRIADA :: ' + pilha);
+  });
+  const proto = BrowserWindow.prototype;
+  const lf = proto.loadFile;
+  proto.loadFile = function (f, ...rest) {
+    const pilha = (new Error().stack || '').split('\n').slice(2, 8).map(s => s.trim().replace(/^at /, '')).join(' <- ');
+    registrar('CARREGOU ' + String(f).split(/[\\/]/).pop() + ' :: ' + pilha);
+    return lf.call(this, f, ...rest);
+  };
+} catch (e) { }
+
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -276,22 +297,19 @@ function createWindow() {
 // ── Overlay de FPS ──
 function ensureOverlay() {
   if (overlayWin) return overlayWin;
-  const d = screen.getPrimaryDisplay().workAreaSize;
   overlayWin = new BrowserWindow({
     width: 300, height: 150, x: 20, y: 20, frame: false, transparent: true, resizable: false,
     alwaysOnTop: true, skipTaskbar: true, focusable: false, hasShadow: false, show: false,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: false },
   });
   overlayWin.setIgnoreMouseEvents(true, { forward: true });
-  overlayWin.loadFile(path.join(__dirname, 'src', 'fps-overlay.html'));
-  // NÃO mostrar no ready-to-show.
+  // A pagina NAO e carregada aqui de proposito.
   //
-  // Esta linha chamava showInactive() assim que a janela carregava. O overlay é alwaysOnTop e
-  // transparente, então uma superfície de 300x150 passava a ser composta por cima de tudo desde o
-  // primeiro segundo — e cada atualização de FPS mandava a janela redesenhar. Resultado: o cursor
-  // travava ao abrir o app. A referência (GDZ) não tem nenhum showInactive: o overlay só aparece
-  // quando o usuário liga no menu. Quem mostra agora é applyOverlay(), que só é chamado com
-  // overlay.on = true.
+  // Criar a janela via BrowserWindow ja cria um renderer, e um renderer carregado desenha mesmo
+  // com a janela oculta: medido 166 quadros por segundo numa janela que ninguem ve. Era o segundo
+  // renderer do app. Agora a pagina e carregada em applyOverlay(), na primeira vez que o usuario
+  // liga o overlay; enquanto isso nao existe renderer nenhum para gastar CPU.
+  overlayWin.hide();
   overlayWin.on('closed', () => { overlayWin = null; });
   return overlayWin;
 }
@@ -299,6 +317,10 @@ function applyOverlay(payload) {
   const ov = ex.fpsOverlayPayload();
   if (!payload || !payload.on) { if (overlayWin) overlayWin.hide(); return; }
   const w = ensureOverlay();
+  // Carrega a pagina na primeira exibicao. As seguintes ja estao carregadas.
+  if (!w.webContents.getURL()) {
+    w.loadFile(path.join(__dirname, 'src', 'fps-overlay.html'));
+  }
   const pos = payload.pos || 0;
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
   const bw = 300, bh = 150, pad = 16;
