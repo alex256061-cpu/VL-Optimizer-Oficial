@@ -16,3 +16,7 @@ engine/*.exe
 bin/Lossless.dll
 bin/PresentMon.exe
 native/scaler/fsr1_engine.exe
+
+# motor oficial do Lossless: vai no instalador, nao no codigo
+native/lossless/
+engine/VLScalingHost.exe

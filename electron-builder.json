@@ -1,40 +1,68 @@
 {
-  "appId": "com.l.optimizer",
-  "productName": "VL Optimizer",
-  "directories": { "output": "release" },
-  "asar": false,
-  "npmRebuild": false,
-  "files": [
-    "package.json", "main.js", "preload.js", "engine.js", "engine-extras.js",
-    "engine-scaler.js", "engine-bridge.js", "updater.js", "features.js", "assets/**/*", "src/**/*",
-    "bin/PresentMon.exe", "bin/PresentMon.LICENSE.txt",
-    "bin/Lossless.dll",
-    "engine/VLScalingHost.exe",
-    "native/scaler/fsr1_engine.cjs", "native/scaler/fsr1_engine.exe",
-    "native/scaler/src/fsr1_con.js", "native/scaler/shaders/*.cso",
-    "LEIA-ME.txt", "FSR.LICENSE.txt"
-  ],
-  "publish": [
-    { "provider": "github", "owner": "alex256061-cpu", "repo": "VL-Optimizer-Oficial" }
-  ],
-  "win": {
-    "target": [{ "target": "nsis", "arch": ["x64"] }],
-    "icon": "assets/icon.ico",
-    "artifactName": "Instalar-VL-Optimizer-${version}.${ext}",
-    "requestedExecutionLevel": "asInvoker"
-  },
-  "nsis": {
-    "oneClick": false,
-    "perMachine": false,
-    "allowElevation": true,
-    "allowToChangeInstallationDirectory": true,
-    "createDesktopShortcut": true,
-    "createStartMenuShortcut": true,
-    "shortcutName": "VL Optimizer",
-    "uninstallDisplayName": "VL Optimizer",
-    "installerLanguages": ["pt_BR"],
-    "language": "1046",
-    "runAfterFinish": false,
-    "deleteAppDataOnUninstall": false
-  }
+    "appId":  "com.l.optimizer",
+    "productName":  "VL Optimizer",
+    "directories":  {
+                        "output":  "release"
+                    },
+    "asar":  false,
+    "npmRebuild":  false,
+    "files":  [
+                  "package.json",
+                  "main.js",
+                  "preload.js",
+                  "engine.js",
+                  "engine-extras.js",
+                  "engine-scaler.js",
+                  "engine-bridge.js",
+                  "updater.js",
+                  "lossless-official.js",
+                  "features.js",
+                  "assets/**/*",
+                  "src/**/*",
+                  "bin/PresentMon.exe",
+                  "bin/PresentMon.LICENSE.txt",
+                  "native/lossless/**/*",
+                  "native/scaler/fsr1_engine.cjs",
+                  "native/scaler/fsr1_engine.exe",
+                  "native/scaler/src/fsr1_con.js",
+                  "native/scaler/shaders/*.cso",
+                  "LEIA-ME.txt",
+                  "FSR.LICENSE.txt"
+              ],
+    "publish":  [
+                    {
+                        "provider":  "github",
+                        "owner":  "alex256061-cpu",
+                        "repo":  "VL-Optimizer-Oficial"
+                    }
+                ],
+    "win":  {
+                "target":  [
+                               {
+                                   "target":  "nsis",
+                                   "arch":  [
+                                                "x64"
+                                            ]
+                               }
+                           ],
+                "icon":  "assets/icon.ico",
+                "artifactName":  "Instalar-VL-Optimizer-${version}.${ext}",
+                "requestedExecutionLevel":  "asInvoker"
+            },
+    "nsis":  {
+                 "oneClick":  false,
+                 "perMachine":  false,
+                 "allowElevation":  true,
+                 "allowToChangeInstallationDirectory":  true,
+                 "createDesktopShortcut":  true,
+                 "createStartMenuShortcut":  true,
+                 "shortcutName":  "VL Optimizer",
+                 "uninstallDisplayName":  "VL Optimizer",
+                 "installerLanguages":  [
+                                            "pt_BR"
+                                        ],
+                 "language":  "1046",
+                 "runAfterFinish":  false,
+                 "deleteAppDataOnUninstall":  false
+             }
 }

@@ -126,34 +126,49 @@ internal sealed class EngineHost : IDisposable
                 return false;
             }
 
-            // 32 argumentos: os 4 primeiros vão em registrador, o resto na pilha. Montar isso por
-            // P/Invoke com 28 parâmetros é o que o binário espera; a ordem está documentada em
-            // ScalingEngineArguments.cs no projeto WPF.
+            // 32 argumentos na ordem provada pelo disassembly do binário:
+            //   arg1 ECX, arg2 EDX, arg3 R8D, arg4 R9D, depois RSP+0x28 + 8*(n-5).
+            // A ordem correta importa: um slot trocado faz o motor rodar com configuração errada
+            // sem reclamar, e o sintoma é a janela preta (ele captura, mas não escala).
+            //
+            // Os valores abaixo reproduzem o Settings.xml que o próprio Lossless grava:
+            //   ScalingMode=Auto(1)  ScalingFitMode=Fullscreen(1)  CaptureApi=DXGI(0)
+            //   WindowedMode=false   SyncMode=VSYNC2(2)           MaxFrameLatency=1
+            //   QueueTarget=1        GsyncSupport=true            Vrs=true
             var arguments = new long[32];
-            arguments[0] = options["mode"]?.GetValue<int>() ?? 1;             // ECX
-            arguments[1] = options["fitMode"]?.GetValue<int>() ?? 1;          // EDX
-            arguments[2] = options["method"]?.GetValue<int>() ?? 5;           // R8D  (FSR)
-            arguments[3] = options["subtype"]?.GetValue<int>() ?? 0;          // R9D
-            arguments[4] = ToScaled(options["scaleFactor"]?.GetValue<double>() ?? 1.5);  // RSP+0x28
-            arguments[5] = 0;                                                  // Vrs
-            arguments[6] = ToScaled(options["sharpness"]?.GetValue<double>() ?? 0.0);
-            arguments[7] = 1;                                                  // ResizeBeforeScale
-            arguments[8] = options["frameGeneration"]?.GetValue<int>() ?? 0;
-            arguments[9] = 0;                                                  // FrameGenerationSize
-            arguments[10] = options["fgMode"]?.GetValue<int>() ?? 0;
-            arguments[11] = options["multiplier"]?.GetValue<int>() ?? 2;
-            arguments[12] = options["targetFps"]?.GetValue<int>() ?? 0;
-            arguments[13] = ToScaled(options["flowScale"]?.GetValue<double>() ?? 1.0);
-            arguments[14] = 0;                                                 // ClipCursor
-            arguments[15] = 1;                                                 // CursorSensitivity
-            arguments[16] = 0;                                                 // HideCursor
-            arguments[17] = 0;                                                 // ScaleCursor
-            arguments[18] = options["syncMode"]?.GetValue<int>() ?? 0;
-            arguments[19] = options["maxFrameLatency"]?.GetValue<int>() ?? 1;
-            arguments[20] = 0;                                                 // GsyncSupport
-            arguments[21] = 0;                                                 // HdrSupport
-            arguments[22] = options["captureApi"]?.GetValue<int>() ?? 0;
-            arguments[23] = options["queueTarget"]?.GetValue<int>() ?? 1;
+            arguments[0]  = options["mode"]?.GetValue<int>() ?? 1;              // ECX  ScalingMode
+            arguments[1]  = options["fitMode"]?.GetValue<int>() ?? 1;           // EDX  ScalingFitMode
+            arguments[2]  = options["method"]?.GetValue<int>() ?? 5;            // R8D  ScalingType
+            arguments[3]  = options["subtype"]?.GetValue<int>() ?? 0;           // R9D
+            arguments[4]  = ToScaled(options["scaleFactor"]?.GetValue<double>() ?? 1.5); // RSP+0x28 float
+            arguments[5]  = options["resizeBeforeScaling"]?.GetValue<int>() ?? 0;        // RSP+0x30 byte
+            arguments[6]  = ToSharp(options["sharpness"]?.GetValue<double>() ?? 0.0);    // RSP+0x38 int
+            arguments[7]  = options["vrs"]?.GetValue<int>() ?? 1;                        // RSP+0x40 byte
+            arguments[8]  = options["frameGeneration"]?.GetValue<int>() ?? 0;            // RSP+0x48
+            arguments[9]  = options["frameGenerationSize"]?.GetValue<int>() ?? 0;        // RSP+0x50
+            arguments[10] = options["fgMode"]?.GetValue<int>() ?? 0;                     // RSP+0x58
+            arguments[11] = ToScaled(options["multiplier"]?.GetValue<double>() ?? 2);    // RSP+0x60 float
+            arguments[12] = ToScaled(options["targetFps"]?.GetValue<double>() ?? 0);     // RSP+0x68 float
+            arguments[13] = options["flowScale"]?.GetValue<int>() ?? 100;                // RSP+0x70 int
+            arguments[14] = options["clipCursor"]?.GetValue<int>() ?? 1;                 // RSP+0x78 byte
+            arguments[15] = options["cursorSensitivity"]?.GetValue<int>() ?? 0;          // RSP+0x80 byte
+            arguments[16] = options["hideCursor"]?.GetValue<int>() ?? 0;                 // RSP+0x88 byte
+            arguments[17] = options["scaleCursor"]?.GetValue<int>() ?? 0;                // RSP+0x90 byte
+            arguments[18] = options["syncMode"]?.GetValue<int>() ?? 2;                   // RSP+0x98
+            arguments[19] = options["maxFrameLatency"]?.GetValue<int>() ?? 1;            // RSP+0xa0
+            arguments[20] = options["gsyncSupport"]?.GetValue<int>() ?? 1;               // RSP+0xa8 byte
+            arguments[21] = options["hdrSupport"]?.GetValue<int>() ?? 0;                 // RSP+0xb0 byte
+            arguments[22] = options["captureApi"]?.GetValue<int>() ?? 0;                 // RSP+0xb8
+            arguments[23] = options["queueTarget"]?.GetValue<int>() ?? 1;                // RSP+0xc0
+            arguments[24] = options["drawFps"]?.GetValue<int>() ?? 1;                    // RSP+0xc8 byte
+            arguments[25] = options["gpuId"]?.GetValue<int>() ?? 0;                      // RSP+0xd0
+            arguments[26] = options["displayId"]?.GetValue<int>() ?? 0;                  // RSP+0xd8
+            // RSP+0xe0..0xf8: recorte da captura. Deixar 0 significa "tela inteira".
+            arguments[27] = 0;
+            arguments[28] = 0;
+            arguments[29] = 0;
+            arguments[30] = 0;
+            arguments[31] = options["multiDisplayMode"]?.GetValue<int>() ?? 0;           // RSP+0x100 byte
 
             for (int i = 0; i < arguments.Length; i++)
             {
@@ -188,6 +203,13 @@ internal sealed class EngineHost : IDisposable
     {
         // O motor recebe o fator de escala em ponto fixo de 16 bits.
         return (long)Math.Round(Math.Clamp(value, 0.1, 8.0) * 65536.0);
+    }
+
+    /// <summary>Nitidez: a interface usa 0..100 e o motor grava em Settings.xml 0..10.</summary>
+    private static long ToSharp(double percent)
+    {
+        double clamped = Math.Clamp(percent, 0, 100);
+        return (long)Math.Round(clamped / 10.0);
     }
 
     public void Stop()
@@ -228,7 +250,16 @@ internal sealed class EngineHost : IDisposable
 
     private static nint CreateOutputWindow(int width, int height)
     {
-        // Janela própria onde o motor apresenta. Sem ela o Activate não tem alvo e o processo cai.
+        // Janela própria onde o motor apresenta o jogo escalado.
+        //
+        // Estilo: WS_POPUP | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN, sem caption.
+        // Não uso WS_OVERLAPPEDWINDOW porque a barra de título apareceria em cima da imagem
+        // escalada, e o motor desenha o frame inteiro na área do cliente.
+        const uint style = 0x80000000   // WS_POPUP
+                         | 0x10000000   // WS_VISIBLE
+                         | 0x04000000   // WS_CLIPSIBLINGS
+                         | 0x02000000;  // WS_CLIPCHILDREN
+
         nint instance = GetModuleHandle(null);
         var className = "VLScalingOutput";
         var wc = new WNDCLASSEX
@@ -240,8 +271,16 @@ internal sealed class EngineHost : IDisposable
             lpszClassName = className,
         };
         if (RegisterClassEx(ref wc) == 0 && Marshal.GetLastWin32Error() != 1410) return 0; // 1410 = já registrada
-        return CreateWindowEx(0, className, "VL Scaling", 0x10CF0000, 40, 40, width, height,
+
+        nint hwnd = CreateWindowEx(0, className, "VL Scaling", style, 40, 40, width, height,
             0, 0, instance, 0);
+        if (hwnd == 0) return 0;
+
+        // Sem WS_VISIBLE a janela nasce oculta e o motor não apresenta nada: garantir aqui,
+        // porque o estilo pode ser mascarado pelo CreateWindowEx dependendo do tema.
+        ShowWindow(hwnd, 5);   // SW_SHOW
+        UpdateWindow(hwnd);
+        return hwnd;
     }
 
     [UnmanagedFunctionPointer(CallingConvention.Winapi)] private delegate void EngineCallback(nint a1, nint a2, nint a3, nint a4);
@@ -277,6 +316,8 @@ internal sealed class EngineHost : IDisposable
     private static extern nint CreateWindowEx(uint exStyle, string className, string windowName, uint style,
         int x, int y, int width, int height, nint parent, nint menu, nint instance, nint param);
     [DllImport("user32.dll")] private static extern bool DestroyWindow(nint hwnd);
+    [DllImport("user32.dll")] private static extern bool ShowWindow(nint hwnd, int command);
+    [DllImport("user32.dll")] private static extern bool UpdateWindow(nint hwnd);
     [DllImport("user32.dll")] private static extern nint DefWindowProc(nint hwnd, uint msg, nint wParam, nint lParam);
     [DllImport("user32.dll")] private static extern bool PeekMessage(out MSG msg, nint hwnd, uint min, uint max, uint remove);
     [DllImport("user32.dll")] private static extern bool TranslateMessage(ref MSG msg);
