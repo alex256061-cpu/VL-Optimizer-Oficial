@@ -1,7 +1,7 @@
 {
   "name": "l-optimizer",
   "productName": "VL Optimizer",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "VL Optimizer â€” suÃ­te de otimizaÃ§Ã£o de PC para jogos",
   "author": "Lucas Larado",
   "main": "main.js",
