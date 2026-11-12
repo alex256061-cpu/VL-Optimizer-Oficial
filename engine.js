@@ -577,7 +577,7 @@ public class D2 { [StructLayout(LayoutKind.Sequential)] public struct DM { publi
     tag: 'memoria', rec: true, restart: 'reboot', title: 'Memória virtual gerenciada pelo Windows',
     desc: 'Volta o arquivo de paginação para o automático. Otimizadores que desligam ou fixam esse arquivo fazem jogos pesados, como o GTA, fecharem do nada.',
     regs: [{ path: HKLM + '\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Memory Management', name: 'PagingFiles', type: 'String', on: '', off: null }],
-    detect: `$v = Get-Val '${HKLM}\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Memory Management' 'PagingFiles'; if ($null -eq $v -or $v -eq '') { Write-Output '1' } else { Write-Output '0' }`,
+    detect: `$v = Get-Val '${HKLM}\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Memory Management' 'PagingFiles'; $auto = $false; if ($null -eq $v -or [string]$v -eq '') { $auto = $true } elseif (-not ([string]$v -match '^\\s*\\d+\\s+\\d+\\s')) { $auto = $true }; if ($auto) { Write-Output '1' } else { Write-Output '0' }`,
     revert: `Write-Output 'ok'`,
   },
 };
