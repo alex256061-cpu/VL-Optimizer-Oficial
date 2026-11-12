@@ -3,7 +3,8 @@ const { contextBridge, ipcRenderer, shell } = require('electron');
 
 const SEND = ['minimize-window', 'maximize-window', 'close-window', 'logout', 'open-scaling-window', 'gs-minimize', 'gs-maximize', 'gs-close'];
 const INVOKE = [
-  'get-user', 'check-session', 'login', 'register', 'open-site', 'update-status', 'update-install', 'claim-key',
+  'get-user', 'check-session', 'login', 'register', 'open-site', 'update-status', 'update-install',
+  'update-check', 'update-open-page', 'claim-key',
   'telemetry-consent', 'telemetry-consent-set', 'offers', 'plan-event', 'autostart-get', 'autostart-set',
   'get-hardware', 'get-stats', 'get-mem-stats', 'get-processes', 'kill-process',
   'run-action', 'revert-action', 'restore-all', 'get-backups', 'get-caps', 'run-check',

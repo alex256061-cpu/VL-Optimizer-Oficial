@@ -6,13 +6,16 @@
   "npmRebuild": false,
   "files": [
     "package.json", "main.js", "preload.js", "engine.js", "engine-extras.js",
-    "engine-scaler.js", "engine-bridge.js", "features.js", "assets/**/*", "src/**/*",
+    "engine-scaler.js", "engine-bridge.js", "updater.js", "features.js", "assets/**/*", "src/**/*",
     "bin/PresentMon.exe", "bin/PresentMon.LICENSE.txt",
     "bin/Lossless.dll",
     "engine/VLScalingHost.exe",
     "native/scaler/fsr1_engine.cjs", "native/scaler/fsr1_engine.exe",
     "native/scaler/src/fsr1_con.js", "native/scaler/shaders/*.cso",
     "LEIA-ME.txt", "FSR.LICENSE.txt"
+  ],
+  "publish": [
+    { "provider": "github", "owner": "alex256061-cpu", "repo": "VL-Optimizer-Oficial" }
   ],
   "win": {
     "target": [{ "target": "nsis", "arch": ["x64"] }],

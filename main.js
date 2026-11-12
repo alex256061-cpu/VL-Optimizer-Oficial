@@ -7,6 +7,7 @@ const os = require('os');
 const core = require('./engine');
 const ex = require('./engine-extras');
 const feat = require('./features');
+const updater = require('./updater');
 require('./engine-scaler').mountScaler(ex);
 
 // Em modos de teste, usa um perfil isolado: evita conflito com a instância elevada
@@ -325,8 +326,25 @@ H('get-user', () => ex.getUser());
 H('check-session', () => ({ valid: true }));
 H('login', () => ({ success: true, user: ex.getUser() }));
 H('register', () => ({ success: true }));
-H('update-status', () => ex.updateStatus());
-H('update-install', () => ({ success: false }));
+H('update-status', () => {
+  // Estado do auto-update (GitHub Releases). Sem rede ou sem release publicado, devolve o estado
+  // atual com error preenchido: a tela mostra o aviso em vez de quebrar.
+  try { return { success: true, ...updater.status() }; }
+  catch (e) { return { success: false, error: e.message }; }
+});
+H('update-check', async () => {
+  try { return { success: true, ...(await updater.check()) }; }
+  catch (e) { return { success: false, error: e.message }; }
+});
+H('update-install', () => {
+  // Só instala o que já foi baixado; nunca reinicia o app por conta própria.
+  try { return updater.install(); }
+  catch (e) { return { success: false, error: e.message }; }
+});
+H('update-open-page', () => {
+  try { updater.openReleasePage(); return { success: true }; }
+  catch (e) { return { success: false, error: e.message }; }
+});
 H('claim-key', () => ex.claimKey());
 H('telemetry-consent', () => ex.telemetryConsent());
 H('telemetry-consent-set', () => ({ success: true }));
@@ -526,10 +544,13 @@ app.whenReady().then(async () => {
   } catch (e) {}
   feat.autoStart();
   feat.ramStart();
+  // Auto-update pelo GitHub Releases: consulta em segundo plano, baixa sozinho e deixa a
+  // instalação para o usuário. Falha aqui nunca impede o app de abrir.
+  try { updater.start(); } catch (e) {}
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
 
-app.on('will-quit', () => { try { globalShortcut.unregisterAll(); } catch (e) {} });
+app.on('will-quit', () => { try { globalShortcut.unregisterAll(); } catch (e) { } try { updater.stop(); } catch (e) { } });
 
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 process.on('uncaughtException', (e) => { try { fs.appendFileSync(path.join(os.tmpdir(), 'lopt-error.log'), String(e && e.stack || e) + '\n'); } catch (_) {} });
