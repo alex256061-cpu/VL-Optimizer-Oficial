@@ -1,0 +1,119 @@
+/* ══════════════════════════════════════════════════════════════════
+   VL Optimizer — Início (Painel)
+   Carregado depois do theme-light.css: tudo do Painel mora aqui, nos dois temas.
+
+   O herói tem o giroscópio 3D (giroscopio.css). Os números vêm do Windows: o mostrador
+   em volta dele tem um traço por otimização recomendada e acende os que já estão ligados.
+   ══════════════════════════════════════════════════════════════════ */
+
+#pg-dashboard { --gy-on: #ff1f2e; --gy-off: rgba(255,255,255,0.13); }
+[data-theme="light"] #pg-dashboard { --gy-on: #e0101f; --gy-off: rgba(24,18,48,0.13); }
+
+/* ── Topo: herói + hardware, na mesma altura ── */
+.dh-top { display: grid; grid-template-columns: minmax(0, 1.85fr) minmax(300px, 1fr); gap: 16px; align-items: stretch; }
+
+.dh-hero {
+  display: flex; align-items: center; gap: 28px; padding: 28px 34px 28px 38px; border-radius: 22px; position: relative; overflow: hidden; min-width: 0;
+  background:
+    radial-gradient(ellipse 55% 95% at 0% 0%, rgba(255,31,46,0.24) 0%, transparent 70%),
+    radial-gradient(circle 300px at calc(100% - 164px) 50%, rgba(255,31,46,0.16) 0%, transparent 100%),
+    linear-gradient(165deg, #18132a 0%, #0e0b16 60%, #0a0810 100%);
+  border: 1px solid rgba(255,85,96,0.2); box-shadow: 0 10px 30px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.05);
+}
+/* órbitas apagadas saindo do giroscópio, para o lado direito não ficar solto */
+.dh-hero::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: repeating-radial-gradient(circle at calc(100% - 164px) 50%, transparent 0 43px, rgba(255,85,96,0.10) 43px 44px);
+  -webkit-mask: radial-gradient(circle at calc(100% - 164px) 50%, transparent 128px, #000 150px, transparent 460px);
+          mask: radial-gradient(circle at calc(100% - 164px) 50%, transparent 128px, #000 150px, transparent 460px);
+}
+/* cantos de HUD, como no site */
+:root:not([data-theme="light"]) .dh-hero::after {
+  content: ''; position: absolute; inset: 11px; pointer-events: none; opacity: .85;
+  background:
+    linear-gradient(var(--volt), var(--volt)) left top / 16px 2px no-repeat, linear-gradient(var(--volt), var(--volt)) left top / 2px 16px no-repeat,
+    linear-gradient(var(--volt), var(--volt)) right top / 16px 2px no-repeat, linear-gradient(var(--volt), var(--volt)) right top / 2px 16px no-repeat,
+    linear-gradient(var(--volt), var(--volt)) left bottom / 16px 2px no-repeat, linear-gradient(var(--volt), var(--volt)) left bottom / 2px 16px no-repeat,
+    linear-gradient(var(--volt), var(--volt)) right bottom / 16px 2px no-repeat, linear-gradient(var(--volt), var(--volt)) right bottom / 2px 16px no-repeat;
+}
+[data-theme="light"] .dh-hero {
+  background:
+    radial-gradient(ellipse 60% 90% at 0% 0%, rgba(255,31,46,0.26) 0%, transparent 70%),
+    radial-gradient(circle 300px at calc(100% - 164px) 50%, rgba(255,110,120,0.30) 0%, transparent 100%),
+    linear-gradient(165deg, #ffffff 0%, #f5efff 55%, #eadfff 100%);
+  border-color: rgba(224,16,31,0.2); box-shadow: 0 1px 2px rgba(143,12,21,0.05), 0 14px 36px rgba(224,16,31,0.14);
+}
+[data-theme="light"] .dh-hero::before { background: repeating-radial-gradient(circle at calc(100% - 164px) 50%, transparent 0 43px, rgba(224,16,31,0.13) 43px 44px); }
+
+/* ── Texto do herói ── */
+.dh-sum { flex: 1; min-width: 0; position: relative; z-index: 1; }
+.dh-title-row { display: flex; align-items: center; gap: 12px; margin-top: 13px; flex-wrap: wrap; }
+.dh-title { font-size: 30px; line-height: 1.1; color: var(--text); }
+.dh-chip { font-size: 10.5px; font-weight: 700; padding: 4px 9px; border-radius: 999px; border: 1px solid; white-space: nowrap; }
+.dh-chip.warn { color: #fcd34d; background: rgba(251,191,36,0.14); border-color: rgba(251,191,36,0.35); }
+.dh-chip.ok { color: #6ee7b7; background: rgba(52,211,153,0.12); border-color: rgba(52,211,153,0.32); }
+.dh-desc { font-size: 13px; line-height: 1.55; color: var(--text2); margin-top: 10px; max-width: 46ch; }
+.dh-act { display: flex; align-items: center; gap: 12px 22px; margin-top: 22px; flex-wrap: wrap; }
+.dh-cta { height: 50px; padding: 0 28px; border-radius: 15px; font-size: 14.5px; display: inline-flex; align-items: center; justify-content: center; gap: 9px; white-space: nowrap; cursor: pointer; -webkit-app-region: no-drag; transition: transform 0.2s var(--ease-out), box-shadow 0.3s ease; }
+.dh-cta svg { width: 17px; height: 17px; }
+.dh-cta svg [fill="white"] { fill: #0a0a0c; }
+.dh-cta:hover:not(:disabled) { transform: translateY(-1px); }
+.dh-cta:disabled { opacity: 0.6; }
+.dh-link { background: none; border: none; display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: var(--purple3); cursor: pointer; padding: 0; white-space: nowrap; }
+.dh-link:hover { color: #fff; }
+.dh-link svg { transition: transform 0.2s var(--ease-out); }
+.dh-link:hover svg { transform: translateX(2px); }
+:root:not([data-theme="light"]) .dh-link { color: var(--volt-2); }
+.dh-last { font-size: 10.5px; color: var(--text4); margin-top: 14px; }
+
+/* ── Giroscópio do herói: o palco é o .gy do giroscopio.css, um pouco mais alto para caber o número ── */
+.dh-gyro { z-index: 1; height: 268px; }
+/* Mostrador: um traço por recomendado; abre embaixo, onde fica o número */
+.gy-dial { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.gy-dial line { stroke: var(--gy-off); stroke-width: 2.6; stroke-linecap: round; transition: stroke 0.5s ease; }
+.gy-dial line.on { stroke: var(--gy-on); }
+
+/* Número no vão do mostrador */
+.dh-count { position: absolute; left: 50%; top: 218px; transform: translateX(-50%); display: grid; grid-template-columns: auto auto; column-gap: 6px; align-items: baseline; justify-content: center; white-space: nowrap; }
+.dh-count b { font-size: 31px; line-height: 1; color: var(--text); }
+.dh-count span { font-size: 11px; color: var(--text3); }
+.dh-count em { grid-column: 1 / -1; justify-self: center; margin-top: 5px; font-family: var(--font-mono); font-style: normal; font-weight: 500; font-size: 8.5px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--text3); }
+
+/* ── Hardware: um card só, uma linha por peça ── */
+.dh-hw { display: flex; flex-direction: column; padding: 20px 22px 10px; border-radius: 22px; background: var(--card-grad); border: 1px solid var(--border); min-width: 0; }
+.dh-hw-hdr { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 6px; }
+.dh-hw-hdr .sec-hdr { margin: 0; }
+.dh-hw-row { flex: 1; display: flex; align-items: center; gap: 14px; padding: 12px 0; min-width: 0; }
+.dh-hw-row + .dh-hw-row { border-top: 1px solid var(--border); }
+.dh-hw-row .hw-chip-icon { width: 38px; height: 38px; border-radius: 11px; }
+.dh-hw-s { flex: 1; min-width: 0; }
+.dh-hw-top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.dh-hw-s .hw-chip-label { font-size: 9px; letter-spacing: 0.14em; color: var(--text3); }
+.dh-hw-s .hw-chip-val { font-size: 13.5px; font-weight: 600; color: var(--text); margin-top: 4px; max-width: none; }
+.dh-track { height: 5px; margin-top: 9px; border-radius: 3px; background: rgba(255,255,255,0.07); overflow: hidden; }
+.dh-fill { height: 100%; width: 0; border-radius: 3px; background: var(--grad-brand); transition: width 0.8s var(--ease-out); }
+:root:not([data-theme="light"]) .dh-fill { background: linear-gradient(90deg, #e0101f 0%, #ff5560 100%); }
+.dh-pct { font-size: 11px; font-weight: 600; color: var(--text2); }
+
+/* ── Seções de baixo ── */
+.dh-sec { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 26px 0 12px; }
+.dh-sec .sec-hdr { margin: 0; }
+#pg-dashboard .grid2 { margin: 16px 0 0; }
+/* Ações Recentes só aparece quando existe alguma. Enquanto está vazio, as Recomendações
+   ocupam a linha toda, lado a lado. */
+#pg-dashboard .icard:has(> #recent-list > .empty-state) { display: none; }
+#pg-dashboard .grid2:has(#recent-list > .empty-state) { grid-template-columns: minmax(0, 1fr); }
+#pg-dashboard .grid2:has(#recent-list > .empty-state) #rec-list:has(.rec-item) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 28px; }
+#pg-dashboard .grid2:has(#recent-list > .empty-state) #rec-list .rec-item { border-bottom: none; }
+
+/* Janela estreita: hardware desce para baixo do herói, as três peças lado a lado */
+@media (max-width: 1180px) {
+  .dh-top { grid-template-columns: minmax(0, 1fr); }
+  .dh-hw { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 24px; padding-bottom: 14px; }
+  .dh-hw-hdr { grid-column: 1 / -1; }
+  .dh-hw-row + .dh-hw-row { border-top: none; }
+}
+@media (max-width: 860px) {
+  .dh-hero { padding: 24px 22px 24px 26px; gap: 14px; }
+  .dh-title { font-size: 25px; }
+}

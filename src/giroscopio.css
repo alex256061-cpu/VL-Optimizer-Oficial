@@ -1,0 +1,133 @@
+/* ══════════════════════════════════════════════════════════════════
+   VL Optimizer — giroscópio em CSS 3D (Painel e tela de login)
+   Três aros em cardã girando em volta da logo, sem canvas nem WebGL. Só anima transform,
+   então roda no compositor; quem usa põe .gy-paused num ancestral quando a janela perde o foco.
+
+   Marcação:
+     .gy                      palco (260×260, dá a perspectiva)
+       .gy-glow               brilho atrás
+       .gy-tilt               inclina na direção do mouse (--gy-x / --gy-y de -1 a 1)
+         .gy-gimbal > .gy-ax, .gy-ring.gy-r1 > .gy-ax, .gy-ring.gy-r2 > .gy-ax, .gy-ring.gy-r3
+         .gy-core > i, i, i, img
+   ══════════════════════════════════════════════════════════════════ */
+
+:root {
+  --gy-a: #ff1f2e;  --gy-a2: #ff9aa2;   /* aro de fora */
+  --gy-b: #ffffff;  --gy-b2: #ff5560;   /* aro do meio */
+  --gy-c: #ff1f2e;  --gy-c2: #ff5560;   /* aro de dentro */
+  --gy-edge: #2b1f5c;                   /* miolo dos aros: é o que dá espessura */
+  --gy-glow: rgba(255,31,46,0.42);
+}
+[data-theme="light"] {
+  --gy-a: #e0101f;  --gy-a2: #ff9aa2;
+  --gy-b: #ff5560;  --gy-b2: #ede9fe;
+  --gy-c: #8f0c15;  --gy-c2: #ff1f2e;
+  --gy-edge: #ddd6fe;
+  --gy-glow: rgba(255,31,46,0.30);
+}
+
+.gy { position: relative; width: 260px; height: 260px; flex-shrink: 0; perspective: 900px; perspective-origin: 50% 130px; }
+.gy-glow {
+  position: absolute; left: 50%; top: 130px; width: 230px; height: 230px; margin: -115px 0 0 -115px; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(circle, var(--gy-glow) 0%, transparent 68%);
+  animation: gyPulse 5s ease-in-out infinite alternate;
+}
+.gy-tilt {
+  position: absolute; left: 0; top: 0; width: 260px; height: 260px; transform-style: preserve-3d;
+  transform: rotateX(calc(var(--gy-y, 0) * -11deg)) rotateY(calc(var(--gy-x, 0) * 13deg));
+  transition: transform 0.7s var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1));
+}
+
+/* Cardã: cada aro gira num eixo preso ao aro de fora, como num giroscópio de verdade */
+.gy-gimbal { position: absolute; left: 50%; top: 50%; width: 0; height: 0; transform-style: preserve-3d; transform: rotateX(-18deg) rotateZ(22deg); }
+.gy-ring {
+  position: absolute; left: 50%; top: 50%; width: var(--d); height: var(--d); margin: calc(var(--d) / -2) 0 0 calc(var(--d) / -2);
+  box-sizing: border-box; border-radius: 50%; border: var(--w) solid var(--gy-edge);
+  transform-style: preserve-3d; will-change: transform;
+}
+/* duas faces afastadas do miolo: de lado o aro tem espessura, não some numa linha */
+.gy-ring::before, .gy-ring::after {
+  content: ''; position: absolute; inset: calc(var(--w) * -1); border-radius: 50%;
+  background: conic-gradient(from var(--from), var(--c1), var(--c2) 22%, var(--c1) 50%, var(--c2) 72%, var(--c1));
+  -webkit-mask: radial-gradient(closest-side, transparent calc(100% - var(--w) - 0.7px), #000 calc(100% - var(--w)), #000 calc(100% - 0.7px), transparent 100%);
+          mask: radial-gradient(closest-side, transparent calc(100% - var(--w) - 0.7px), #000 calc(100% - var(--w)), #000 calc(100% - 0.7px), transparent 100%);
+}
+.gy-ring::before { transform: translateZ(2px); }
+.gy-ring::after { transform: translateZ(-2px); }
+.gy-r1 { --d: 184px; --w: 7px; --c1: var(--gy-a); --c2: var(--gy-a2); --from: 20deg; animation: gySpinY 18s linear -4s infinite; }
+.gy-r2 { --d: 152px; --w: 6px; --c1: var(--gy-b2); --c2: var(--gy-b); --from: 110deg; animation: gySpinX 12s linear -2.4s infinite; }
+.gy-r3 { --d: 132px; --w: 5px; --c1: var(--gy-c); --c2: var(--gy-c2); --from: 200deg; animation: gySpinY 8s linear -1.2s infinite reverse; }
+
+/* eixos: os pinos que prendem cada aro ao de fora */
+.gy-ax { position: absolute; left: 50%; top: 50%; border-radius: 2px; }
+.gy-gimbal > .gy-ax { width: 3px; height: 190px; margin: -95px 0 0 -1.5px; background: linear-gradient(180deg, var(--gy-a2) 0 13px, transparent 13px calc(100% - 13px), var(--gy-a2) calc(100% - 13px)); }
+.gy-r1 > .gy-ax { width: 100%; height: 3px; margin: -1.5px 0 0 -50%; background: linear-gradient(90deg, var(--gy-a2) 0 11px, transparent 11px calc(100% - 11px), var(--gy-a2) calc(100% - 11px)); }
+.gy-r2 > .gy-ax { width: 3px; height: 100%; margin: -50% 0 0 -1.5px; background: linear-gradient(180deg, var(--gy-b) 0 11px, transparent 11px calc(100% - 11px), var(--gy-b) calc(100% - 11px)); }
+
+/* Miolo: a logo como uma moeda com espessura, balançando sem nunca ficar de costas */
+.gy-core { position: absolute; left: 50%; top: 50%; width: 58px; height: 58px; margin: -29px 0 0 -29px; transform-style: preserve-3d; will-change: transform; animation: gyRock 7s ease-in-out infinite alternate; }
+.gy-core > * { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 50%; }
+.gy-core i:nth-child(1) { transform: translateZ(-4px); background: #2e1065; box-shadow: 0 0 30px rgba(255,31,46,0.75); }
+.gy-core i:nth-child(2) { transform: translateZ(-2px); background: #8f0c15; }
+.gy-core i:nth-child(3) { background: #a30f1a; }
+.gy-core img { inset: auto; left: 8%; top: 8%; width: 84%; height: 84%; transform: translateZ(2.5px); display: block; -webkit-user-drag: none; }
+
+@keyframes gySpinY { from { transform: rotateY(0deg); } to { transform: rotateY(360deg); } }
+@keyframes gySpinX { from { transform: rotateX(0deg); } to { transform: rotateX(360deg); } }
+@keyframes gyRock { from { transform: translateZ(20px) rotateY(-30deg) rotateX(10deg); } to { transform: translateZ(20px) rotateY(30deg) rotateX(-8deg); } }
+@keyframes gyPulse { from { opacity: 0.65; transform: scale(0.94); } to { opacity: 1; transform: scale(1.06); } }
+
+/* ── Em equilíbrio (.gy-done): tudo aplicado ──
+   O dash-v3.js leva cada aro até ficar alinhado com os outros; daí em diante quem se mexe é o
+   conjunto inteiro, devagar, e os aros de fora passam do roxo para o volt. O primeiro e o último
+   quadro são a pose parada do cardã, então a animação entra e sai sem tranco. */
+.gy-done { --gy-a: #ff1f2e; --gy-a2: #e9ffb0; --gy-b: #ffffff; --gy-b2: #ff1f2e; --gy-glow: rgba(255,31,46,0.20); }
+ [data-theme="light"] .gy-done { --gy-a: #e0101f; --gy-a2: #ff5560; --gy-b: #e0101f; --gy-b2: #ff9aa2; --gy-c: #e0101f; --gy-c2: #ff5560; --gy-glow: rgba(224,16,31,0.34); }
+.gy-done .gy-gimbal { animation: gyCalm 11s ease-in-out infinite; }
+@keyframes gyCalm {
+  0%, 100% { transform: rotateX(-18deg) rotateZ(22deg); }
+  30% { transform: rotateX(-34deg) rotateY(26deg) rotateZ(22deg); }
+  68% { transform: rotateX(-6deg) rotateY(-30deg) rotateZ(22deg); }
+}
+
+
+
+/* ── Parado: janela sem foco, "reduzir movimento" no Windows ou Efeitos visuais desligado ── */
+.gy-paused :is(.gy-ring, .gy-core, .gy-glow, .gy-gimbal) { animation-play-state: paused; }
+[data-fx="off"] :is(.gy-ring, .gy-core, .gy-glow, .gy-gimbal) { animation: none; }
+[data-fx="off"] .gy-tilt { transition: none; transform: none; }
+[data-fx="off"] .gy:not(.gy-done) .gy-r1 { transform: rotateY(38deg); }
+[data-fx="off"] .gy:not(.gy-done) .gy-r2 { transform: rotateX(62deg); }
+[data-fx="off"] .gy:not(.gy-done) .gy-r3 { transform: rotateY(-48deg); }
+@media (prefers-reduced-motion: reduce) {
+  :is(.gy-ring, .gy-core, .gy-glow, .gy-gimbal) { animation: none; }
+  .gy-tilt { transition: none; transform: none; }
+  .gy:not(.gy-done) .gy-r1 { transform: rotateY(38deg); }
+  .gy:not(.gy-done) .gy-r2 { transform: rotateX(62deg); }
+  .gy:not(.gy-done) .gy-r3 { transform: rotateY(-48deg); }
+  .gy-core { transform: rotateY(-18deg) rotateX(6deg); }
+}
+
+
+/* ── Logo VL em destaque no centro do giroscópio ── */
+.gy-core { width: 100px; height: 100px; margin: -50px 0 0 -50px; }
+.gy-core > * { border-radius: 50%; }
+.gy-core i:nth-child(1) {
+  transform: translateZ(-12px);
+  background: radial-gradient(circle at 50% 36%, #2b0b10 0%, #100608 58%, #030203 100%);
+  box-shadow: 0 0 24px rgba(255, 31, 46, 0.40), 0 0 58px rgba(255, 31, 46, 0.16), inset 0 0 16px rgba(255, 31, 46, 0.18);
+  border: 1px solid rgba(255, 85, 96, 0.22);
+}
+.gy-core i:nth-child(2) { transform: translateZ(-6px); background: #4a0409; }
+.gy-core i:nth-child(3) { background: #120305; }
+.gy-core img {
+  transform: translateZ(40px) scale(1.12);
+  filter: drop-shadow(0 0 9px rgba(255, 31, 46, 0.85)) drop-shadow(0 4px 12px rgba(0, 0, 0, 0.55));
+}
+[data-theme="light"] .gy-core i:nth-child(1) {
+  background: radial-gradient(circle at 50% 36%, #ffffff 0%, #ffe6e8 58%, #ffd4d8 100%);
+  box-shadow: 0 0 24px rgba(224, 16, 31, 0.30), inset 0 0 14px rgba(224, 16, 31, 0.14);
+  border-color: rgba(224, 16, 31, 0.22);
+}
+[data-theme="light"] .gy-core i:nth-child(2) { background: #ffd4d8; }
+[data-theme="light"] .gy-core i:nth-child(3) { background: #fff2f3; }

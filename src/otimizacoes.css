@@ -1,0 +1,110 @@
+/* ── Otimizações (otimizacoes.js) ──
+   Carregado depois do theme.css. As linhas, seções e interruptores (.tw-*) vêm do tweaks.css. */
+
+/* Páginas de otimização: coluna de leitura, não grade de cards */
+:is(#pg-desempenho, #pg-inputlag, #pg-memoria, #pg-live, #pg-tweaks, #pg-hardware) .content { max-width: 940px; margin-left: auto; margin-right: auto; width: 100%; }
+:is(#pg-inputlag, #pg-memoria, #pg-hardware) [id^="opt-"] { margin-top: 18px; }
+/* Tela bem larga (ultrawide, janela esticada): os grupos em 2 colunas, em vez de uma faixa
+   estreita com metade da tela vazia. Só quando a página tem mais de um grupo. */
+@media (min-width: 1800px) {
+  :is(#pg-desempenho, #pg-inputlag, #pg-memoria, #pg-live, #pg-tweaks, #pg-hardware) .content:has(.tw-sec ~ .tw-sec) { max-width: 1880px; }
+  :is(#opt-desempenho, #opt-inputlag, #opt-memoria, #opt-live, #opt-tweaks, #opt-hardware):has(> .tw-sec ~ .tw-sec) { columns: 2; column-gap: 22px; }
+  :is(#opt-desempenho, #opt-inputlag, #opt-memoria, #opt-live, #opt-tweaks, #opt-hardware) > :is(.op-bar, .op-search, .tw-empty) { column-span: all; }
+  :is(#opt-desempenho, #opt-inputlag, #opt-memoria, #opt-live, #opt-tweaks, #opt-hardware) > .tw-sec { break-inside: avoid; }
+}
+
+/* Barra do topo da página: quantos estão ligados + aplicar os recomendados */
+.op-bar { display: flex; align-items: center; gap: 16px; padding: 14px 16px; margin-bottom: 18px; border-radius: var(--r); background: var(--card-grad); border: 1px solid var(--border); border-left: 3px solid var(--success); }
+.op-bar-txt { flex: 1; min-width: 0; }
+.op-bar-count { display: block; font-size: 13.5px; font-weight: 700; color: var(--text); }
+.op-bar-sub { display: block; font-size: 11.5px; color: var(--text3); margin-top: 2px; }
+.op-rec-btn { flex-shrink: 0; }
+.op-rec-btn:disabled { opacity: 0.55; cursor: default !important; }
+.op-search { margin-bottom: 18px; background: var(--bg2); }
+
+/* Grupo "Para PC fraco": acento de aviso para ninguém ligar sem ler */
+.tw-sec.op-warn .tw-sec-ic { background: var(--warning-l); }
+.tw-sec.op-warn .tw-sec-ic svg * { stroke: var(--warning) !important; }
+.tw-sec.op-warn .tw-list { border-color: rgba(251,191,36,0.22); }
+.tw-sec.op-warn .tw-sec-name { color: var(--warning); }
+
+/* Dicas (sem botão) e resultado das verificações */
+.tw-row.op-tip { background: rgba(255,255,255,0.015); }
+.tw-row.op-tip .tw-title { font-weight: 700; color: var(--text2); }
+.check-result.op-check { margin: 10px 0 0; }
+.tw-tag { color: var(--text3); }
+
+.op-foot { margin-top: 6px; font-size: 12px; color: var(--text3); text-align: center; }
+.op-foot a { color: var(--purple3); font-weight: 700; text-decoration: none; }
+.op-foot a:hover { text-decoration: underline; }
+
+/* Painel: um cartão por assunto */
+.op-cats { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.op-cat { display: flex; align-items: stretch; gap: 12px; padding: 16px; text-align: left; border-radius: 14px; background: var(--card-grad); border: 1px solid var(--border); color: var(--text); transition: border-color 0.18s, transform 0.18s; }
+.op-cat:hover { border-color: rgba(255,85,96,0.35); transform: translateY(-1px); }
+.op-cat:focus-visible { outline: 2px solid var(--purple2); outline-offset: 2px; }
+.op-cat-ic { width: 38px; height: 38px; border-radius: 11px; background: var(--purple-l); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.op-cat-ic svg * { stroke: #ece8ff; }
+/* o estado vai sempre para o pé do cartão: com descrições de tamanhos diferentes, as linhas ficam alinhadas */
+.op-cat-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.op-cat-name { font-size: 13.5px; font-weight: 700; }
+.op-cat-blurb { font-size: 11px; color: var(--text3); line-height: 1.4; margin-top: 3px; }
+.op-cat-st { font-size: 11px; font-weight: 700; color: var(--warning); margin-top: auto; padding-top: 10px; }
+.op-cat-st.ok { color: var(--success); }
+
+/* Atualização pronta (plano.js) */
+.update-bar { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 8000; display: flex; align-items: center; gap: 12px; padding: 10px 12px 10px 18px; border-radius: 14px; background: var(--card-grad); border: 1px solid rgba(255,85,96,0.32); box-shadow: 0 16px 40px rgba(0,0,0,0.55), 0 0 30px rgba(224,16,31,0.2); font-size: 13px; font-weight: 600; color: var(--text); animation: pgIn 0.25s ease; }
+.update-txt { font-variant-numeric: tabular-nums; }
+.update-track { width: 140px; height: 5px; border-radius: 3px; background: var(--bg2); overflow: hidden; }
+.update-fill { height: 100%; width: 0; border-radius: 3px; background: var(--grad-brand); transition: width 0.4s ease; }
+
+/* Plano grátis: páginas pagas com cadeado (plano.js) */
+.nav-item.nav-locked { opacity: 0.55; }
+.nav-item.nav-locked:hover { opacity: 0.85; }
+.nav-lock { margin-left: auto; display: inline-flex; color: var(--text3); }
+.sidebar:is(.sb-closing, :not(:hover):not(:focus-within)) .nav-lock { position: absolute; right: 8px; top: 6px; }
+
+.plan-upsell { position: fixed; inset: 0; z-index: 9000; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgba(0,0,0,0.62); backdrop-filter: blur(3px); animation: pgIn 0.2s ease; }
+.plan-upsell-card { width: 100%; max-width: 440px; padding: 28px; border-radius: var(--r); background: var(--card-grad); border: 1px solid rgba(255,85,96,0.28); box-shadow: 0 24px 60px rgba(0,0,0,0.6), 0 0 50px rgba(224,16,31,0.22); text-align: center; }
+.plan-upsell-ic { width: 52px; height: 52px; margin: 0 auto 16px; border-radius: 15px; display: flex; align-items: center; justify-content: center; background: var(--grad-violet); box-shadow: 0 8px 24px rgba(224,16,31,0.4); }
+.plan-upsell-title { font-size: 18px; font-weight: 800; letter-spacing: -0.02em; color: var(--text); }
+.plan-upsell-text { margin: 10px 0 0; font-size: 13px; line-height: 1.6; color: var(--text2); }
+.plan-upsell-btns { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 22px; }
+.plan-upsell-legacy { margin-top: 16px; background: none; border: none; color: var(--purple3); font-size: 12px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+.plan-upsell-claim { display: flex; gap: 8px; margin-top: 16px; }
+.plan-upsell-claim input { flex: 1; min-width: 0; height: 40px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--border2); background: var(--bg2); color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 12.5px; letter-spacing: 0.04em; text-transform: uppercase; }
+.plan-upsell-claim input:focus { outline: none; border-color: var(--purple2); }
+
+/* Preços no modal de planos, oferta com prazo e indicação (plano.js) */
+.plan-promo { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px 8px; margin-top: 16px; padding: 9px 12px; border-radius: 11px; background: var(--success-l); border: 1px solid rgba(52,211,153,0.3); font-size: 12.5px; font-weight: 600; color: var(--text); }
+/* o atributo hidden perde para o display dos botões e do formulário: aqui ele vale */
+.plan-upsell-card [hidden] { display: none; }
+.plan-upsell-card { max-height: calc(100vh - 48px); overflow-y: auto; }
+.plan-promo-tag { padding: 2px 7px; border-radius: 6px; background: var(--success); color: #06281c; font-size: 10px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
+.plan-promo-left { color: var(--success); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.plan-opts { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
+.plan-opt { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; padding: 12px 14px; border-radius: 13px; border: 1px solid var(--border2); background: var(--bg2); color: var(--text); text-align: left; cursor: pointer; transition: border-color 0.15s ease, transform 0.15s ease; }
+.plan-opt:hover, .plan-opt:focus-visible { border-color: var(--purple2); transform: translateY(-1px); outline: none; }
+.plan-opt.hot { border-color: rgba(255,85,96,0.55); background: linear-gradient(180deg, rgba(255,31,46,0.16), rgba(255,31,46,0.05)); }
+.plan-opt-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.plan-opt-name { display: flex; align-items: center; gap: 7px; font-size: 14px; font-weight: 800; }
+.plan-opt-tag { padding: 2px 6px; border-radius: 6px; background: var(--grad-violet); color: #fff; font-size: 9.5px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; }
+.plan-opt-sub { font-size: 11.5px; line-height: 1.4; color: var(--text3); }
+.plan-opt-price { display: flex; flex-direction: column; align-items: flex-end; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.plan-opt-price s { font-size: 11.5px; color: var(--text3); }
+.plan-opt-price b { font-size: 17px; font-weight: 800; letter-spacing: -0.02em; }
+.plan-ref { margin-top: 16px; padding: 12px; border-radius: 12px; border: 1px dashed var(--border2); text-align: left; }
+.plan-ref-txt { font-size: 12px; line-height: 1.5; color: var(--text2); }
+.plan-ref-txt + .plan-ref-txt { margin-top: 8px; }
+.plan-ref-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.plan-ref-code { flex: 1; min-width: 0; padding: 7px 10px; border-radius: 9px; background: var(--bg2); font-family: 'JetBrains Mono', monospace; font-size: 12.5px; letter-spacing: 0.04em; color: var(--text); user-select: all; }
+
+/* Aviso de plano no canto: acima do toast, sem travar a tela (plano.js) */
+.plan-nudge { position: fixed; right: 20px; bottom: 84px; z-index: 7900; width: 316px; padding: 16px 16px 14px; border-radius: 15px; background: var(--card-grad); border: 1px solid rgba(255,85,96,0.32); box-shadow: 0 18px 44px rgba(0,0,0,0.55), 0 0 30px rgba(224,16,31,0.18); animation: pgIn 0.25s ease; }
+.plan-nudge-x { position: absolute; top: 8px; right: 9px; width: 24px; height: 24px; border: none; border-radius: 7px; background: none; color: var(--text3); font-size: 17px; line-height: 1; cursor: pointer; }
+.plan-nudge-x:hover { color: var(--text); background: var(--bg2); }
+.plan-nudge-title { padding-right: 22px; font-size: 14px; font-weight: 800; letter-spacing: -0.01em; color: var(--text); }
+.plan-nudge-text { margin-top: 6px; font-size: 12.5px; line-height: 1.5; color: var(--text2); }
+.plan-nudge-left { margin-top: 8px; font-size: 12px; font-weight: 700; color: var(--success); font-variant-numeric: tabular-nums; }
+.plan-nudge-btns { display: flex; gap: 8px; margin-top: 12px; }
+.plan-nudge-btns .qo-btn { height: 34px; padding: 0 16px; font-size: 12.5px; }

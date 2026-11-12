@@ -1,0 +1,1277 @@
+<!DOCTYPE html>
+
+<html lang="pt-BR">
+
+<head>
+
+  <meta charset="UTF-8">
+
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self';">
+
+  <title>VL Scaling</title>
+
+  <style>
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+
+
+    :root {
+
+      --bg:      #0b0b0f;
+
+      --bg2:     #131318;
+
+      --bg3:     #1a1a21;
+
+      --bg4:     #24242d;
+
+      --bg5:     #2e2e39;
+
+      --border:  rgba(255,255,255,0.07);
+
+      --border2: rgba(255,255,255,0.12);
+
+      --accent:  #ff1f2e;
+
+      --accent2: #ff5560;
+
+      --text:    #f5f5f7;
+
+      --text2:   #a3a3ad;
+
+      --text3:   #6b6b76;
+
+      --success: #4db36a;
+
+      --r:       3px;
+
+    }
+
+
+
+    html, body {
+
+      width: 100%; height: 100vh; overflow: hidden;
+
+      font-family: 'Segoe UI', system-ui, sans-serif;
+
+      font-size: 12px; line-height: 1.4;
+
+      background: var(--bg); color: var(--text);
+
+      user-select: none;
+
+    }
+
+
+
+    /* TITLEBAR */
+
+    .titlebar {
+
+      height: 30px; display: flex; align-items: center; justify-content: space-between;
+
+      padding: 0 0 0 10px;
+
+      background: #060608;
+
+      border-bottom: 1px solid var(--border);
+
+      -webkit-app-region: drag;
+
+      flex-shrink: 0;
+
+    }
+
+    .tb-brand { display: flex; align-items: center; gap: 7px; }
+
+    .tb-icon-wrap { width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+
+    .tb-icon-wrap img { width: 16px; height: 16px; object-fit: contain; }
+
+    .tb-icon-fb {
+
+      width: 16px; height: 16px; border-radius: 3px;
+
+      background: linear-gradient(135deg,#ff1f2e,#ff9aa2);
+
+      display: flex; align-items: center; justify-content: center;
+
+      font-size: 9px; font-weight: 900; color: #fff;
+
+    }
+
+    .tb-title { font-size: 12px; color: var(--text2); font-weight: 400; }
+
+    .tb-ctrl  { display: flex; -webkit-app-region: no-drag; }
+
+    .tb-btn {
+
+      width: 44px; height: 30px; border: none; background: transparent;
+
+      color: var(--text2); font-size: 13px; cursor: pointer;
+
+      display: flex; align-items: center; justify-content: center;
+
+      transition: background .12s;
+
+    }
+
+    .tb-btn:hover { background: rgba(255,255,255,0.07); }
+
+    .tb-close:hover { background: #c42b1c !important; color: #fff; }
+
+
+
+    /* ROOT */
+
+    .app { display: flex; height: calc(100vh - 30px); }
+
+
+
+    /* SIDEBAR ESQUERDA — perfis */
+
+    .sidebar {
+
+      width: 120px; flex-shrink: 0;
+
+      background: #060608;
+
+      border-right: 1px solid var(--border);
+
+      display: flex; flex-direction: column;
+
+    }
+
+    .sb-hdr {
+
+      padding: 8px 10px 6px;
+
+      border-bottom: 1px solid var(--border);
+
+    }
+
+    .sb-hdr-title { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--text3); }
+
+    .profile-list { flex: 1; overflow-y: auto; }
+
+    .profile-list::-webkit-scrollbar { width: 3px; }
+
+    .profile-list::-webkit-scrollbar-thumb { background: var(--bg4); border-radius: 2px; }
+
+    .profile-item {
+
+      padding: 7px 10px; font-size: 12px; color: var(--text2);
+
+      cursor: pointer; border-left: 2px solid transparent;
+
+      transition: all .12s; -webkit-app-region: no-drag;
+
+    }
+
+    .profile-item:hover { background: var(--bg3); color: var(--text); }
+
+    .profile-item.active { background: rgba(255,31,46,0.16); color: var(--accent2); border-left-color: var(--accent); }
+
+
+
+    /* MAIN */
+
+    .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+
+
+    /* profile bar */
+
+    .profile-bar {
+
+      padding: 5px 14px 4px;
+
+      background: var(--bg2);
+
+      border-bottom: 1px solid var(--border);
+
+      display: flex; align-items: baseline; gap: 8px;
+
+      flex-shrink: 0;
+
+    }
+
+    .pbar-lbl  { font-size: 11px; color: var(--text3); }
+
+    .pbar-name { font-size: 13px; font-weight: 600; color: var(--text); }
+
+
+
+    /* two-column scroll */
+
+    .cols-scroll {
+
+      flex: 1; overflow-y: auto; overflow-x: hidden;
+
+      display: grid; grid-template-columns: 1fr 1fr;
+
+    }
+
+    .cols-scroll::-webkit-scrollbar { width: 4px; }
+
+    .cols-scroll::-webkit-scrollbar-thumb { background: var(--bg4); border-radius: 2px; }
+
+
+
+    .col { padding: 10px 13px; display: flex; flex-direction: column; gap: 12px; }
+
+    .col-left { border-right: 1px solid var(--border); }
+
+
+
+    /* SECTION */
+
+    .sec { display: flex; flex-direction: column; gap: 7px; }
+
+    .sec-title {
+
+      font-size: 12px; font-weight: 600; color: var(--text);
+
+      padding-bottom: 5px; border-bottom: 1px solid var(--border);
+
+    }
+
+
+
+    /* FIELD ROW */
+
+    .frow { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+
+    .flbl { font-size: 11.5px; color: var(--text2); flex-shrink: 0; }
+
+
+
+    /* SELECT */
+
+    select {
+
+      background: var(--bg3); border: 1px solid var(--border2);
+
+      border-radius: var(--r); color: var(--text);
+
+      font-family: inherit; font-size: 12px;
+
+      padding: 3px 20px 3px 7px;
+
+      outline: none; cursor: pointer; appearance: none;
+
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='9' viewBox='0 0 24 24'%3E%3Cpath d='M6 9l6 6 6-6' stroke='%235e6880' stroke-width='2.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+
+      background-repeat: no-repeat; background-position: right 5px center;
+
+      min-width: 90px; max-width: 145px;
+
+    }
+
+    select:focus { border-color: var(--accent); }
+
+    select option { background: var(--bg3); }
+
+
+
+    /* NUMBER INPUT */
+
+    .num {
+
+      width: 52px; background: var(--bg3); border: 1px solid var(--border2);
+
+      border-radius: var(--r); color: var(--text);
+
+      font-family: inherit; font-size: 12px;
+
+      padding: 3px 6px; outline: none; text-align: center;
+
+      -webkit-app-region: no-drag;
+
+    }
+
+    .num:focus { border-color: var(--accent); }
+
+
+
+    /* TOGGLE */
+
+    .toggle {
+
+      width: 32px; height: 18px; border-radius: 9px;
+
+      background: var(--bg4); border: 1px solid var(--border2);
+
+      position: relative; cursor: pointer; flex-shrink: 0;
+
+      transition: all .18s; -webkit-app-region: no-drag;
+
+    }
+
+    .toggle::after {
+
+      content: ''; position: absolute; top: 2px; left: 2px;
+
+      width: 12px; height: 12px; border-radius: 50%;
+
+      background: var(--text3); transition: all .18s;
+
+    }
+
+    .toggle.on { background: var(--accent); border-color: var(--accent2); }
+
+    .toggle.on::after { left: 16px; background: #fff; }
+
+
+
+    /* SLIDER */
+
+    .slider-wrap { display: flex; flex-direction: column; gap: 4px; }
+
+    .slider-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1px; }
+
+    .slider-val { font-size: 12px; font-weight: 600; color: var(--text); min-width: 30px; text-align: right; }
+
+    input[type=range] {
+
+      width: 100%; height: 3px; appearance: none;
+
+      background: var(--bg5); border-radius: 2px; outline: none; cursor: pointer;
+
+    }
+
+    input[type=range]::-webkit-slider-thumb {
+
+      appearance: none; width: 12px; height: 12px; border-radius: 50%;
+
+      background: var(--accent2); border: 2px solid #c8d4f0;
+
+      box-shadow: 0 0 4px rgba(224,60,70,.5); cursor: pointer;
+
+    }
+
+
+
+    /* BOTTOM BAR */
+
+    .bottom-bar {
+
+      height: 38px; padding: 0 14px;
+
+      background: #060608; border-top: 1px solid var(--border);
+
+      display: flex; align-items: center; justify-content: space-between;
+
+      flex-shrink: 0;
+
+    }
+
+    .status-row { display: flex; align-items: center; gap: 7px; }
+
+    .sdot {
+
+      width: 7px; height: 7px; border-radius: 50%;
+
+      background: var(--text3); flex-shrink: 0; transition: all .3s;
+
+    }
+
+    .sdot.on { background: var(--success); box-shadow: 0 0 5px rgba(77,179,106,.7); animation: pulse 1.5s infinite; }
+
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+
+    .stxt { font-size: 11.5px; color: var(--text2); }
+
+
+
+    .btn-row { display: flex; gap: 7px; }
+
+    .btn {
+
+      padding: 5px 20px; border-radius: var(--r); border: none;
+
+      font-family: inherit; font-size: 12px; font-weight: 600;
+
+      cursor: pointer; transition: all .15s; -webkit-app-region: no-drag;
+
+      display: flex; align-items: center; gap: 6px;
+
+    }
+
+    .btn-primary { background: var(--accent); color: #fff; }
+
+    .btn-primary:hover { background: var(--accent2); }
+
+    .btn-primary:disabled { opacity: .45; cursor: not-allowed; }
+
+    .btn-stop { background: var(--bg3); color: #e06060; border: 1px solid rgba(220,80,80,.25); }
+
+    .btn-stop:hover { background: rgba(220,60,60,.12); }
+
+
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .spin { width: 11px; height: 11px; border: 2px solid rgba(255,255,255,.25); border-top-color: #fff; border-radius: 50%; animation: spin .6s linear infinite; flex-shrink: 0; }
+
+
+
+    .hidden { display: none !important; }
+
+
+
+    /* ── Motion ── */
+
+    @keyframes appIn { from { opacity: 0; } to { opacity: 1; } }
+
+    @keyframes riseIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+    body { animation: appIn .35s ease backwards; }
+
+    .sidebar { animation: riseIn .4s cubic-bezier(.16,1,.3,1) backwards; }
+
+    .col .sec { animation: riseIn .4s cubic-bezier(.16,1,.3,1) backwards; }
+
+    .col-left .sec:nth-child(2), .col:not(.col-left) .sec:nth-child(1) { animation-delay: .04s; }
+
+    .col .sec:nth-child(n+3) { animation-delay: .08s; }
+
+    .profile-item { transition: background .15s ease, color .15s ease, border-left-color .2s ease, padding-left .2s cubic-bezier(.16,1,.3,1); }
+
+    .profile-item.active { padding-left: 13px; }
+
+    .toggle::after { transition: left .3s cubic-bezier(.34,1.4,.64,1), background .2s ease; }
+
+    .btn { transition: background .15s ease, transform .15s cubic-bezier(.16,1,.3,1), opacity .2s ease; }
+
+    .btn:active:not(:disabled) { transform: scale(.96); transition-duration: .06s; }
+
+    @media (prefers-reduced-motion: reduce) {
+
+      *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0s !important; transition-duration: .01ms !important; }
+
+    }
+
+  </style>
+
+  <link rel="stylesheet" href="tema-l.css">
+
+</head>
+
+<body>
+
+
+
+<!-- TITLEBAR -->
+
+<div class="titlebar">
+
+  <div class="tb-brand">
+
+    <div class="tb-icon-wrap">
+
+      <img id="tb-ico" src="../assets/icon.ico"
+
+           onerror="this.style.display='none';document.getElementById('tb-ico-fb').style.display='flex'">
+
+      <div class="tb-icon-fb" id="tb-ico-fb" style="display:none">G</div>
+
+    </div>
+
+    <span class="tb-title">VL Scaling</span>
+
+  </div>
+
+  <div class="tb-ctrl">
+
+    <button class="tb-btn" onclick="ipcRenderer.send('gs-minimize')">&#8211;</button>
+
+    <button class="tb-btn" onclick="ipcRenderer.send('gs-maximize')">&#9633;</button>
+
+    <button class="tb-btn tb-close" onclick="ipcRenderer.send('gs-close')">&#10005;</button>
+
+  </div>
+
+</div>
+
+
+
+<div class="app">
+
+
+
+  <!-- SIDEBAR — perfis -->
+
+  <div class="sidebar">
+
+    <div class="sb-hdr">
+
+      <div class="sb-hdr-title">Perfis de jogo</div>
+
+    </div>
+
+    <div class="profile-list">
+
+      <div class="profile-item active" onclick="selectProfile(this,'Default')">Padrão</div>
+
+    </div>
+
+  </div>
+
+
+
+  <!-- MAIN -->
+
+  <div class="main">
+
+
+
+    <div class="profile-bar">
+
+      <span class="pbar-lbl">Perfil:</span>
+
+      <span class="pbar-name" id="pbar-name">"Padrão"</span>
+
+    </div>
+
+
+
+    <div class="cols-scroll">
+
+
+
+      <!-- ── COLUNA ESQUERDA ── -->
+
+      <div class="col col-left">
+
+
+
+        <!-- Frame Generation -->
+
+        <div class="sec">
+
+          <div class="sec-title">Geração de quadros</div>
+
+
+
+          <div class="frow">
+
+            <span class="flbl">Tipo</span>
+
+            <select id="ls-fg-type" onchange="onFGTypeChange()">
+
+              <option value="lsfg31" selected>VL FG 3.1</option>
+
+              <option value="lsfg23">VL FG 2.3</option>
+
+              <option value="lsfg11">VL FG 1.1</option>
+
+              <option value="off">Desligado</option>
+
+            </select>
+
+          </div>
+
+
+
+          <div class="frow" id="ls-fg-mode-row">
+
+            <span class="flbl">Modo</span>
+
+            <select id="ls-fg-mode">
+
+              <option value="adaptive" selected>Adaptativo</option>
+
+              <option value="fixed">Fixo</option>
+
+            </select>
+
+          </div>
+
+
+
+          <div id="ls-fg-target-row">
+
+            <div class="slider-wrap">
+
+              <div class="slider-top">
+
+                <span class="flbl">Alvo</span>
+
+                <span class="slider-val" id="ls-target-val">100</span>
+
+              </div>
+
+              <input type="range" id="ls-target" min="30" max="300" step="1" value="100"
+
+                oninput="document.getElementById('ls-target-val').textContent=this.value">
+
+            </div>
+
+          </div>
+
+
+
+          <div id="ls-flow-row">
+
+            <div class="slider-wrap">
+
+              <div class="slider-top">
+
+                <span class="flbl">Escala de fluxo</span>
+
+                <span class="slider-val" id="ls-flow-val">1</span>
+
+              </div>
+
+              <input type="range" id="ls-flow" min="0.5" max="2.0" step="0.1" value="1.0"
+
+                oninput="document.getElementById('ls-flow-val').textContent=parseFloat(this.value).toFixed(1).replace(/\.0$/,'')">
+
+            </div>
+
+          </div>
+
+
+
+          <div class="frow hidden" id="ls-fg2-row">
+
+            <span class="flbl">Modo</span>
+
+            <select id="ls-fg2-mode">
+
+              <option value="fusion" selected>Fusão</option>
+
+              <option value="normal">Normal</option>
+
+            </select>
+
+          </div>
+
+
+
+          <div class="frow" id="ls-perf-row">
+
+            <span class="flbl">Modo desempenho</span>
+
+            <div class="toggle" id="ls-perf" onclick="this.classList.toggle('on')"></div>
+
+          </div>
+
+        </div>
+
+
+
+        <!-- Scaling -->
+
+        <div class="sec">
+
+          <div class="sec-title">Redimensionamento</div>
+
+
+
+          <div class="frow">
+
+            <span class="flbl">Tipo</span>
+
+            <select id="ls-sc-type" onchange="onScaleTypeChange()">
+
+              <option value="off" selected>Desligado</option>
+
+              <option value="ls1">LS1</option>
+
+              <option value="fsr">FSR 1 (embutido)</option>
+
+              <option value="nis">NVIDIA NIS</option>
+
+              <option value="integer">Inteiro</option>
+
+              <option value="nearest">Vizinho mais próximo</option>
+
+              <option value="xbr">xBR</option>
+
+              <option value="anime4k">Anime4K</option>
+
+            </select>
+
+          </div>
+
+
+
+          <div class="frow" id="ls-sc-mode-row">
+
+            <span class="flbl">Modo</span>
+
+            <select id="ls-sc-mode" onchange="onScaleModeChange()">
+
+              <option value="auto" selected>Automático</option>
+
+              <option value="custom">Personalizado</option>
+
+            </select>
+
+          </div>
+
+
+
+          <div id="ls-sc-factor-row" class="hidden">
+
+            <div class="slider-wrap">
+
+              <div class="slider-top">
+
+                <span class="flbl">Fator de escala</span>
+
+                <span class="slider-val" id="ls-factor-val">1.5x</span>
+
+              </div>
+
+              <input type="range" id="ls-factor" min="1.0" max="3.0" step="0.1" value="1.5"
+
+                oninput="document.getElementById('ls-factor-val').textContent=parseFloat(this.value).toFixed(1)+'x'">
+
+            </div>
+
+          </div>
+
+
+
+          <div id="ls-sharp-row" class="hidden">
+
+            <div class="slider-wrap">
+
+              <div class="slider-top">
+
+                <span class="flbl">Nitidez</span>
+
+                <span class="slider-val" id="ls-sharp-val">0</span>
+
+              </div>
+
+              <input type="range" id="ls-sharp" min="0" max="100" value="0"
+
+                oninput="document.getElementById('ls-sharp-val').textContent=this.value">
+
+            </div>
+
+          </div>
+
+
+
+          <div class="frow hidden" id="ls-fsr-row">
+
+            <span class="flbl">FSR</span>
+
+            <select id="ls-fsr-type">
+
+              <option value="fsr1" selected>FSR 1</option>
+
+              <option value="fsr2">FSR 2</option>
+
+              <option value="fsr3">FSR 3</option>
+
+            </select>
+
+          </div>
+
+
+
+          <div class="frow hidden" id="ls-resize-row">
+
+            <span class="flbl">Redimensionar antes de escalar</span>
+
+            <div class="toggle" id="ls-resize" onclick="this.classList.toggle('on')"></div>
+
+          </div>
+
+        </div>
+
+
+
+      </div><!-- /col-left -->
+
+
+
+      <!-- ── COLUNA DIREITA ── -->
+
+      <div class="col col-right">
+
+
+
+        <!-- Capture -->
+
+        <div class="sec">
+
+          <div class="sec-title">Captura</div>
+
+
+
+          <div class="frow">
+
+            <span class="flbl">API de captura</span>
+
+            <select id="ls-cap-api">
+
+              <option value="dxgi" selected>DXGI</option>
+
+              <option value="wgc">WGC</option>
+
+            </select>
+
+          </div>
+
+
+
+          <div class="frow">
+
+            <span class="flbl">Alvo da fila</span>
+
+            <input class="num" type="number" id="ls-queue" min="1" max="4" value="1"
+
+                   onchange="clampNum(this,1,4)">
+
+          </div>
+
+
+
+          <div class="frow">
+
+            <span class="flbl">Prender cursor</span>
+
+            <div class="toggle" id="ls-clip-cursor" onclick="this.classList.toggle('on')"></div>
+
+          </div>
+
+
+
+          <div class="frow">
+
+            <span class="flbl">Escalar cursor</span>
+
+            <div class="toggle on" id="ls-scale-cursor" onclick="this.classList.toggle('on')"></div>
+
+          </div>
+
+        </div>
+
+
+
+        <!-- Rendering -->
+
+        <div class="sec">
+
+          <div class="sec-title">Renderização</div>
+
+
+
+          <div class="frow">
+
+            <span class="flbl">Modo de sincronização</span>
+
+            <select id="ls-sync">
+
+              <option value="standard" selected>Padrão</option>
+
+              <option value="vsync">V-Sync</option>
+
+              <option value="gsync">G-Sync / FreeSync</option>
+
+              <option value="adaptive">Adaptativo</option>
+
+            </select>
+
+          </div>
+
+
+
+          <div class="frow">
+
+            <span class="flbl">Latência máxima de quadros</span>
+
+            <input class="num" type="number" id="ls-latency" min="1" max="16" value="1"
+
+                   onchange="clampNum(this,1,16)">
+
+          </div>
+
+
+
+          <div class="frow">
+
+            <span class="flbl">Suporte a HDR</span>
+
+            <div class="toggle" id="ls-hdr" onclick="this.classList.toggle('on')"></div>
+
+          </div>
+
+
+
+          <div class="frow">
+
+            <span class="flbl">Mostrar FPS</span>
+
+            <div class="toggle" id="ls-drawfps" onclick="this.classList.toggle('on')"></div>
+
+          </div>
+          <div class="frow">
+
+            <span class="flbl">Sombreamento variável (VRS)</span>
+
+            <div class="toggle" id="ls-vrs" onclick="this.classList.toggle('on')"></div>
+
+          </div>
+
+        </div>
+
+
+
+        <!-- Auto Scale -->
+
+        <div class="sec">
+
+          <div class="sec-title">Escala automática</div>
+
+
+
+          <div class="frow">
+
+            <span class="flbl">Ativar escala automática</span>
+
+            <div class="toggle" id="ls-auto" onclick="this.classList.toggle('on')"></div>
+
+          </div>
+
+
+
+          <div class="frow">
+
+            <span class="flbl">Iniciar minimizado</span>
+
+            <div class="toggle on" id="ls-minimized" onclick="this.classList.toggle('on')"></div>
+
+          </div>
+
+
+
+          <div class="frow">
+
+            <span class="flbl">Iniciar como administrador</span>
+
+            <div class="toggle on" id="ls-admin" onclick="this.classList.toggle('on')"></div>
+
+          </div>
+
+        </div>
+
+
+
+      </div><!-- /col-right -->
+
+
+
+    </div><!-- /cols-scroll -->
+
+
+
+    <!-- BOTTOM BAR -->
+
+    <div class="bottom-bar">
+
+      <div class="status-row">
+
+        <div class="sdot" id="sdot"></div>
+
+        <span class="stxt" id="stxt">Inativo</span>
+
+      </div>
+
+      <div class="btn-row">
+
+        <button class="btn btn-stop" onclick="doStop()">Parar</button>
+
+        <button class="btn btn-primary" id="btn-launch" onclick="doLaunch()">Aplicar</button>
+
+      </div>
+
+    </div>
+
+
+
+  </div><!-- /main -->
+
+</div><!-- /app -->
+
+
+
+<script>
+
+// Ponte segura window.electron (preload.js), no lugar de require('electron').
+
+const ipcRenderer = window.electron;
+
+
+
+function selectProfile(el, name) {
+
+  document.querySelectorAll('.profile-item').forEach(x => x.classList.remove('active'));
+
+  el.classList.add('active');
+
+  document.getElementById('pbar-name').textContent = '"' + (name === 'Default' ? 'Padrão' : name) + '"';
+
+}
+
+
+
+function clampNum(el, min, max) {
+
+  let v = parseInt(el.value);
+
+  if (isNaN(v)) v = min;
+
+  el.value = Math.min(max, Math.max(min, v));
+
+}
+
+
+
+function tog(id) {
+
+  const el = document.getElementById(id);
+
+  return el ? el.classList.contains('on') : false;
+
+}
+
+
+
+function onFGTypeChange() {
+
+  const v = document.getElementById('ls-fg-type').value;
+
+  const is3  = v === 'lsfg31';
+
+  const is2  = v === 'lsfg23';
+
+  const isOff = v === 'off';
+
+  document.getElementById('ls-fg-mode-row').classList.toggle('hidden', !is3);
+
+  document.getElementById('ls-fg-target-row').classList.toggle('hidden', !is3);
+
+  document.getElementById('ls-flow-row').classList.toggle('hidden', isOff);
+
+  document.getElementById('ls-fg2-row').classList.toggle('hidden', !is2);
+
+  document.getElementById('ls-perf-row').classList.toggle('hidden', isOff);
+
+}
+
+
+
+function onScaleTypeChange() {
+
+  const v = document.getElementById('ls-sc-type').value;
+
+  const on = v !== 'off';
+
+  document.getElementById('ls-sharp-row').classList.toggle('hidden', !on);
+
+  document.getElementById('ls-fsr-row').classList.toggle('hidden', v !== 'fsr');
+
+  document.getElementById('ls-sc-mode-row').classList.toggle('hidden', !on);
+
+  document.getElementById('ls-resize-row').classList.toggle('hidden', !on);
+
+  if (!on) document.getElementById('ls-sc-factor-row').classList.add('hidden');
+
+}
+
+
+
+function onScaleModeChange() {
+
+  const custom = document.getElementById('ls-sc-mode').value === 'custom';
+
+  document.getElementById('ls-sc-factor-row').classList.toggle('hidden', !custom);
+
+}
+
+
+
+function getConfig() {
+
+  return {
+
+    fgType:          document.getElementById('ls-fg-type').value,
+
+    lsfg3Mode:       document.getElementById('ls-fg-mode').value,
+
+    lsfg3Target:     parseInt(document.getElementById('ls-target').value),
+
+    lsfg3Multiplier: 2,
+
+    lsfg2Mode:       document.getElementById('ls-fg2-mode').value === 'fusion' ? 'fusao' : 'normal',
+
+    flowScale:       parseFloat(document.getElementById('ls-flow').value),
+
+    perfMode:        tog('ls-perf'),
+
+    captureApi:      document.getElementById('ls-cap-api').value,
+
+    queueTarget:     parseInt(document.getElementById('ls-queue').value),
+
+    scaleType:       document.getElementById('ls-sc-type').value,
+
+    fsrType:         document.getElementById('ls-fsr-type').value,
+
+    sharpness:       parseInt(document.getElementById('ls-sharp').value),
+
+    scaleMode:       document.getElementById('ls-sc-mode').value,
+
+    scaleFactor:     parseFloat(document.getElementById('ls-factor').value),
+
+    fitMode:         'fullscreen',
+
+    syncMode:        document.getElementById('ls-sync').value,
+
+    drawFps:         tog('ls-drawfps'),
+
+    windowedMode:    false,
+
+    hdrCompat:       tog('ls-hdr'),
+
+    resizeBefore:    tog('ls-resize'),
+
+    scaleCursor:     tog('ls-scale-cursor'),
+
+    vrs:             tog('ls-vrs'),
+
+    autoScale:       tog('ls-auto'),
+
+    autoDelay:       0,
+
+    startMinimized:  tog('ls-minimized'),
+
+    startAsAdmin:    tog('ls-admin'),
+
+  };
+
+}
+
+
+
+function setStatus(active, msg) {
+
+  document.getElementById('sdot').className = 'sdot' + (active ? ' on' : '');
+
+  document.getElementById('stxt').textContent = msg || (active ? 'Ativo' : 'Inativo');
+
+}
+
+
+
+async function doLaunch() {
+
+  const btn = document.getElementById('btn-launch');
+
+  btn.disabled = true;
+
+  btn.innerHTML = '<div class="spin"></div>Starting...';
+
+  try {
+
+    const r = await ipcRenderer.invoke('gdz-scaling-apply', getConfig());
+
+    btn.disabled = false;
+
+    btn.textContent = 'Scale';
+
+    if (r && r.success) {
+
+      setStatus(true, r.embedded ? 'Ativo · FSR 1 interno' : 'Ativo');
+
+    } else {
+
+      // sem motor embutido: se o Lossless estiver instalado, usa ele como fallback
+      const caps = await ipcRenderer.invoke('gdz-scaling-caps').catch(() => null);
+
+      if (caps && !caps.ok) {
+
+        const ls = await ipcRenderer.invoke('ls-launch', getConfig()).catch(() => null);
+
+        if (ls && ls.success) { setStatus(true, 'Ativo · Lossless'); return; }
+
+      }
+
+      setStatus(false, r?.error ? r.error.split('\n')[0] : 'Error');
+
+    }
+
+  } catch(e) {
+
+    btn.disabled = false;
+
+    btn.textContent = 'Scale';
+
+    setStatus(false, e.message);
+
+  }
+
+}
+
+
+
+async function doStop() {
+
+  try {
+
+    await ipcRenderer.invoke('gdz-scaling-revert');
+
+  } catch(e) {}
+
+  try {
+
+    await ipcRenderer.invoke('ls-stop');
+
+  } catch(e) {}
+
+  setStatus(false, 'Inativo');
+
+  const btn = document.getElementById('btn-launch');
+
+  btn.disabled = false;
+
+  btn.textContent = 'Scale';
+
+}
+
+
+
+// init
+
+onFGTypeChange();
+
+onScaleTypeChange();
+
+// motor embutido: o cliente não instala nem paga nada
+(async function initScaler() {
+
+  try {
+
+    const caps = await ipcRenderer.invoke('gdz-scaling-caps');
+
+    if (caps) setStatus(false, caps.ok ? 'Motor FSR 1 interno pronto' : (caps.message || 'Motor indisponível'));
+
+  } catch (e) {}
+
+})();
+
+</script>
+
+</body>
+
+</html>
+

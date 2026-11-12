@@ -1,0 +1,88 @@
+/* tema-l.css â€” acabamento da versÃ£o vermelha/preto (carregado por Ãºltimo) */
+:root {
+  --bg: #050506;
+  --bg2: #141416;
+  --surface: #0a0a0c;
+  --white: #0a0a0c;
+  --card: #0c0c0e;
+  --card-grad: linear-gradient(180deg, #111114 0%, #0a0a0c 100%);
+  --sidebar: #070708;
+  --border: rgba(255, 255, 255, 0.07);
+  --border2: rgba(255, 255, 255, 0.14);
+
+  --purple: #ff1f2e;
+  --purple2: #ff5560;
+  --purple3: #ff9aa2;
+  --purple-deep: #a30f1a;
+  --purple-l: rgba(255, 31, 46, 0.12);
+  --purple-glow: rgba(224, 16, 31, 0.35);
+  --purple-glow2: rgba(255, 31, 46, 0.22);
+  --purple-neon: rgba(255, 154, 162, 0.45);
+
+  --grad-brand: linear-gradient(135deg, #ffffff 0%, #ffd7da 42%, #ff1f2e 100%);
+  --grad-cta: linear-gradient(135deg, #ffffff 0%, #ffe6e8 55%, #ff9aa2 100%);
+  --grad-violet: linear-gradient(135deg, #ff1f2e 0%, #a30f1a 100%);
+  --grad-text: linear-gradient(180deg, #ffffff 0%, #ffd2d6 100%);
+
+  --grid-line: rgba(255, 85, 96, 0.09);
+  --grid-hatch: rgba(255, 85, 96, 0.055);
+}
+
+body::before {
+  background:
+    radial-gradient(ellipse 55% 45% at 58% -8%, rgba(224, 16, 31, 0.20) 0%, transparent 70%),
+    radial-gradient(ellipse 40% 38% at 92% 100%, rgba(255, 255, 255, 0.05) 0%, transparent 70%),
+    radial-gradient(ellipse 30% 30% at 12% 100%, rgba(255, 31, 46, 0.08) 0%, transparent 70%),
+    linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px),
+    linear-gradient(to bottom right, transparent calc(50% - 1px), var(--grid-hatch) calc(50% - 1px), var(--grid-hatch) calc(50% + 1px), transparent calc(50% + 1px));
+  background-size: auto, auto, auto, var(--grid-cell) var(--grid-cell), var(--grid-cell) var(--grid-cell), var(--grid-cell) var(--grid-cell);
+}
+
+::selection { background: rgba(255, 85, 96, 0.35); color: #fff; }
+::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.10); }
+::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
+
+/* marca na barra lateral e na janela */
+.sb-logo img, .tb-logo, .dh-gyro .gy-core img { filter: drop-shadow(0 0 10px rgba(255, 31, 46, 0.45)); }
+.titlebar .tb-app b { color: #fff; }
+.titlebar .tb-app i { color: #ff5560; font-style: normal; }
+
+/* botÃ£o principal com texto preto sobre vermelho claro */
+.qo-btn, .apply-btn, .dh-cta {
+  box-shadow: 0 8px 26px rgba(255, 31, 46, 0.28), inset 0 -1px 0 rgba(163, 15, 26, 0.35);
+}
+
+/* foco de teclado visÃ­vel e acessÃ­vel */
+:focus-visible { outline: 2px solid rgba(255, 85, 96, 0.65); outline-offset: 2px; }
+
+/* Ã­cones que ainda usam o roxo legado em gradientes inline */
+.nav-indicator::before { background: linear-gradient(180deg, #ffffff, #ff8a91); }
+
+/* -- Ações e estados: vermelho no lugar do volt -- */
+:root:not([data-theme="light"]) {
+  --volt: #ff1f2e;
+  --volt-2: #ff5560;
+  --volt-3: #ff9aa2;
+  --grad-cta: linear-gradient(135deg, #ffe6e8 0%, #ffb3b8 52%, #ff5560 100%);
+  --bg2: #141416;
+  --surface: #0a0a0c;
+  --card: #0c0c0e;
+  --sidebar: #070708;
+}
+:root:not([data-theme="light"]) :is(.toggle.on, .tw-switch[aria-checked="true"])::after { background: #fff; }
+:root:not([data-theme="light"]) .nav-badge { background: var(--grad-cta); color: #0a0910; }
+
+
+/* ── Aviso de modo limitado (sem administrador) ── */
+.adm-bar {
+  display: flex; align-items: center; gap: 12px; margin: 10px 28px 0; padding: 10px 14px;
+  border-radius: 10px; background: rgba(255, 31, 46, 0.10); border: 1px solid rgba(255, 85, 96, 0.35);
+  color: var(--text2); font-size: 12.5px; font-weight: 500;
+}
+.adm-bar span { flex: 1; min-width: 0; }
+.adm-btn {
+  flex-shrink: 0; padding: 6px 12px; border-radius: 8px; border: none; cursor: pointer;
+  background: var(--grad-cta); color: #0a0910; font-family: inherit; font-weight: 800; font-size: 12px;
+}
+.adm-btn:hover { filter: brightness(1.06); }

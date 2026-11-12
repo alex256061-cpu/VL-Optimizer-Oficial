@@ -1,0 +1,90 @@
+/* ══════════════════════════════════════════════════════════════════
+   VL Optimizer — fundo: a grade vira uma placa de circuito
+   O fundo.js desenha trilhas em cima das linhas da grade (com os desvios a 45° de uma
+   placa de verdade), vias nas pontas e pulsos de sinal correndo por elas.
+
+   Custo: as trilhas são um SVG pintado uma vez; cada pulso é um elemento pequeno animado
+   só por transform e opacity, então roda no compositor. Sem foco na janela tudo congela.
+   A camada começa abaixo da barra do topo de propósito: a barra tem desfoque de fundo, e
+   um pulso passando por baixo dela obrigaria a refazer o desfoque a cada quadro.
+   ══════════════════════════════════════════════════════════════════ */
+
+:root {
+  --pcb-line: rgba(255,85,96,0.16);
+  --pcb-via: rgba(255,154,162,0.30);
+  --pcb-chip: rgba(19,15,28,0.9);
+  --pcb-sig1: #ff1f2e;
+  --pcb-sig2: #ff9aa2;
+  --pcb-lit: rgba(255,227,230,0.95);
+  --pcb-lit2: #ff1f2e;
+  --pcb-glow: rgba(255,31,46,0.17);
+  --cur-edge: rgba(255,31,46,0.9);
+  --cur-edge2: rgba(255,85,96,0.55);
+}
+[data-theme="light"] {
+  --pcb-line: rgba(224,16,31,0.15);
+  --pcb-via: rgba(224,16,31,0.30);
+  --pcb-chip: rgba(255,255,255,0.85);
+  --pcb-sig1: #e0101f;
+  --pcb-sig2: #c026d3;
+  --pcb-lit: #e0101f;
+  --pcb-lit2: #c026d3;
+  --pcb-glow: rgba(255,31,46,0.16);
+  --cur-edge: rgba(224,16,31,0.95);
+  --cur-edge2: rgba(230,16,30,0.45);
+}
+
+/* fica entre o body::before (grade e brilhos) e o app: no painel, left/top são a barra lateral
+   recolhida e a barra de título + a barra do topo; a tela de login troca os dois por variável */
+body > .pcb { position: fixed; z-index: 0; left: var(--pcb-x, 72px); top: var(--pcb-y, 108px); right: 0; bottom: 0; pointer-events: none; overflow: hidden; contain: strict; }
+.pcb svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.pcb-trace { fill: none; stroke: var(--pcb-line); stroke-width: 1.25; stroke-linecap: round; stroke-linejoin: round; }
+.pcb-bus { fill: var(--pcb-line); }
+.pcb-via { fill: var(--bg); stroke: var(--pcb-via); stroke-width: 1.25; }
+.pcb-dot { fill: var(--pcb-via); }
+.pcb-chip { fill: var(--pcb-chip); stroke: var(--pcb-via); stroke-width: 1.25; }
+.pcb-die { fill: none; stroke: var(--pcb-line); stroke-width: 1.25; }
+.pcb-pin { fill: none; stroke: var(--pcb-via); stroke-width: 2; }
+
+/* Pulso: um risco curto com a ponta acesa. O fundo.js gera um @keyframes por trilha. */
+.pcb-sig { position: absolute; left: 0; top: 0; transition: opacity 1.4s ease; }
+.pcb-sig.off { opacity: 0; }
+.pcb-sig b { position: absolute; left: -38px; top: -1px; width: 38px; height: 2px; border-radius: 2px; opacity: 0; background: linear-gradient(90deg, transparent, var(--c)); transform-origin: 100% 50%; will-change: transform, opacity; }
+.pcb-sig b::after { content: ''; position: absolute; right: -2px; top: -1.5px; width: 5px; height: 5px; border-radius: 50%; background: var(--c); box-shadow: 0 0 10px 1px var(--c); }
+/* o sinal anda nos primeiros 70% do ciclo (TRAVEL no fundo.js) e some antes de recomeçar */
+@keyframes pcbFade { 0% { opacity: 0; } 2.5% { opacity: 1; } 66% { opacity: 1; } 70% { opacity: 0; } 100% { opacity: 0; } }
+
+/* ── Luz do cursor ── */
+/* Lanterna: janela redonda que segue o mouse; dentro dela, a placa acesa anda o mesmo tanto
+   para o lado contrário e por isso fica no lugar. Só transform, com a mesma transição nos dois. */
+.pcb-lamp {
+  position: absolute; left: -230px; top: -230px; width: 460px; height: 460px; border-radius: 50%; overflow: hidden; opacity: 0;
+  background: radial-gradient(closest-side, var(--pcb-glow) 0%, transparent 100%);
+  -webkit-mask: radial-gradient(closest-side, #000 0%, rgba(0,0,0,0.5) 48%, transparent 100%);
+          mask: radial-gradient(closest-side, #000 0%, rgba(0,0,0,0.5) 48%, transparent 100%);
+  transition: opacity 0.5s ease, transform 0.34s cubic-bezier(0.22, 1, 0.36, 1); will-change: transform, opacity;
+}
+.pcb-lamp.on { opacity: 1; }
+.pcb-lit { position: absolute; left: 0; top: 0; transition: transform 0.34s cubic-bezier(0.22, 1, 0.36, 1); will-change: transform; }
+.pcb-lamp.jump, .pcb-lamp.jump .pcb-lit { transition: none; }
+.pcb-lit .pcb-trace { stroke: var(--pcb-lit); stroke-width: 1.5; }
+.pcb-lit .pcb-bus { fill: var(--pcb-lit); }
+.pcb-lit :is(.pcb-via, .pcb-die) { stroke: var(--pcb-lit2); }
+.pcb-lit .pcb-dot { fill: var(--pcb-lit2); }
+.pcb-lit :is(.pcb-chip, .pcb-pin) { stroke: var(--pcb-lit); }
+
+/* Contorno do card debaixo do mouse: só o fio da borda, aceso no ponto onde o cursor está */
+body > .cur-clip { position: fixed; z-index: 2; left: var(--pcb-x, 72px); top: var(--pcb-y, 108px); right: 0; bottom: 0; overflow: hidden; pointer-events: none; contain: strict; }
+.cur-ring {
+  position: absolute; left: 0; top: 0; box-sizing: border-box; padding: 1px; opacity: 0; transition: opacity 0.3s ease;
+  background: radial-gradient(260px circle at var(--x, 50%) var(--y, 50%), var(--cur-edge) 0%, var(--cur-edge2) 38%, transparent 100%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+          mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+}
+.cur-ring.on { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .pcb-lamp { transition: opacity 0.5s ease; } .pcb-lit { transition: none; } }
+
+.pcb.paused .pcb-sig b { animation-play-state: paused; }
+/* Efeitos visuais desligado em Sobre: fica só a placa desenhada */
+[data-fx="off"] :is(.pcb-sig, .pcb-lamp, .cur-clip) { display: none; }
+@media (prefers-reduced-motion: reduce) { .pcb-sig { display: none; } }

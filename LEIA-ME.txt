@@ -1,0 +1,35 @@
+VL OPTIMIZER - GUIA PARA INSTALAR E USAR
+
+Requisitos: Windows 10/11 de 64 bits. Reserve 500 MB livres.
+O instalador inclui o aplicativo, Electron, PresentMon e o motor FSR 1.
+Nao e necessario instalar Node.js, npm ou Lossless Scaling para o FSR 1.
+
+1. Abra Instalar-VL-Optimizer-1.0.0.exe e siga o assistente em portugues.
+2. Abra VL Optimizer pelo atalho na area de trabalho ou pelo menu Iniciar.
+3. Para recursos que exigem administrador, use "Reabrir como admin"
+   no aplicativo e aceite o pedido de permissao do Windows.
+4. Para testar a escala FSR, deixe o jogo em janela ou sem bordas.
+
+Este pacote corresponde ao projeto local, versao 1.0.0. O briefing de
+divulgacao da versao 0.4.0 descreve outro estado do produto. Neste codigo,
+o motor interno implementa FSR 1 (EASU + RCAS). As demais opcoes de escala
+e geracao de quadros exibidas na interface nao estao implementadas pelo
+motor interno. Nao ha garantia de ganho de FPS ou compatibilidade com
+todos os jogos. Teste primeiro fora de partidas competitivas.
+
+O instalador nao tem assinatura digital. O Windows pode exibir um aviso
+de editor desconhecido. Confira a origem e o SHA256 antes de executar.
+Nao e necessario desativar o antivirus.
+
+Para remover: Configuracoes do Windows > Aplicativos > VL Optimizer >
+Desinstalar. Os dados e backups do usuario sao preservados. Desinstalar
+o aplicativo nao desfaz automaticamente ajustes ja aplicados no Windows;
+use os controles de desfazer do aplicativo antes de remover, se desejar.
+
+PresentMon: licenca em resources/app/bin/PresentMon.LICENSE.txt.
+FSR: licenca em resources/app/FSR.LICENSE.txt (AMD, MIT).
+Validacao local: o instalador concluiu a instalacao e o motor nativo
+carregou D3D11 e shaders. A interface Electron encerrou antes de abrir
+neste ambiente, inclusive na versao de desenvolvimento; a causa ainda
+nao foi identificada. O uso completo do aplicativo nao foi confirmado.
+O funcionamento em um PC limpo ainda precisa ser validado.

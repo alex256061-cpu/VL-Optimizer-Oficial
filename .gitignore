@@ -1,0 +1,18 @@
+node_modules/
+dist/
+dist2/
+release/
+smoke.png
+uitest.log
+shots/
+*.log
+
+# motor: o exe do hospedeiro e publicado a partir de engine/src
+engine/bin/
+engine/obj/
+engine/*.exe
+
+# binarios de terceiros: vao no instalador publicado, nao no codigo
+bin/Lossless.dll
+bin/PresentMon.exe
+native/scaler/fsr1_engine.exe

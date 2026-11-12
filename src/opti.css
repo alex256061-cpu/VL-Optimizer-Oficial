@@ -1,0 +1,63 @@
+/* ── DLSS / FSR (OptiScaler) — desenhado por opti.js; reaproveita .fpm-* do fps.css ── */
+.opx-hero { display: flex; gap: 16px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
+.opx-hero-txt { flex: 1 1 380px; min-width: 0; }
+.opx-list { margin: 10px 0 0; padding: 0 0 0 18px; font-size: 12.5px; color: var(--text2); line-height: 1.6; }
+.opx-list b { color: var(--text); }
+.opx-pkg { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; min-width: 200px; }
+.opx-pkg-v { font-size: 12px; color: var(--text3); }
+.opx-pkg-v b { color: var(--success); font-weight: 700; }
+.opx-warn { margin-top: 14px; font-size: 12px; line-height: 1.5; color: var(--warning); background: var(--warning-l); border-radius: 8px; padding: 10px 12px; }
+.opx-warn b { font-weight: 800; }
+.opx-credit { margin-top: 10px; font-size: 11px; color: var(--text4); }
+.opx-credit a { color: var(--purple2); cursor: pointer; text-decoration: underline; }
+
+.opx-sec { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 22px 0 12px; }
+.opx-sec-t { font-size: 10px; font-weight: 700; letter-spacing: 0.14em; color: var(--text3); text-transform: uppercase; }
+
+.opx-game { margin-bottom: 12px; }
+.opx-game-hdr { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.opx-game-name { font-size: 15px; font-weight: 800; color: var(--text); word-break: break-word; }
+.opx-path { font-size: 11px; color: var(--text4); margin-top: 3px; font-family: 'JetBrains Mono', monospace; word-break: break-all; }
+.opx-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.opx-chip { font-size: 11px; font-weight: 700; border-radius: 999px; padding: 4px 10px; background: var(--bg2); color: var(--text3); }
+.opx-chip.yes { background: var(--success-l); color: var(--success); }
+.opx-chip.no { text-decoration: line-through; opacity: 0.7; }
+.opx-notes { margin-top: 10px; font-size: 12px; color: var(--text2); line-height: 1.5; }
+.opx-notes div + div { margin-top: 4px; }
+.opx-err { margin-top: 10px; font-size: 12.5px; color: var(--error); background: var(--error-l); border-radius: 8px; padding: 10px 12px; line-height: 1.5; }
+
+.opx-opts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 18px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
+@media (max-width: 900px) { .opx-opts { grid-template-columns: minmax(0, 1fr); } }
+.opx-opt { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; }
+.opx-opt-l { min-width: 0; }
+.opx-opt-t { font-size: 13px; font-weight: 700; color: var(--text); }
+.opx-opt-d { font-size: 11.5px; color: var(--text3); margin-top: 2px; line-height: 1.4; }
+.opx-opt .fpm-select { flex-shrink: 0; max-width: 55%; }
+
+.opx-ac { display: flex; gap: 10px; align-items: flex-start; margin-top: 12px; font-size: 12.5px; color: var(--text2); line-height: 1.5; cursor: pointer; }
+.opx-ac input { margin-top: 3px; accent-color: var(--purple); flex-shrink: 0; }
+.opx-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+.opx-actions .fpm-btn { flex: 0 0 auto; padding: 10px 18px; }
+.opx-saved { font-size: 11.5px; color: var(--success); align-self: center; }
+.opx-empty { font-size: 12.5px; color: var(--text3); text-align: center; padding: 22px 12px; border: 1px dashed var(--border2); border-radius: 12px; background: var(--card-grad); }
+.opx-bar { height: 4px; border-radius: 2px; background: var(--bg2); overflow: hidden; width: 200px; max-width: 100%; }
+.opx-bar > i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--purple), var(--purple3)); transition: width 0.4s; }
+
+/* ── GTA RP (desenhado por gtarp.js) ── */
+.gta-card { margin-bottom: 16px; border-color: rgba(255,31,46,0.35); background: linear-gradient(120deg, rgba(255,31,46,0.10) 0%, rgba(255,255,255,0.01) 60%), var(--card-grad); }
+.gta-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 14px; }
+@media (max-width: 1100px) { .gta-grid { grid-template-columns: minmax(0, 1fr); } }
+.gta-side { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.gta-step { border: 1px solid var(--border); border-radius: 12px; padding: 16px; background: rgba(255,255,255,0.015); min-width: 0; }
+.gta-step-t { font-size: 14px; font-weight: 800; color: var(--text); margin-bottom: 6px; }
+.gta-step-d { font-size: 12px; color: var(--text3); line-height: 1.55; }
+.gta-step-d b, .gta-ol b { color: var(--text2); }
+.gta-ol { margin: 10px 0 12px; padding-left: 18px; font-size: 12.5px; color: var(--text2); line-height: 1.7; }
+.gta-step > .fpm-btn { flex: 0 0 auto; }
+.gta-seg { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+.gta-seg-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.gta-seg button { background: var(--bg2); border: 1px solid var(--border2); color: var(--text2); border-radius: 9px; padding: 9px 6px; font-family: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 2px; -webkit-app-region: no-drag; min-width: 0; }
+.gta-seg button small { font-size: 10.5px; font-weight: 500; color: var(--text4); }
+.gta-seg button.on { border-color: var(--purple); background: var(--purple-l); color: #fff; }
+.gta-seg button:disabled { opacity: 0.45; cursor: default; }
+.gta-now { margin-top: 12px; font-size: 11px; color: var(--text4); line-height: 1.5; }

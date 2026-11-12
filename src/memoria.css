@@ -1,0 +1,182 @@
+/* ══════════════════════════════════════════════════════════════════
+   VL Optimizer — pentes de memória (página Memória e disco)
+   Cada slot da placa-mãe vira um soquete, com o pente de verdade que está nele. Tudo em CSS, sem
+   canvas: o que fica rodando só anima transform e opacity, e para com a janela sem foco
+   (.gy-paused no body, do fundo.js), com Efeitos visuais desligado ou "reduzir movimento".
+
+   Marcação (montada pelo memoria.js):
+     .rs-row                       grade; recebe --fill (uso), --avail (uso + cache), --beat (ritmo)
+       .rs-slot[.empty|.sodimm|.soldada]   --i = ordem de entrada
+         .rs-stage
+           .rs                     o pente: .rs-led > b, i   .rs-pcb > .rs-chip…   .rs-pins > i, i   .rs-scan
+           .rs-ghost               só no slot vazio
+           .rs-socket              o soquete e as duas travas (::before / ::after)
+         .rs-cap                   .rs-loc, .rs-gb, .rs-spec, .rs-part
+   ══════════════════════════════════════════════════════════════════ */
+
+/* ── Barra do card: em uso | cache | livre ── */
+.mem-track { display: flex; }
+.mem-used { flex-shrink: 0; position: relative; z-index: 1; }
+/* entra 7px por baixo da ponta arredondada da parte em uso, para as duas emendarem */
+.mem-cache {
+  flex-shrink: 0; height: 100%; width: 0; margin-left: -7px; transition: width 0.8s var(--ease-out);
+  background: repeating-linear-gradient(135deg, rgba(255,85,96,0.40) 0 4px, rgba(255,85,96,0.16) 4px 8px);
+}
+/* a parte em uso cresce na entrada (barFill); o cache só aparece depois, para não sobrar um vão */
+.page.active .mem-cache { animation: rsFade 0.5s 0.95s ease backwards; }
+[data-theme="light"] .mem-cache { background: repeating-linear-gradient(135deg, rgba(224,16,31,0.50) 0 4px, rgba(224,16,31,0.20) 4px 8px); }
+[data-theme="light"] .mem-legend .ml-cache i { background: repeating-linear-gradient(135deg, rgba(224,16,31,0.75) 0 2px, rgba(224,16,31,0.25) 2px 4px); }
+.mem-legend { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 10px; font-size: 11.5px; color: var(--text3); }
+.mem-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.mem-legend i { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+.mem-legend b { font-family: 'Geist Mono', 'JetBrains Mono', monospace; font-weight: 600; color: var(--text2); }
+.mem-legend .ml-used i { background: var(--purple2); }
+.mem-legend .ml-cache i { background: repeating-linear-gradient(135deg, rgba(255,85,96,0.75) 0 2px, rgba(255,85,96,0.3) 2px 4px); }
+.mem-legend .ml-free i { background: var(--bg2); box-shadow: inset 0 0 0 1px var(--border2); }
+.mem-legend .ml-cache { cursor: help; }
+
+.rs-sum { margin-left: auto; font-size: 11.5px; font-weight: 600; color: var(--text3); font-family: 'Geist Mono', 'JetBrains Mono', monospace; }
+
+/* ── Grade dos slots ── */
+.rs-row {
+  --fill: 0%; --avail: 0%; --beat: 3s;
+  --rs-led: linear-gradient(90deg, #ffffff 0%, #ffe3e5 45%, #ff1f2e 100%); --rs-glow: 255,31,46;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px 28px;
+  padding-top: 18px; border-top: 1px solid var(--border);
+}
+.rs-row[hidden] { display: none; }
+.rs-row.warn { --rs-led: linear-gradient(90deg, #fff6d6 0%, #fbbf24 100%); --rs-glow: 251,191,36; }
+.rs-row.crit { --rs-led: linear-gradient(90deg, #ffe0e5 0%, #fb7185 100%); --rs-glow: 251,113,133; }
+.rs-slot { min-width: 0; }
+.rs-stage { position: relative; height: 106px; perspective: 800px; }
+.rs-slot.sodimm .rs-stage, .rs-slot.soldada .rs-stage { max-width: 290px; }
+
+/* ── O pente ── */
+.rs {
+  position: absolute; left: 16px; right: 16px; bottom: 9px; height: 88px; display: flex; flex-direction: column;
+  transform-origin: 50% 100%; transition: transform 0.5s var(--ease-out);
+}
+.rs-slot:hover .rs { transform: translateY(-2px) rotateX(10deg); }
+
+/* barra de luz: o nível é o uso da memória; atrás dele, mais apagado, o que é cache */
+.rs-led { position: relative; height: 8px; flex-shrink: 0; border-radius: 5px 5px 0 0; overflow: hidden; background: #1d1d27; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.07); }
+.rs-led b, .rs-led i { position: absolute; left: 0; top: 0; bottom: 0; transition: width 0.9s var(--ease-out); }
+.rs-led b { width: var(--avail); background: repeating-linear-gradient(135deg, rgba(var(--rs-glow),0.42) 0 3px, rgba(var(--rs-glow),0.16) 3px 6px); }
+.rs-led i { width: var(--fill); overflow: hidden; background: var(--rs-led); box-shadow: 0 0 12px rgba(var(--rs-glow),0.9); }
+.rs-led i::after {
+  content: ''; position: absolute; top: 0; bottom: 0; left: 0; width: 46px; will-change: transform;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.95), transparent);
+  animation: rsShine 3.2s linear infinite; animation-delay: calc(var(--i, 0) * -0.7s);
+}
+
+/* placa: preta, com os dois recortes laterais onde as travas do soquete encaixam */
+.rs-pcb {
+  position: relative; flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; gap: 2.2%; padding: 0 5.5%;
+  background:
+    repeating-linear-gradient(90deg, rgba(255,255,255,0.028) 0 1px, transparent 1px 7px),
+    linear-gradient(180deg, #1b1b25 0%, #101016 100%);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.09), inset 0 1px 0 rgba(255,255,255,0.10);
+  -webkit-mask: radial-gradient(circle 5px at 0 58%, transparent 96%, #000), radial-gradient(circle 5px at 100% 58%, transparent 96%, #000);
+          mask: radial-gradient(circle 5px at 0 58%, transparent 96%, #000), radial-gradient(circle 5px at 100% 58%, transparent 96%, #000);
+  -webkit-mask-composite: source-in; mask-composite: intersect;
+}
+.rs-chip {
+  position: relative; flex: 1 1 0; max-width: 46px; height: 60%; border-radius: 3px;
+  background: linear-gradient(180deg, #2b2b36 0%, #17171d 100%);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.09), 0 1px 2px rgba(0,0,0,0.5);
+}
+/* gravação a laser do chip */
+.rs-chip::before {
+  content: ''; position: absolute; left: 18%; right: 30%; top: 26%; height: 7px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.20) 0 1px, transparent 1px 4px, rgba(255,255,255,0.12) 4px 5px, transparent 5px);
+}
+/* chip trabalhando: acende de dentro, no ritmo de --beat */
+.rs-chip::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; opacity: 0; transition: opacity 0.6s ease;
+  background: radial-gradient(ellipse 80% 70% at 50% 62%, rgba(var(--rs-glow),0.95) 0%, rgba(var(--rs-glow),0.34) 55%, rgba(var(--rs-glow),0.08) 100%);
+  box-shadow: 0 0 12px rgba(var(--rs-glow),0.55);
+}
+.rs-chip.on::after { opacity: 0.85; animation: rsBeat var(--beat) ease-in-out infinite alternate; animation-delay: calc(var(--c, 0) * -0.41s); }
+/* no meio do pente: DDR5 tem o regulador de energia (PMIC) na própria placa; os outros, só o SPD */
+.rs-pmic, .rs-spd { flex: 0 0 auto; border-radius: 2px; background: linear-gradient(180deg, #34343f, #1b1b22); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.10); }
+.rs-pmic { position: relative; width: 14px; height: 30%; margin: 0 3px; }
+.rs-pmic::after { content: ''; position: absolute; left: 1px; right: 1px; top: calc(100% + 4px); height: 6px; border-radius: 2px; background: #2a2a34; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08); }
+.rs-spd { width: 8px; height: 14%; align-self: flex-end; margin: 0 2px 9%; }
+
+/* contatos dourados, em dois grupos separados pelo chanfro */
+.rs-pins { display: flex; gap: 7px; height: 13px; flex-shrink: 0; margin: 0 4.5%; }
+.rs-pins i {
+  border-radius: 0 0 2px 2px;
+  background: repeating-linear-gradient(90deg, #f7dd92 0 2.5px, #b3862a 2.5px 3.2px, #121217 3.2px 5.2px);
+  box-shadow: inset 0 3px 3px rgba(0,0,0,0.35);
+}
+.rs-pins i:first-child { flex: 1.12; }
+.rs-pins i:last-child { flex: 1; }
+.rs-slot.sodimm .rs-pins i:first-child { flex: 0.42; }
+
+/* varredura da limpeza do cache (enquanto o Windows esvazia a lista de espera) */
+.rs-scan { position: absolute; inset: 0 0 13px; overflow: hidden; pointer-events: none; border-radius: 5px 5px 0 0; }
+.rs-scan::after {
+  content: ''; position: absolute; top: 0; bottom: 0; left: 0; width: 22%; opacity: 0; transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent 0%, rgba(255,31,46,0.10) 40%, rgba(255,31,46,0.50) 88%, #e9ffb0 97%, transparent 100%);
+}
+.rs-cleaning .rs-scan::after { opacity: 1; animation: rsScan 1s cubic-bezier(0.5, 0, 0.3, 1) infinite; animation-delay: calc(var(--i, 0) * 0.12s); }
+
+/* ── Soquete e travas ── */
+.rs-socket {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 15px; z-index: 2; border-radius: 4px;
+  background: linear-gradient(180deg, #2a2a34 0%, #131318 100%);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.10), inset 0 1px 0 rgba(255,255,255,0.12), 0 6px 14px rgba(0,0,0,0.35);
+}
+.rs-socket::before, .rs-socket::after {
+  content: ''; position: absolute; bottom: 3px; width: 10px; height: 34px; border-radius: 3px 3px 2px 2px; transform-origin: 50% 100%;
+  background: linear-gradient(180deg, #45455a 0%, #1f1f28 100%); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.14);
+}
+.rs-socket::before { left: 3px; }
+.rs-socket::after { right: 3px; }
+.rs-slot.empty .rs-socket::before { transform: rotate(-24deg); }
+.rs-slot.empty .rs-socket::after { transform: rotate(24deg); }
+.rs-slot.empty .rs-socket { opacity: 0.6; }
+.rs-slot.soldada :is(.rs-socket, .rs-pins) { display: none; }
+.rs-slot.soldada .rs { bottom: 0; }
+.rs-slot.soldada .rs-scan { inset: 0; }
+.rs-slot.soldada .rs-pcb { -webkit-mask: none; mask: none; border-radius: 0 0 4px 4px; }
+.rs-ghost {
+  position: absolute; left: 16px; right: 16px; bottom: 15px; height: 76px; border-radius: 5px 5px 0 0;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px dashed var(--border2); border-bottom: 0; color: var(--text4);
+  font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+}
+
+/* ── Legenda de cada slot ── */
+.rs-cap { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 10px; margin-top: 10px; padding: 0 3px; min-width: 0; }
+.rs-loc { width: 100%; font-size: 9.5px; font-weight: 800; letter-spacing: 0.09em; text-transform: uppercase; color: var(--text3); margin-bottom: 1px; }
+.rs-gb { font-family: var(--font-display, inherit); font-stretch: 116%; font-size: 19px; font-weight: 800; letter-spacing: -0.02em; color: var(--text); }
+.rs-spec { font-family: 'Geist Mono', 'JetBrains Mono', monospace; font-size: 11.5px; font-weight: 600; color: var(--purple3); }
+.rs-part { margin-left: auto; min-width: 0; font-family: 'Geist Mono', 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--text3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rs-slot.empty .rs-part { margin-left: 0; }
+
+/* ── Entrada: o pente desce no soquete e as travas fecham ── */
+.page.active .rs { animation: rsInsert 0.75s calc(0.15s + var(--i, 0) * 0.1s) var(--ease-out) backwards; }
+.page.active .rs-slot:not(.empty) .rs-socket::before { animation: rsLatchL 0.45s calc(0.55s + var(--i, 0) * 0.1s) var(--ease-out) backwards; }
+.page.active .rs-slot:not(.empty) .rs-socket::after { animation: rsLatchR 0.45s calc(0.55s + var(--i, 0) * 0.1s) var(--ease-out) backwards; }
+.page.active :is(.rs-ghost, .rs-cap) { animation: popIn 0.45s calc(0.1s + var(--i, 0) * 0.1s) var(--ease-out) backwards; }
+
+@keyframes rsInsert { 0% { opacity: 0; transform: translateY(-30px); } 30% { opacity: 1; } 62% { transform: translateY(3px); } 82% { transform: translateY(-1px); } 100% { transform: none; } }
+@keyframes rsLatchL { from { transform: rotate(-24deg); } to { transform: none; } }
+@keyframes rsLatchR { from { transform: rotate(24deg); } to { transform: none; } }
+@keyframes rsFade { from { opacity: 0; } }
+@keyframes rsBeat { from { opacity: 0.22; } to { opacity: 1; } }
+@keyframes rsShine { 0%, 55% { transform: translateX(-60px); } 100% { transform: translateX(640px); } }
+@keyframes rsScan { from { transform: translateX(-100%); } to { transform: translateX(460%); } }
+
+/* ── Parado: janela sem foco, Efeitos visuais desligado ou "reduzir movimento" no Windows ── */
+.gy-paused .rs-row :is(.rs-chip, .rs-led i, .rs-scan)::after { animation-play-state: paused; }
+[data-fx="off"] .mem-cache, [data-fx="off"] .rs-row :is(.rs, .rs-ghost, .rs-cap),[data-fx="off"] .rs-row :is(.rs-chip, .rs-led i, .rs-scan, .rs-socket)::after, [data-fx="off"] .rs-row .rs-socket::before { animation: none; }
+[data-fx="off"] .rs-led i::after { display: none; }
+[data-fx="off"] .rs-slot:hover .rs { transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  .rs-row :is(.rs-chip, .rs-led i, .rs-scan)::after { animation: none; }
+  .rs-led i::after { display: none; }
+  .rs-slot:hover .rs { transform: none; }
+}

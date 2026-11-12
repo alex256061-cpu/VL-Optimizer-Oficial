@@ -1,0 +1,153 @@
+/* ══════════════════════════════════════════════════════════════════
+   VL Optimizer — modo claro do tema v3
+   Só vale com <html data-theme="light">; o padrão continua escuro.
+   Carregado por último: troca as variáveis e as regras que o theme.css
+   escreveu com cor fixa (texto branco, fundos quase pretos).
+   ══════════════════════════════════════════════════════════════════ */
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f1ecfd;
+  --bg2: #e9e2fb;
+  --surface: #ffffff;
+  --white: #ffffff;
+  --card: #ffffff;
+  --card-grad: linear-gradient(160deg, #ffffff 0%, #faf7ff 55%, #f1e9ff 100%);
+  --sidebar: #f8f4ff;
+  --border: rgba(179,16,28,0.13);
+  --border2: rgba(179,16,28,0.22);
+
+  --purple: #e0101f;
+  --purple2: #ff1f2e;
+  --purple3: #b3101c;
+  --purple-l: rgba(224,16,31,0.09);
+  --purple-glow: rgba(224,16,31,0.22);
+
+  --text: #15131d;
+  --text2: #3f3c4c;
+  --text3: #6c6979;
+  --text4: #9c99a8;
+
+  --success: #059669; --success-l: rgba(5,150,105,0.10);
+  --warning: #b45309; --warning-l: rgba(217,119,6,0.10);
+  --error:   #e11d48; --error-l:   rgba(225,29,72,0.09);
+
+  --grad-brand: linear-gradient(135deg, #a30f1a 0%, #e0101f 50%, #c084fc 100%);
+  --grad-cta:   linear-gradient(135deg, #a30f1a 0%, #e0101f 55%, #ff1f2e 100%);
+  --grad-ink:   linear-gradient(180deg, #ffffff 0%, #f4eeff 100%);
+  --grad-text:  linear-gradient(180deg, #2e1065 0%, #e0101f 100%);
+  --grid-line: rgba(224,16,31,0.10);
+  --grid-hatch: rgba(224,16,31,0.065);
+}
+
+[data-theme="light"] body::before {
+  background:
+    radial-gradient(ellipse 60% 50% at 62% -10%, rgba(255,31,46,0.30) 0%, transparent 70%),
+    radial-gradient(ellipse 45% 40% at 100% 100%, rgba(255,110,120,0.22) 0%, transparent 70%),
+    radial-gradient(ellipse 40% 40% at 0% 90%, rgba(224,16,31,0.16) 0%, transparent 70%),
+    linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px),
+    linear-gradient(to bottom right, transparent calc(50% - 1px), var(--grid-hatch) calc(50% - 1px), var(--grid-hatch) calc(50% + 1px), transparent calc(50% + 1px));
+  background-size: auto, auto, auto, var(--grid-cell) var(--grid-cell), var(--grid-cell) var(--grid-cell), var(--grid-cell) var(--grid-cell);
+}
+[data-theme="light"] .sidebar { background: linear-gradient(180deg, #faf7ff 0%, #f1e9ff 60%, #e9ddff 100%); }
+[data-theme="light"] .sb-section, [data-theme="light"] .sec-hdr, [data-theme="light"] .dh-eyebrow { color: #7c5cc4; }
+[data-theme="light"] ::selection { background: rgba(255,31,46,0.22); color: var(--text); }
+
+/* Texto que o tema escuro deixou branco */
+[data-theme="light"] :is(.sb-logo-name, .topbar-title, .acard-title, .hw-chip-val, .hw-name, .dh-title, .dh-hw-s .hw-chip-val,
+  .il-name, .mt-title, .mt-live, .mt-cmp b, .live-warn-text .title, .user-name) { color: var(--text); }
+[data-theme="light"] :is(.nav-item:hover, .nav-item.active, .link-row:hover .row-go, .dh-link:hover, .tw-chip:hover, .game-mini-btn:hover:not(:disabled)) { color: var(--text); }
+[data-theme="light"] .icard[style*="border-left"] div[style*="color:var(--purple)"] { color: var(--purple3) !important; }
+
+/* Titlebar, sidebar e topbar */
+[data-theme="light"] .titlebar { background: linear-gradient(90deg, rgba(248,244,255,0.95), rgba(237,228,255,0.95)); }
+[data-theme="light"] .wc-btn { color: var(--text2); }
+[data-theme="light"] .wc-btn:hover { background: rgba(24,18,48,0.06); color: var(--text); }
+[data-theme="light"] .wc-btn:active { background: rgba(24,18,48,0.1); }
+[data-theme="light"] .wc-close:hover { background: #e81123; color: #fff; }
+[data-theme="light"] .nav-item { color: #5d5a6b; }
+[data-theme="light"] .nav-item:hover { background: rgba(24,18,48,0.04); }
+[data-theme="light"] .nav-item.active .nav-icon svg :is(path, circle, rect, polyline, line, polygon) { stroke: var(--purple3); }
+[data-theme="light"] :is(.nav-item.active, .nav-indicator) {
+  background: linear-gradient(100deg, rgba(255,31,46,0.16) 0%, rgba(255,31,46,0.03) 100%);
+  border-color: rgba(224,16,31,0.2); box-shadow: 0 6px 18px rgba(163,15,26,0.08);
+}
+[data-theme="light"] .nav-indicator::before { background: linear-gradient(180deg, #ff1f2e, #a30f1a); box-shadow: 0 0 10px rgba(255,31,46,0.5); }
+[data-theme="light"] .sidebar:is(:hover, :focus-within):not(.sb-closing) { background: linear-gradient(180deg, rgba(250,247,255,0.98), rgba(255,238,240,0.98)); box-shadow: 24px 0 60px rgba(24,18,48,0.12), 1px 0 0 var(--border); }
+[data-theme="light"] .topbar { background: linear-gradient(90deg, rgba(246,241,255,0.82), rgba(255,238,240,0.7)); }
+[data-theme="light"] .icon-btn:hover { background: #fff; }
+[data-theme="light"] :is(.nav-badge, .user-av, .about-logo-g) { color: #fff; }
+
+/* Botões: primário escuro com texto branco (o inverso do tema escuro) */
+[data-theme="light"] :is(.qo-btn, .apply-btn, .dh-cta, .run-btn:hover, .game-opt-btn:hover, .preset-btn:hover, .preset-btn.active, .tw-chip.active, .social-discord:hover) {
+  color: #fff; box-shadow: 0 8px 24px rgba(224,16,31,0.35);
+}
+[data-theme="light"] :is(.qo-btn svg polygon[fill="white"], .apply-btn svg [fill="white"], .dh-cta svg [fill="white"]) { fill: #fff; }
+[data-theme="light"] .app button[style*="var(--purple),var(--purple2)"] { color: #fff !important; box-shadow: 0 8px 22px rgba(80,10,15,0.25) !important; }
+[data-theme="light"] .app button[style*="var(--purple),var(--purple2)"] svg [fill="white"] { fill: #fff; }
+[data-theme="light"] .app button[style*="var(--purple),var(--purple2)"] svg [stroke="white"] { stroke: #fff; }
+[data-theme="light"] :is(.qo-btn, .dh-cta) .spinner { border-color: rgba(255,255,255,0.3); border-top-color: #fff; }
+[data-theme="light"] :is(.run-btn, .game-opt-btn) { color: var(--text); }
+[data-theme="light"] .run-btn span[style*="border-top-color"] { border-color: rgba(24,18,48,0.2) !important; border-top-color: var(--text) !important; }
+[data-theme="light"] .run-btn:hover span[style*="border-top-color"] { border-color: rgba(255,255,255,0.3) !important; border-top-color: #fff !important; }
+[data-theme="light"] .ghost-btn:hover:not(:disabled) { border-color: rgba(24,18,48,0.28); background: #fff; }
+
+/* Superfícies */
+[data-theme="light"] :is(.health-card, .hw-detect-card, .acard, .icard, .hw-card, .bn-hero, .auto-card, .hw-summary, .game-card, .team-card, .input-device-card, .app-slot, .tw-list, .tw-safe, .mt-card, .dh-hw) {
+  box-shadow: 0 1px 2px rgba(143,12,21,0.05), 0 10px 28px rgba(224,16,31,0.09);
+}
+[data-theme="light"] .acard:hover { border-color: rgba(224,16,31,0.25); box-shadow: 0 14px 34px rgba(24,18,48,0.10), 0 0 0 1px rgba(255,31,46,0.10); }
+[data-theme="light"] .game-card:hover { border-color: rgba(224,16,31,0.4); box-shadow: 0 14px 34px rgba(24,18,48,0.12); }
+[data-theme="light"] :is(.ic-purple, .ic-blue, .ic-pink, .ic-green, .ic-amber, .ic-red, .hw-chip-icon, .hw-icon-wrap, .rec-ic, .toast-ic, .startup-ic, .tw-sec-ic, .il-ic) {
+  background: linear-gradient(135deg, rgba(255,31,46,0.16) 0%, rgba(255,31,46,0.04) 100%); border-color: rgba(224,16,31,0.2); box-shadow: none;
+}
+[data-theme="light"] :is(.acard-icon, .hw-chip-icon, .hw-icon-wrap, .rec-ic, .toast-ic, .startup-ic, .tw-sec-ic) svg :is([stroke]:not([stroke="none"]), [stroke] *:not([stroke])) { stroke: var(--purple3); }
+[data-theme="light"] :is(.acard-icon, .hw-chip-icon, .hw-icon-wrap, .rec-ic, .toast-ic, .startup-ic, .tw-sec-ic) svg[stroke]:not([stroke="none"]) { stroke: var(--purple3); }
+[data-theme="light"] :is(.acard-icon, .hw-chip-icon, .hw-icon-wrap, .rec-ic, .toast-ic, .startup-ic, .tw-sec-ic) svg [fill]:not([fill="none"]) { fill: var(--purple3); }
+
+[data-theme="light"] .op-cat-ic svg * { stroke: var(--purple3); }
+[data-theme="light"] .op-cat:hover { border-color: rgba(224,16,31,0.3); }
+
+/* Campos, trilhos e toggles */
+[data-theme="light"] :is(.toggle, .tw-switch, input[type=range]) { background: #dddbe6; }
+[data-theme="light"] :is(.toggle.on, .tw-switch[aria-checked="true"]) { background: linear-gradient(90deg, #b3101c 0%, #ff5560 100%); box-shadow: 0 0 10px rgba(255,31,46,0.3); }
+[data-theme="light"] select option { background: #fff; }
+[data-theme="light"] kbd { box-shadow: 0 2px 0 rgba(24,18,48,0.1) !important; }
+[data-theme="light"] :is(.bn-bar, .mem-track, .meter-bar) { background: #e6e4ee; }
+[data-theme="light"] :is(.dh-track, .mt-progress) { background: rgba(24,18,48,0.07); }
+[data-theme="light"] .bn-fill-ram, [data-theme="light"] .mf-ram { background: linear-gradient(90deg, #9d9aab, #4b4858); }
+
+/* Listas e linhas */
+[data-theme="light"] :is(.link-row:hover, .link-row:focus-visible, .tw-row:hover) { background: rgba(24,18,48,0.03); }
+[data-theme="light"] .ptable td { border-bottom-color: rgba(24,18,48,0.05); }
+[data-theme="light"] :is(.hw-chip, .mem-slot, .tw-dns-opt, .mt-stat, .fpm-slot, .gta-step, .tw-row.op-tip) { background: rgba(24,18,48,0.02); }
+[data-theme="light"] :is(.tw-search, .tw-chip) { background: #fff; }
+[data-theme="light"] .tw-toolbar { background: linear-gradient(var(--bg) 78%, rgba(244,243,248,0)); }
+[data-theme="light"] .tw-note { color: #92400e; }
+[data-theme="light"] :is(.fpm-pos button.on, .gta-seg button.on) { color: var(--purple3); }
+
+/* Hero do Painel (o card em si fica no inicio.css) */
+[data-theme="light"] :is(.dh-chip.warn, .mt-tag.warn, .mt-tip) { color: #92400e; }
+[data-theme="light"] :is(.dh-chip.ok, .mt-tag.ok, .mt-delta.subiu) { color: #047857; }
+[data-theme="light"] :is(.mt-tag.bad, .mt-delta.caiu) { color: #be123c; }
+[data-theme="light"] .mt-pad {
+  background: repeating-linear-gradient(0deg, rgba(24,18,48,0.035) 0 1px, transparent 1px 16px), repeating-linear-gradient(90deg, rgba(24,18,48,0.035) 0 1px, transparent 1px 16px), #fafaff;
+}
+
+/* Sobre, toast e avisos */
+[data-theme="light"] .social-tiktok { color: var(--text); }
+[data-theme="light"] .toast { background: rgba(255,255,255,0.95); box-shadow: 0 16px 40px rgba(24,18,48,0.16); }
+[data-theme="light"] :is(.plan-upsell-card, .plan-nudge) { background: #fff; border-color: var(--border2); box-shadow: 0 30px 80px rgba(24,18,48,0.25); }
+[data-theme="light"] :is(.plan-upsell-title) { color: var(--text); }
+[data-theme="light"] .plan-upsell { background: rgba(244,243,248,0.6); }
+
+/* Scrollbar */
+[data-theme="light"] ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, #ff9aa2 0%, #ff1f2e 100%); background-clip: padding-box; }
+
+/* Botão de tema: sol no escuro (vai para o claro), lua no claro */
+.theme-btn { cursor: pointer; -webkit-app-region: no-drag; display: inline-flex; align-items: center; justify-content: center; }
+.theme-btn .ic-moon, [data-theme="light"] .theme-btn .ic-sun { display: none; }
+[data-theme="light"] .theme-btn .ic-moon { display: block; }
+.wc-btn.theme-btn svg { width: 14px; height: 14px; }
+[data-theme="light"] .update-bar { box-shadow: 0 16px 40px rgba(24,18,48,0.16); }

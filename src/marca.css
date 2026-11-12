@@ -1,0 +1,135 @@
+/* ══════════════════════════════════════════════════════════════════
+   VL Optimizer — identidade da marca (a mesma do site gdzfps.com)
+   Carregado depois do theme.css e antes do theme-light.css: só sobrescreve.
+
+   O que faz o app ser "do L" e não um painel escuro qualquer:
+   - título em Archivo largo e pesado; texto em Geist; número e rótulo em Geist Mono;
+   - roxo é a base da marca e o volt (verde-limão) é a ação: botão principal, ligado, progresso;
+   - rótulo de seção em mono com o traço volt na frente; cantos de HUD no card principal;
+   - botão principal chanfrado, como no site.
+   As cores valem só no tema escuro; a tipografia vale nos dois.
+   ══════════════════════════════════════════════════════════════════ */
+
+@font-face { font-family: 'Archivo'; src: url('fontes/archivo.woff2') format('woff2'); font-weight: 100 900; font-stretch: 62% 125%; font-display: swap; }
+@font-face { font-family: 'Geist'; src: url('fontes/geist.woff2') format('woff2'); font-weight: 100 900; font-display: swap; }
+@font-face { font-family: 'Geist Mono'; src: url('fontes/geist-mono.woff2') format('woff2'); font-weight: 100 900; font-display: swap; }
+
+:root {
+  --font: 'Geist', 'Inter', 'Segoe UI', system-ui, sans-serif;
+  --font-display: 'Archivo', 'Geist', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'Geist Mono', 'JetBrains Mono', Consolas, monospace;
+  --volt: #ff1f2e;
+  --volt-2: #ff9aa2;
+  --volt-3: #ff5560;
+  --ink: #0a0910;
+}
+
+:root:not([data-theme="light"]) {
+  --bg: #07060c;
+  --bg2: #16121f;
+  --surface: #0e0b16;
+  --white: #0e0b16;
+  --card: #110e19;
+  --card-grad: linear-gradient(180deg, #15111f 0%, #0d0a14 100%);
+  --sidebar: #09080e;
+  --grad-ink: linear-gradient(160deg, #1d1829 0%, #0f0c17 100%);
+  --grad-cta: linear-gradient(135deg, #ffe6e8 0%, #ff1f2e 52%, #ff5560 100%);
+  --text3: #857f99;
+  --text4: #5f5a73;
+}
+
+/* ── Tipografia ── */
+:is(.topbar-title, .dh-title, .about-title, .fpm-title, .auto-title, .plan-upsell-title, .plan-nudge-title, .bn-title, .about-plan-t) {
+  font-family: var(--font-display); font-stretch: 116%; font-weight: 800; letter-spacing: -0.028em;
+}
+.topbar-title { font-size: 20px; }
+.auto-title { font-size: 15.5px; }
+:is(.dh-count b, .bn-m-val, .game-art-badge) { font-family: var(--font-display) !important; font-stretch: 125%; font-weight: 900; letter-spacing: -0.02em; }
+:is(.dh-pct, .about-ver, .act-time, .dh-count span, .dh-last, kbd, .gta-now) { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+/* Rótulo de seção: mono, espaçado, com o traço volt na frente (o "kicker" do site) */
+:is(.sec-hdr, .dh-eyebrow, .about-plan-kicker, .opx-sec-t) {
+  display: flex; align-items: center; gap: 9px;
+  font-family: var(--font-mono); font-size: 10.5px; font-weight: 500; letter-spacing: 0.17em; text-transform: uppercase;
+}
+:is(.sec-hdr, .dh-eyebrow, .about-plan-kicker, .opx-sec-t)::before { content: ''; width: 16px; height: 2px; border-radius: 2px; background: var(--volt-3); flex-shrink: 0; }
+:is(.sb-section, .hw-chip-label, .dh-sec-aside) { font-family: var(--font-mono); font-weight: 500; }
+
+/* ── Barra de título: a marca escrita como no site ── */
+.tb-brand { display: flex; align-items: center; gap: 9px; }
+.tb-logo { width: 18px; height: 18px; border-radius: 50%; flex-shrink: 0; -webkit-user-drag: none; }
+.tb-app { display: inline-flex; align-items: baseline; gap: 7px; }
+.tb-app b { font-family: var(--font-display); font-stretch: 125%; font-weight: 900; font-size: 12.5px; letter-spacing: -0.01em; }
+.tb-app i { font-family: var(--font-mono); font-style: normal; font-weight: 500; font-size: 9px; letter-spacing: 0.3em; text-transform: uppercase; opacity: .62; }
+
+/* Menu lateral aberto: a marca escrita do mesmo jeito */
+.sb-logo-name { font-family: var(--font-display); font-stretch: 125%; font-weight: 900; letter-spacing: -0.01em; }
+.sb-logo-name span { font-family: var(--font-mono); font-stretch: 100%; font-weight: 500; font-size: 9.5px; letter-spacing: 0.28em; text-transform: uppercase; margin-left: 2px; }
+
+/* ── Sobre ── */
+.about-logo-img { display: block; width: 84px; height: 84px; margin: 0 auto 16px; border-radius: 50%; filter: drop-shadow(0 12px 34px rgba(224,16,31,.6)); -webkit-user-drag: none; }
+.about-plan {
+  display: flex; flex-direction: column; gap: 16px; margin: 4px 24px 14px; padding: 20px 22px; border-radius: 16px; text-align: left; position: relative; overflow: hidden;
+  background: linear-gradient(110deg, rgba(255,31,46,0.20) 0%, rgba(255,31,46,0.05) 55%, rgba(255,31,46,0.07) 100%), var(--card-grad);
+  border: 1px solid rgba(255,85,96,0.34);
+}
+.about-plan[hidden] { display: none; }
+.about-plan-txt { flex: 1; min-width: 0; }
+.about-plan-kicker { color: var(--purple3); }
+.about-plan-t { font-size: 20px; color: var(--text); margin-top: 9px; line-height: 1.15; }
+.about-plan-s { font-size: 12.5px; color: var(--text2); line-height: 1.5; margin-top: 7px; }
+.about-plan-list { list-style: none; display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 12px; }
+.about-plan-list li { display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 600; color: var(--text); }
+.about-plan-list li::before { content: ''; width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; background: var(--volt) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230a0910' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E") center / 9px no-repeat; }
+.about-plan-cta { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.about-plan-cta .qo-btn { height: 46px; padding: 0 26px; font-size: 14px; white-space: nowrap; }
+.about-plan-note { font-family: var(--font-mono); font-size: 10.5px; color: var(--text3); white-space: nowrap; }
+
+/* ══ Cores e formas: só no tema escuro ══ */
+:root:not([data-theme="light"]) ::selection { background: rgba(255,31,46,0.30); color: #fff; }
+:root:not([data-theme="light"]) :focus-visible { outline-color: var(--volt); }
+:root:not([data-theme="light"]) :is(.sec-hdr, .dh-eyebrow, .opx-sec-t) { color: #b5a7e6; }
+:root:not([data-theme="light"]) :is(.sec-hdr, .dh-eyebrow, .about-plan-kicker, .opx-sec-t)::before { background: var(--volt); }
+:root:not([data-theme="light"]) .tb-app b { color: #fff; }
+:root:not([data-theme="light"]) .tb-app i { color: var(--purple3); opacity: 1; }
+
+/* Botão principal: volt com texto escuro, canto chanfrado */
+:root:not([data-theme="light"]) :is(.qo-btn, .apply-btn, .dh-cta) {
+  color: var(--ink); box-shadow: none; font-weight: 700;
+  clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 9px, 100% 100%, 9px 100%, 0 calc(100% - 9px));
+  border-radius: 6px; transition: filter 0.18s, transform 0.18s var(--ease-out);
+}
+:root:not([data-theme="light"]) :is(.qo-btn, .apply-btn, .dh-cta):hover:not(:disabled) { box-shadow: none; filter: brightness(1.08) saturate(1.1); }
+:root:not([data-theme="light"]) .dh-cta { clip-path: polygon(0 0, calc(100% - 13px) 0, 100% 13px, 100% 100%, 13px 100%, 0 calc(100% - 13px)); border-radius: 8px; }
+:root:not([data-theme="light"]) :is(.qo-btn, .apply-btn, .dh-cta) svg :is([fill="white"], [fill="#fff"]) { fill: var(--ink); }
+:root:not([data-theme="light"]) .app button[style*="var(--purple),var(--purple2)"] { box-shadow: 0 8px 26px rgba(255,31,46,0.2) !important; color: var(--ink) !important; }
+/* o que acende ao passar o mouse ou ao ficar ativo brilha em volt, não em lavanda */
+:root:not([data-theme="light"]) :is(.run-btn:hover, .game-opt-btn:hover, .preset-btn:hover, .preset-btn.active, .tw-chip.active, .social-discord:hover) { color: var(--ink); box-shadow: 0 6px 22px rgba(255,31,46,0.2); }
+:root:not([data-theme="light"]) .run-btn.done { color: var(--success); box-shadow: none; }
+:root:not([data-theme="light"]) .game-gta-btn { background: var(--grad-cta); color: var(--ink); border-color: transparent; }
+:root:not([data-theme="light"]) .game-gta-btn:hover { filter: brightness(1.08); }
+
+/* Menu lateral: o item ativo ganha o marcador volt */
+:root:not([data-theme="light"]) .nav-indicator { background: linear-gradient(100deg, rgba(255,31,46,0.32) 0%, rgba(255,31,46,0.06) 100%); border-color: rgba(255,85,96,0.28); }
+:root:not([data-theme="light"]) .nav-indicator::before { background: var(--volt); box-shadow: 0 0 12px rgba(255,31,46,0.75); }
+:root:not([data-theme="light"]) .nav-badge { color: var(--ink); }
+:root:not([data-theme="light"]) .user-av { background: var(--grad-violet); color: #fff; }
+
+/* Ligado = volt */
+:root:not([data-theme="light"]) :is(.toggle.on, .tw-switch[aria-checked="true"]) { background: var(--volt); border-color: transparent; box-shadow: 0 0 16px rgba(255,31,46,0.38); }
+:root:not([data-theme="light"]) :is(.toggle.on, .tw-switch[aria-checked="true"])::after { background: var(--ink); }
+:root:not([data-theme="light"]) input[type=range]::-webkit-slider-thumb { box-shadow: 0 0 0 3px rgba(255,31,46,0.25); }
+
+/* Cards: borda com um fio de roxo e destaque em volt ao passar o mouse */
+:root:not([data-theme="light"]) :is(.acard, .dh-hw, .icard, .auto-card, .game-card) { border-color: rgba(255,85,96,0.13); }
+:root:not([data-theme="light"]) .acard:hover { border-color: rgba(255,31,46,0.38); box-shadow: 0 16px 40px rgba(0,0,0,0.5); }
+:root:not([data-theme="light"]) .game-card:hover { border-color: rgba(255,31,46,0.5); }
+:root:not([data-theme="light"]) .flash-target { animation-name: flashTargetVolt; }
+@keyframes flashTargetVolt { 0%, 30% { box-shadow: 0 0 0 2px rgba(255,31,46,0.75), 0 0 30px rgba(255,31,46,0.3); } 100% { box-shadow: 0 0 0 2px rgba(255,31,46,0), 0 0 30px rgba(255,31,46,0); } }
+
+/* Ação principal das outras páginas (medidor de FPS, DLSS/FSR): o mesmo botão volt do Início */
+:root:not([data-theme="light"]) .fpm-btn:not(.ghost) {
+  background: var(--grad-cta); color: var(--ink); border-radius: 6px; transition: filter 0.18s;
+  clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 9px, 100% 100%, 9px 100%, 0 calc(100% - 9px));
+}
+:root:not([data-theme="light"]) .fpm-btn:not(.ghost):hover:not(:disabled) { filter: brightness(1.08) saturate(1.1); }
