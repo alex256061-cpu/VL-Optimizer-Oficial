@@ -16,6 +16,7 @@
                   "engine-bridge.js",
                   "updater.js",
                   "supabase.js",
+                  "hwid.js",
                   "lossless-official.js",
                   "escrever-settings.js",
                   "gdz-launch.js",

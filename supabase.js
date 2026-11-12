@@ -10,6 +10,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const hwid = require('./hwid');
 
 // ── configuração ──────────────────────────────────────────────────────────
 // Preencha depois de criar o projeto no supabase.com. Os dois valores são públicos
@@ -108,7 +109,9 @@ async function entrar(email, senha) {
     user: r.dados.user,
   };
   gravarSessao(s);
-  return { success: true, user: await perfil(s) };
+  const p = await perfil(s);
+  const v = await verificarPc(s);
+  return { success: true, user: { ...p, ...v } };
 }
 
 // ── cadastro ──────────────────────────────────────────────────────────────
@@ -130,7 +133,9 @@ async function registrar(nome, email, senha) {
       user: r.dados.user,
     };
     gravarSessao(s);
-    return { success: true, user: await perfil(s), confirmarEmail: false };
+      const p = await perfil(s);
+    const v = await verificarPc(s);
+    return { success: true, user: { ...p, ...v }, confirmarEmail: false };
   }
   return {
     success: true,
@@ -167,22 +172,73 @@ async function sessaoValida() {
   return s;
 }
 
+// ── verificação do PC (mesma regra da referência) ──────────────────────
+//
+// Depois de autenticar, o app manda o HWID. O servidor decide:
+//   - PC já vinculado            -> libera
+//   - ainda cabe na cota         -> vincula e libera
+//   - cota cheia                 -> reason 'other_device'
+//       pcBound true  -> o PC mudou (formatou/trocou); pode renovar
+//       pcBound false -> plano em outro PC
+async function verificarPc(s) {
+  const sess = s || (await sessaoValida());
+  if (!sess) return { success: false, reason: 'no_session' };
+
+  const h = hwid.ler();
+  if (!hwid.valido(h)) return { success: false, reason: 'bad_hwid' };
+
+  const r = await pedir('/rest/v1/rpc/verificar_pc', {
+    method: 'POST',
+    token: sess.access_token,
+    body: JSON.stringify({
+      p_hwid: h.id,
+      p_board: h.board || null,
+      p_device: h.deviceName || null,
+    }),
+  });
+
+  if (!r.ok) {
+    return { success: false, reason: 'erro_servidor', message: (r.dados && r.dados.message) || 'Falha ao verificar o PC.' };
+  }
+
+  const d = r.dados || {};
+  return {
+    success: !!d.success,
+    plan: d.plan || 'free',
+    features: Array.isArray(d.features) ? d.features : ['painel'],
+    lifetime: !!d.lifetime,
+    licenseExpiresAt: d.licenseExpiresAt || null,
+    reason: d.reason || null,
+    pcBound: !!d.pcBound,
+    maxDevices: d.maxDevices,
+  };
+}
+
 // ── perfil (nome + plano) ─────────────────────────────────────────────────
 async function perfil(s) {
   const sess = s || (await sessaoValida());
   if (!sess) return null;
-  const r = await pedir('/rest/v1/profiles?select=email,name,plan,premium_until&id=eq.' + sess.user.id, {
+  const r = await pedir('/rest/v1/profiles?select=email,name,plan,features,lifetime,license_expires_at&id=eq.' + sess.user.id, {
     method: 'GET',
     token: sess.access_token,
   });
   const p = Array.isArray(r.dados) && r.dados[0] ? r.dados[0] : {};
-  const premiumValido = p.plan === 'premium' && (!p.premium_until || new Date(p.premium_until) > new Date());
+
+  // Mesmo modelo da referencia: plan 'free' ou 'pro' e uma lista de features (por pagina).
+  // ['*'] libera tudo. Licenca vencida volta para gratuito.
+  const vencida = !!(p.license_expires_at && new Date(p.license_expires_at) <= new Date());
+  const planoValido = p.plan === 'pro' && !vencida;
+  const features = planoValido ? (Array.isArray(p.features) ? p.features : []) : ['painel'];
+
   return {
     id: sess.user.id,
     email: p.email || sess.user.email,
     name: p.name || (sess.user.user_metadata && sess.user.user_metadata.name) || String(sess.user.email || '').split('@')[0],
-    plan: premiumValido ? 'premium' : 'free',
-    premiumUntil: p.premium_until || null,
+    plan: planoValido ? 'pro' : 'free',
+    features,
+    lifetime: !!p.lifetime,
+    licenseExpiresAt: p.license_expires_at || null,
+    expirada: vencida,
   };
 }
 
@@ -192,7 +248,8 @@ async function sessao() {
   if (!s) return { valid: false };
   const p = await perfil(s);
   if (!p) return { valid: false };
-  return { valid: true, user: p };
+  const v = await verificarPc(s);
+  return { valid: true, user: { ...p, ...v } };
 }
 
 function sair() {
@@ -214,7 +271,7 @@ async function recuperar(email) {
 // ── usuário local (compatibilidade com o que a tela já usa) ───────────────
 async function usuario() {
   const p = await perfil();
-  return p || { username: 'visitante', email: null, plan: 'free' };
+  return p || { username: 'visitante', email: null, plan: 'free', features: ['painel'] };
 }
 
-module.exports = { configurado, entrar, registrar, sessao, sair, recuperar, perfil, usuario, CONFIG };
+module.exports = { configurado, entrar, registrar, sessao, sair, recuperar, perfil, usuario, verificarPc, CONFIG };

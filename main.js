@@ -373,13 +373,24 @@ H('recuperar-senha', (a) => conta.recuperar(a && a.email));
 H('conta-status', () => ({ configurado: conta.configurado() }));
 // Plano do usuario logado: 'premium' libera os itens trancados; 'free' mantem o cadeado.
 // Sem as chaves do Supabase, devolve premium para nao bloquear quem ja usa o app.
+// Plano do usuario logado, no mesmo formato da referencia: plan 'free'/'pro' e a lista de
+// features por pagina ('*' libera tudo). Sem as chaves do banco, devolve semLogin para o app
+// liberar todas as paginas (ninguem fica trancado fora do ar).
 H('conta-plano', async () => {
-  if (!conta.configurado()) return { plano: 'premium', ilimitado: true };
+  if (!conta.configurado()) return { semLogin: true, plan: 'pro', features: ['*'] };
   try {
     const s = await conta.sessao();
-    if (!s || !s.valid) return { plano: 'free' };
-    return { plano: s.user.plan, ate: s.user.premiumUntil, nome: s.user.name, email: s.user.email };
-  } catch (e) { return { plano: 'free', erro: e.message }; }
+    if (!s || !s.valid) return { semLogin: true, plan: 'pro', features: ['*'] };
+    return {
+      plan: s.user.plan,
+      features: s.user.features,
+      lifetime: s.user.lifetime,
+      licenseExpiresAt: s.user.licenseExpiresAt,
+      expirada: s.user.expirada,
+      nome: s.user.name,
+      email: s.user.email,
+    };
+  } catch (e) { return { semLogin: true, plan: 'pro', features: ['*'], erro: e.message }; }
 });
 H('update-status', () => {
   // Estado do auto-update (GitHub Releases). Sem rede ou sem release publicado, devolve o estado

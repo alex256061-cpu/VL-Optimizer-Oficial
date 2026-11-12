@@ -269,8 +269,9 @@
 
   // ── Estado ──
   const st = { tweaks: null, acts: {}, blocked: {}, caps: null, dns: 'auto', tools: [], loaded: false,
-    // plano do usuario logado: "premium" libera os itens trancados
-    plano: null, premiumLiberado: false,
+    // Plano do usuario logado. Mesmo modelo da referencia: user.features guarda as paginas
+    // liberadas e ['*'] libera tudo. Sem login (ou sem Supabase), tudo liberado.
+    conta: null,
     loading: null, busy: new Set(), queries: {}, lastLoad: 0 };
   const $ = (sel, root = document) => root.querySelector(sel);
   const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
@@ -293,13 +294,11 @@
     if (it.kind === 'tweak') {
       const t = tweak(it.id);
       if (!t) return null;
-      const prem = !!t.premium;
-      return { title: it.title || t.title, desc: it.desc || t.desc, note: t.note, tags: t.tags, rec: t.rec, restart: t.restart, blocked: (prem && !st.premiumLiberado) ? 'premium' : t.blocked, premium: prem, on: t.on };
+      return { title: it.title || t.title, desc: it.desc || t.desc, note: t.note, tags: t.tags, rec: t.rec, restart: t.restart, blocked: t.blocked, on: t.on };
     }
     if (it.kind === 'tool') return { ...TOOLS[it.id], ...it };
     const blocked = (it.kind === 'act' || it.kind === 'once') && Object.prototype.hasOwnProperty.call(st.blocked, it.act) ? st.blocked[it.act] : null;
-    const prem = !!it.premium;
-    return { ...it, note: val(it.note), rec: !!val(it.rec), blocked: (prem && !st.premiumLiberado) ? 'premium' : blocked, premium: prem, on: it.kind === 'act' ? st.acts[it.act] === true : false };
+    return { ...it, note: val(it.note), rec: !!val(it.rec), blocked, on: it.kind === 'act' ? st.acts[it.act] === true : false };
   }
   const isSwitch = (it) => it.kind === 'tweak' || it.kind === 'act';
   const allItems = () => PAGES.flatMap(p => p.groups.flatMap(g => g.items.map(it => ({ it, page: p }))));
@@ -310,16 +309,14 @@
     if (!silent || !st.loaded) PAGES.forEach(p => { const r = root(p); if (r && !st.loaded) r.replaceChildren(el('div', 'tw-loading', 'Lendo as configurações do Windows…')); });
     st.loading = (async () => {
       const [tw, ac, caps, plano] = await Promise.all([invoke('tweaks-status'), invoke('actions-status'), invoke('get-caps'), invoke('conta-plano').catch(() => null)]);
-      if (plano && typeof plano === 'object') {
-        st.plano = plano.plano || 'free';
-        st.premiumLiberado = plano.plano === 'premium';
-      }
+      st.conta = (plano && typeof plano === 'object') ? plano : { semLogin: true };
       if (caps && typeof caps === 'object' && !caps.error) { st.caps = caps; st.blocked = caps.blocked || {}; }
       if (tw && Array.isArray(tw.tweaks)) { st.tweaks = tw.tweaks; st.dns = tw.dns || 'auto'; st.tools = tw.tools || []; }
       if (ac && ac.success && ac.on) st.acts = ac.on;
       st.lastLoad = Date.now();
       if (!st.tweaks && !st.loaded) { renderError(); return; }
       if (!st.loaded) { st.loaded = true; renderAll(); } else repaint();
+      if (!mostrarBloqueioDePc()) { paintLocks(); ligarGuardaDeNavegacao(); }
       changed();
     })().finally(() => { st.loading = null; });
     return st.loading;
@@ -706,6 +703,109 @@
 
   function changed() { window.dispatchEvent(new Event('gdz-opt-change')); }
 
+  // ── Páginas que exigem plano (mesmo mapa da referência) ──
+  //
+  // Copiado de src/plano.js da referência: cada página listada aqui exige uma feature na conta
+  // do usuário. Páginas fora do mapa (desempenho, inputlag, memoria, limpeza, live, tweaks,
+  // scaling) são livres para todo mundo.
+  const PAGE_FEATURE = {
+    dashboard: 'painel', jogos: 'jogos', fps: 'fps', gargalo: 'gargalo', hardware: 'hardware',
+    pcinfo: 'hardware', inicializacao: 'inicializacao', sobre: 'sobre',
+  };
+
+  // Libera a página quando: a conta tem ['*'], ou tem a feature que a página pede.
+  // Sem login e sem Supabase configurado, st.conta.semLogin é true e tudo é liberado.
+  function allowed(page) {
+    const ct = st.conta;
+    if (!ct || ct.semLogin) return true;
+    const fs2 = Array.isArray(ct.features) ? ct.features : [];
+    if (fs2.includes('*')) return true;
+    const need = PAGE_FEATURE[page];
+    return !!need && fs2.includes(need);
+  }
+
+
+  // ── Bloqueio por PC (mesma regra e mesmos textos da referência) ──────────
+  //
+  // reason 'other_device' + pcBound true  -> o Windows é outro (formatou/trocou): oferece renovar
+  // reason 'other_device' + pcBound false -> o plano está em outro PC: orienta falar no suporte
+  function mostrarBloqueioDePc() {
+    document.getElementById('vl-pc-block')?.remove();
+    const ct = st.conta;
+    if (!ct || ct.semLogin || ct.reason !== 'other_device') return false;
+
+    const renovar = !!ct.pcBound;
+    const titulo = renovar ? 'PC novo: renovar' : 'Plano em outro PC';
+    const texto = renovar
+      ? 'A sua Licença do PC ficou no Windows de antes. Ela vale até formatar: se você formatou ou trocou de PC, compre de novo pelo mesmo preço (ou passe para o vitalício, que continua depois de formatar) e ela vem para este PC.'
+      : 'O seu plano pago está ligado a outro PC. Para usar aqui, fale com o suporte no Discord.';
+
+    const d = document.createElement('div');
+    d.id = 'vl-pc-block';
+    d.style.cssText = 'position:fixed;inset:0;z-index:9500;background:rgba(5,3,8,.9);display:grid;place-items:center;backdrop-filter:blur(8px);padding:24px';
+
+    const card = document.createElement('div');
+    card.style.cssText = 'max-width:430px;width:100%;background:#120b18;border:1px solid rgba(255,31,46,.28);border-radius:18px;padding:30px;text-align:center';
+
+    card.innerHTML =
+      '<div style="width:52px;height:52px;margin:0 auto 18px;border-radius:14px;background:rgba(255,31,46,.12);display:grid;place-items:center">' +
+      '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#ff3b47" stroke-width="2" stroke-linecap="round">' +
+      '<rect x="2" y="4" width="20" height="14" rx="2"/><path d="M8 21h8M12 18v3"/></svg></div>' +
+      '<div style="font-size:19px;font-weight:900;color:#f5f5f7;letter-spacing:-.02em;margin-bottom:12px">' + titulo + '</div>' +
+      '<div style="font-size:13.5px;color:#a8a4b8;line-height:1.65;margin-bottom:22px">' + texto + '</div>' +
+      '<button id="vl-pc-sair" style="width:100%;border:0;border-radius:11px;padding:13px;background:linear-gradient(135deg,#ff1f2e,#c00c1a);color:#fff;font-weight:800;font-size:14px;cursor:pointer;font-family:inherit">Sair e entrar com outra conta</button>' +
+      '<div style="font-size:11.5px;color:#5f5a73;margin-top:14px">PC atual: ' + (ct.nome || '') + (ct.maxDevices ? ' · limite de ' + ct.maxDevices + ' PC' + (ct.maxDevices > 1 ? 's' : '') : '') + '</div>';
+
+    d.appendChild(card);
+    document.body.appendChild(d);
+
+    card.querySelector('#vl-pc-sair').onclick = async () => {
+      try { await invoke('ir-para-login'); } catch (e) { location.reload(); }
+    };
+    return true;
+  }
+
+  // Aplica o cadeado no menu lateral, como a referência faz com .nav-locked
+  function paintLocks() {
+    document.querySelectorAll('.sidebar .nav-item').forEach((item) => {
+      const oc = item.getAttribute('onclick') || '';
+      const m = /go\('([^']+)'/.exec(oc);
+      const page = m ? m[1] : null;
+      const locked = !!page && !allowed(page);
+      item.classList.toggle('nav-locked', locked);
+      const tem = item.querySelector('.nav-lock');
+      if (locked && !tem) {
+        const l = el('span', 'nav-lock');
+        l.innerHTML = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
+        item.appendChild(l);
+      } else if (!locked && tem) tem.remove();
+    });
+  }
+
+  // Intercepta a navegação: página trancada mostra o aviso em vez de abrir.
+  function ligarGuardaDeNavegacao() {
+    const baseGo = window.go;
+    if (typeof baseGo !== 'function' || baseGo.__vlGuarda) return;
+    window.go = function (pg, e) {
+      if (!allowed(pg)) { mostrarUpgrade(pg); return; }
+      return baseGo(pg, e);
+    };
+    window.go.__vlGuarda = true;
+  }
+
+  function mostrarUpgrade(pg) {
+    const nome = (PAGES.find(x => x.id === pg) || {}).name || 'Esta parte';
+    const d = document.createElement('div');
+    d.id = 'vl-upgrade';
+    d.style.cssText = 'position:fixed;inset:0;z-index:9000;background:rgba(5,3,8,.82);display:grid;place-items:center;backdrop-filter:blur(6px)';
+    d.innerHTML = '<div style="max-width:380px;background:#120b18;border:1px solid rgba(255,31,46,.25);border-radius:16px;padding:28px;text-align:center;font-family:inherit">' +
+      '<div style="font-size:15px;font-weight:800;color:#f5f5f7;margin-bottom:8px">' + nome + ' faz parte do plano completo</div>' +
+      '<div style="font-size:13px;color:#a8a4b8;line-height:1.55;margin-bottom:20px">Assine no site e entre com o mesmo e-mail e senha: o acesso é liberado na hora.</div>' +
+      '<button id="vl-up-fechar" style="width:100%;border:0;border-radius:10px;padding:12px;background:linear-gradient(135deg,#ff1f2e,#c00c1a);color:#fff;font-weight:800;font-size:14px;cursor:pointer;font-family:inherit">Entendi</button></div>';
+    document.body.appendChild(d);
+    d.querySelector('#vl-up-fechar').onclick = () => d.remove();
+  }
+
   // ── API para o resto do app ──
   window.gdzOpt = {
     loaded: () => st.loaded,
@@ -714,10 +814,7 @@
     // Mantém o filtro por rec:true — é o critério original e o que dá a contagem correta. Contar
     // todos os itens inflava o número (48 em vez de 19) e não reflete o que o catálogo recomenda.
     recommended: () => PAGES.filter(p => !p.checksOnly).flatMap(p => pageItems(p)
-      // Os itens premium saem do resumo para a contagem bater com o mercado (21 -> 19).
-      // Continuam funcionando normalmente na pagina deles: isto e so o numero do painel.
-      // Quando as chaves forem adicionadas, a verificacao de licenca entra aqui.
-      .filter(x => x.d.rec && !x.d.blocked && !x.d.premium).map(x => ({ key: x.it.key, page: p.id, title: x.d.title, on: !!x.d.on }))),
+      .filter(x => x.d.rec && !x.d.blocked).map(x => ({ key: x.it.key, page: p.id, title: x.d.title, on: !!x.d.on }))),
     // Leva para o primeiro recomendado que falta (ou para Desempenho).
     goPending() {
       const x = this.recommended().find(r => !r.on);
