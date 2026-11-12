@@ -10,6 +10,19 @@ let DATA_DIR = process.env.LOPT_DATA_DIR || path.join(os.tmpdir(), 'l-optimizer-
 function setDataDir(dir) {
   DATA_DIR = dir;
   try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (e) {}
+  // Remove ps-*.ps1 orfaos: se o app encerra no meio de uma chamada, o callback que apagaria o
+  // temporario nunca roda. Só apaga arquivos com mais de 1 minuto, para nao remover um script que
+  // outra chamada acabou de criar.
+  try {
+    const agora = Date.now();
+    for (const nome of fs.readdirSync(DATA_DIR)) {
+      if (!nome.startsWith('ps-') || !nome.endsWith('.ps1')) continue;
+      try {
+        const p = path.join(DATA_DIR, nome);
+        if (agora - fs.statSync(p).mtimeMs > 60000) fs.unlinkSync(p);
+      } catch (e) {}
+    }
+  } catch (e) {}
 }
 setDataDir(DATA_DIR);
 
@@ -142,7 +155,7 @@ const TWEAKS = [
     cat: 'desempenho', title: 'Modo de Jogo ligado', rec: true, tags: ['FPS mais estável'],
     desc: 'O Windows prioriza o jogo quando você abre um: menos disputa com processos de fundo.',
     reg: [{ path: HKCU + '\\Software\\Microsoft\\GameBar', name: 'AutoGameModeEnabled', type: 'DWord', on: 1, off: 1 }],
-    probe: `Write-Output (if ((Get-Val '${HKCU}\\Software\\Microsoft\\GameBar' 'AutoGameModeEnabled') -eq 1) { '1' } else { '0' })`,
+    probe: `if ((Get-Val '${HKCU}\\Software\\Microsoft\\GameBar' 'AutoGameModeEnabled') -eq 1) { Write-Output '1' } else { Write-Output '0' }`,
   }),
   T('steam-overlay', {
     cat: 'desempenho', title: 'Sobreposição da Steam desligada', tags: ['Mais FPS'],
@@ -211,7 +224,7 @@ const TWEAKS = [
       $arr = @(0, 0, 0)
       [M]::SystemParametersInfo(0x0004, 0, $arr, 0x01) | Out-Null
       Write-Output 'ok'`,
-    probe: `Write-Output (if ((Get-Val '${HKCU}\\Control Panel\\Mouse' 'MouseSpeed') -eq '0') { '1' } else { '0' })`,
+    probe: `if ((Get-Val '${HKCU}\\Control Panel\\Mouse' 'MouseSpeed') -eq '0') { Write-Output '1' } else { Write-Output '0' }`,
   }),
   T('kbd-repeat', {
     cat: 'inputlag', title: 'Repetição do teclado rápida', tags: ['Resposta imediata'],
@@ -242,28 +255,28 @@ const TWEAKS = [
     desc: 'Corrige a live/discord caindo quando você joga: desliga o Large Send Offload da placa de rede.',
     on: `Get-NetAdapter | Disable-NetAdapterLso -ErrorAction SilentlyContinue; Write-Output 'ok'`,
     off: `Get-NetAdapter | Enable-NetAdapterLso -ErrorAction SilentlyContinue; Write-Output 'ok'`,
-    probe: `$l = @(Get-NetAdapterLso -ErrorAction SilentlyContinue | Where-Object { $_.Enabled }); Write-Output (if ($l.Count -eq 0) { '1' } else { '0' })`,
+    probe: `$l = @(Get-NetAdapterLso -ErrorAction SilentlyContinue | Where-Object { $_.Enabled }); if ($l.Count -eq 0) { Write-Output '1' } else { Write-Output '0' }`,
   }),
   T('eee', {
     cat: 'live', title: 'EEE desligado (sem queda de cabo)', tags: ['Rede'],
     desc: 'Tira o Energy-Efficient Ethernet: acabam os picos de ping e desconexões.',
     on: `Get-NetAdapter | Set-NetAdapterAdvancedProperty -DisplayName 'Energy-Efficient Ethernet' -DisplayValue 'Disabled' -ErrorAction SilentlyContinue; Write-Output 'ok'`,
     off: `Get-NetAdapter | Set-NetAdapterAdvancedProperty -DisplayName 'Energy-Efficient Ethernet' -DisplayValue 'Enabled' -ErrorAction SilentlyContinue; Write-Output 'ok'`,
-    probe: `$p = @(Get-NetAdapterAdvancedProperty -DisplayName 'Energy-Efficient Ethernet' -ErrorAction SilentlyContinue | Where-Object { $_.DisplayValue -eq 'Disabled' }); Write-Output (if ($p.Count -gt 0) { '1' } else { '0' })`,
+    probe: `$p = @(Get-NetAdapterAdvancedProperty -DisplayName 'Energy-Efficient Ethernet' -ErrorAction SilentlyContinue | Where-Object { $_.DisplayValue -eq 'Disabled' }); if ($p.Count -gt 0) { Write-Output '1' } else { Write-Output '0' }`,
   }),
   T('nic-intmod', {
     cat: 'live', title: 'Interrupt Moderation desligado', tags: ['Ping'],
     desc: 'Menos latência na placa de rede (micro-pacotes chegam na hora).',
     on: `Get-NetAdapter | Set-NetAdapterAdvancedProperty -DisplayName 'Interrupt Moderation' -RegistryValue 0 -ErrorAction SilentlyContinue; Write-Output 'ok'`,
     off: `Get-NetAdapter | Set-NetAdapterAdvancedProperty -DisplayName 'Interrupt Moderation' -RegistryValue 1 -ErrorAction SilentlyContinue; Write-Output 'ok'`,
-    probe: `$p = @(Get-NetAdapterAdvancedProperty -DisplayName 'Interrupt Moderation' -ErrorAction SilentlyContinue | Where-Object { $_.DisplayValue -eq 'Disabled' }); Write-Output (if ($p.Count -gt 0) { '1' } else { '0' })`,
+    probe: `$p = @(Get-NetAdapterAdvancedProperty -DisplayName 'Interrupt Moderation' -ErrorAction SilentlyContinue | Where-Object { $_.DisplayValue -eq 'Disabled' }); if ($p.Count -gt 0) { Write-Output '1' } else { Write-Output '0' }`,
   }),
   T('hibernate', {
     cat: 'limpeza', title: 'Hibernação desligada', tags: ['Espaço em disco'],
     desc: 'Apaga o hiberfil.sys (tamanho de boa parte da sua RAM) e a inicialização rápida.',
     on: `powercfg /h off; Write-Output 'ok'`,
     off: `powercfg /h on; Write-Output 'ok'`,
-    probe: `$h = Get-Val '${HKLM}\\SYSTEM\\CurrentControlSet\\Control\\Power' 'HibernateEnabled'; Write-Output (if ($null -eq $h -or $h -eq 0) { '1' } else { '0' })`,
+    probe: `$h = Get-Val '${HKLM}\\SYSTEM\\CurrentControlSet\\Control\\Power' 'HibernateEnabled'; if ($null -eq $h -or $h -eq 0) { Write-Output '1' } else { Write-Output '0' }`,
   }),
   // — Windows: privacidade
   T('telemetry', {
@@ -336,7 +349,7 @@ const TWEAKS = [
     reg: [],
     on: `New-Key '${HKCU}\\Software\\Classes\\CLSID\\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\\InprocServer32'; Set-ItemProperty -LiteralPath '${HKCU}\\Software\\Classes\\CLSID\\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\\InprocServer32' -Name '(default)' -Value '' -Force; Write-Output 'ok'`,
     off: `Remove-Item -Path '${HKCU}\\Software\\Classes\\CLSID\\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}' -Recurse -Force -ErrorAction SilentlyContinue; Write-Output 'ok'`,
-    probe: `Write-Output (if (Test-Path '${HKCU}\\Software\\Classes\\CLSID\\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}') { '1' } else { '0' })`,
+    probe: `if (Test-Path '${HKCU}\\Software\\Classes\\CLSID\\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}') { Write-Output '1' } else { Write-Output '0' }`,
   }),
   T('dark', {
     cat: 'tweaks', title: 'Modo escuro no Windows', tags: ['Aparência'],
@@ -403,7 +416,7 @@ const ACTIONS = {
       Set-Val '${HKCU}\\Software\\Microsoft\\GameBar' 'AutoGameModeEnabled' 1 'DWord'
       Set-Val '${HKCU}\\Software\\Microsoft\\GameBar' 'UseNexusForGameBarEnabled' 1 'DWord'
       Write-Output 'ok'`,
-    detect: `$g = (powercfg /getactivescheme | Out-String); $gm = Get-Val '${HKCU}\\Software\\Microsoft\\GameBar' 'AutoGameModeEnabled'; Write-Output (if ($g -match '381b4222-f694-41f0-9685-ff5bb260df2e' -and $gm -eq 1) { '1' } else { '0' })`,
+    detect: `$g = (powercfg /getactivescheme | Out-String); $gm = Get-Val '${HKCU}\\Software\\Microsoft\\GameBar' 'AutoGameModeEnabled'; if ($g -match '381b4222-f694-41f0-9685-ff5bb260df2e' -and $gm -eq 1) { Write-Output '1' } else { Write-Output '0' }`,
     revert: `powercfg /setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c; Write-Output 'ok'`,
   },
   'DVR Desativado': {
@@ -413,14 +426,14 @@ const ACTIONS = {
       { path: HKCU + '\\System\\GameConfigStore', name: 'GameDVR_Enabled', type: 'DWord', on: 0, off: 1 },
       { path: HKCU + '\\Software\\Microsoft\\Windows\\CurrentVersion\\GameDVR', name: 'AppCaptureEnabled', type: 'DWord', on: 0, off: 1 },
     ],
-    detect: `Write-Output (if ((Get-Val '${HKCU}\\System\\GameConfigStore' 'GameDVR_Enabled') -eq 0) { '1' } else { '0' })`,
+    detect: `if ((Get-Val '${HKCU}\\System\\GameConfigStore' 'GameDVR_Enabled') -eq 0) { Write-Output '1' } else { Write-Output '0' }`,
     revert: `Set-Val '${HKCU}\\System\\GameConfigStore' 'GameDVR_Enabled' 1 'DWord'; Set-Val '${HKCU}\\Software\\Microsoft\\Windows\\CurrentVersion\\GameDVR' 'AppCaptureEnabled' 1 'DWord'; Write-Output 'ok'`,
   },
   'Game Bar Desativado': {
     tag: 'desempenho', rec: true, title: 'Game Bar (Win+G) desligada',
     desc: 'A tela do Xbox Game Bar para de abrir por cima do jogo e de ficar carregada em segundo plano. O app continua instalado.',
     regs: [{ path: HKCU + '\\Software\\Microsoft\\GameBar', name: 'UseNexusForGameBarEnabled', type: 'DWord', on: 0, off: 1 }],
-    detect: `Write-Output (if ((Get-Val '${HKCU}\\Software\\Microsoft\\GameBar' 'UseNexusForGameBarEnabled') -eq 0) { '1' } else { '0' })`,
+    detect: `if ((Get-Val '${HKCU}\\Software\\Microsoft\\GameBar' 'UseNexusForGameBarEnabled') -eq 0) { Write-Output '1' } else { Write-Output '0' }`,
     revert: `Set-Val '${HKCU}\\Software\\Microsoft\\GameBar' 'UseNexusForGameBarEnabled' 1 'DWord'; Write-Output 'ok'`,
   },
   'Sem Reinício Durante o Jogo': {
@@ -430,7 +443,7 @@ const ACTIONS = {
       { path: HKLM + '\\SOFTWARE\\Microsoft\\WindowsUpdate\\UX\\Settings', name: 'ActiveHoursStart', type: 'DWord', on: 0, off: 0 },
       { path: HKLM + '\\SOFTWARE\\Microsoft\\WindowsUpdate\\UX\\Settings', name: 'ActiveHoursEnd', type: 'DWord', on: 23, off: 23 },
     ],
-    detect: `Write-Output (if ((Get-Val '${HKLM}\\SOFTWARE\\Microsoft\\WindowsUpdate\\UX\\Settings' 'ActiveHoursEnd') -eq 23) { '1' } else { '0' })`,
+    detect: `if ((Get-Val '${HKLM}\\SOFTWARE\\Microsoft\\WindowsUpdate\\UX\\Settings' 'ActiveHoursEnd') -eq 23) { Write-Output '1' } else { Write-Output '0' }`,
     revert: `Del-Val '${HKLM}\\SOFTWARE\\Microsoft\\WindowsUpdate\\UX\\Settings' 'ActiveHoursStart'; Del-Val '${HKLM}\\SOFTWARE\\Microsoft\\WindowsUpdate\\UX\\Settings' 'ActiveHoursEnd'; Write-Output 'ok'`,
   },
   'Desativar Notificações': {
@@ -438,21 +451,21 @@ const ACTIONS = {
     desc: 'Os avisos que sobem no canto da tela param de aparecer.',
     note: 'Vale o tempo todo: você deixa de ver os avisos também fora do jogo.',
     regs: [{ path: HKCU + '\\Software\\Microsoft\\Windows\\CurrentVersion\\PushNotifications', name: 'ToastEnabled', type: 'DWord', on: 0, off: 1 }],
-    detect: `Write-Output (if ((Get-Val '${HKCU}\\Software\\Microsoft\\Windows\\CurrentVersion\\PushNotifications' 'ToastEnabled') -eq 0) { '1' } else { '0' })`,
+    detect: `if ((Get-Val '${HKCU}\\Software\\Microsoft\\Windows\\CurrentVersion\\PushNotifications' 'ToastEnabled') -eq 0) { Write-Output '1' } else { Write-Output '0' }`,
     revert: `Set-Val '${HKCU}\\Software\\Microsoft\\Windows\\CurrentVersion\\PushNotifications' 'ToastEnabled' 1 'DWord'; Write-Output 'ok'`,
   },
   'HAGS Ativo': {
     tag: 'desempenho', rec: true, restart: 'reboot', title: 'Agendamento de GPU por hardware (HAGS)',
     desc: 'A placa de vídeo organiza a fila de quadros, tirando trabalho do processador. Obrigatório para o DLSS Frame Generation.',
     regs: [{ path: HKLM + '\\SYSTEM\\CurrentControlSet\\Control\\GraphicsDrivers', name: 'HwSchMode', type: 'DWord', on: 2, off: 1 }],
-    detect: `Write-Output (if ((Get-Val '${HKLM}\\SYSTEM\\CurrentControlSet\\Control\\GraphicsDrivers' 'HwSchMode') -eq 2) { '1' } else { '0' })`,
+    detect: `if ((Get-Val '${HKLM}\\SYSTEM\\CurrentControlSet\\Control\\GraphicsDrivers' 'HwSchMode') -eq 2) { Write-Output '1' } else { Write-Output '0' }`,
     revert: `Set-Val '${HKLM}\\SYSTEM\\CurrentControlSet\\Control\\GraphicsDrivers' 'HwSchMode' 1 'DWord'; Write-Output 'ok'`,
   },
   'Jogos em Janela Otimizados': {
     tag: 'desempenho', rec: true, title: 'Jogos em janela e sem bordas otimizados',
     desc: 'Jogos em janela ou tela cheia sem bordas passam a usar a apresentação moderna: menos atraso, G-Sync/FreeSync e Auto HDR.',
     regs: [{ path: HKCU + '\\Software\\Microsoft\\DirectX\\GraphicsSettings', name: 'SwapEffectUpgradeEnable', type: 'DWord', on: 1, off: 0 }],
-    detect: `Write-Output (if ((Get-Val '${HKCU}\\Software\\Microsoft\\DirectX\\GraphicsSettings' 'SwapEffectUpgradeEnable') -eq 1) { '1' } else { '0' })`,
+    detect: `if ((Get-Val '${HKCU}\\Software\\Microsoft\\DirectX\\GraphicsSettings' 'SwapEffectUpgradeEnable') -eq 1) { Write-Output '1' } else { Write-Output '0' }`,
     revert: `Set-Val '${HKCU}\\Software\\Microsoft\\DirectX\\GraphicsSettings' 'SwapEffectUpgradeEnable' 0 'DWord'; Write-Output 'ok'`,
   },
   'Efeitos Visuais Off': {
@@ -460,7 +473,7 @@ const ACTIONS = {
     desc: 'Tira sombras e animações de janelas e menus. Ajuda em PC com vídeo integrado ou pouca memória.',
     note: 'O Windows fica com a cara mais simples.',
     regs: [{ path: HKCU + '\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\VisualEffects', name: 'VisualFXSetting', type: 'DWord', on: 2, off: 0 }],
-    detect: `Write-Output (if ((Get-Val '${HKCU}\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\VisualEffects' 'VisualFXSetting') -eq 2) { '1' } else { '0' })`,
+    detect: `if ((Get-Val '${HKCU}\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\VisualEffects' 'VisualFXSetting') -eq 2) { Write-Output '1' } else { Write-Output '0' }`,
     revert: `Set-Val '${HKCU}\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\VisualEffects' 'VisualFXSetting' 0 'DWord'; Write-Output 'ok'`,
   },
   'SysMain Desativado': {
@@ -468,7 +481,7 @@ const ACTIONS = {
     desc: 'O Windows para de pré-carregar na memória os programas que você mais usa. Ajuda em PC com HD e 8 GB ou menos.',
     note: 'Com SSD o ganho é quase zero, e os programas podem abrir um pouco mais devagar.',
     svcs: ['SysMain'],
-    detect: `Write-Output (if ((Get-Service -Name 'SysMain' -ErrorAction SilentlyContinue).StartType -eq 'Disabled') { '1' } else { '0' })`,
+    detect: `if ((Get-Service -Name 'SysMain' -ErrorAction SilentlyContinue).StartType -eq 'Disabled') { Write-Output '1' } else { Write-Output '0' }`,
     revert: `Svc 'SysMain' 'Automatic'; Write-Output 'ok'`,
   },
   'Indexação Off': {
@@ -476,7 +489,7 @@ const ACTIONS = {
     desc: 'O Windows para de ler o disco o tempo todo para montar o índice da pesquisa. Alivia HDs lentos.',
     note: 'A pesquisa de arquivos do Windows fica bem mais lenta.',
     svcs: ['WSearch'],
-    detect: `Write-Output (if ((Get-Service -Name 'WSearch' -ErrorAction SilentlyContinue).StartType -eq 'Disabled') { '1' } else { '0' })`,
+    detect: `if ((Get-Service -Name 'WSearch' -ErrorAction SilentlyContinue).StartType -eq 'Disabled') { Write-Output '1' } else { Write-Output '0' }`,
     revert: `Svc 'WSearch' 'Automatic'; Write-Output 'ok'`,
   },
   'Serviços Desativados': {
@@ -484,7 +497,7 @@ const ACTIONS = {
     desc: 'Desliga impressão, fax, registro remoto, mapas offline e leitor de digital.',
     note: 'Não use se você tem impressora ou entra no Windows pela digital.',
     svcs: ['Spooler', 'Fax', 'RemoteRegistry', 'MapsBroker', 'WbioSrvc'],
-    detect: `$all = @('Spooler','Fax','RemoteRegistry','MapsBroker','WbioSrvc'); $d = 0; foreach ($n in $all) { $s = Get-Service -Name $n -ErrorAction SilentlyContinue; if ($s -and $s.StartType -eq 'Disabled') { $d++ } }; Write-Output (if ($d -ge 4) { '1' } else { '0' })`,
+    detect: `$all = @('Spooler','Fax','RemoteRegistry','MapsBroker','WbioSrvc'); $d = 0; foreach ($n in $all) { $s = Get-Service -Name $n -ErrorAction SilentlyContinue; if ($s -and $s.StartType -eq 'Disabled') { $d++ } }; if ($d -ge 4) { Write-Output '1' } else { Write-Output '0' }`,
     revert: `Svc 'Spooler' 'Automatic'; Svc 'Fax' 'Manual'; Svc 'RemoteRegistry' 'Disabled'; Svc 'MapsBroker' 'Automatic'; Svc 'WbioSrvc' 'Manual'; Write-Output 'ok'`,
   },
   'Serviços Xbox Desativados': {
@@ -492,7 +505,7 @@ const ACTIONS = {
     desc: 'Desliga o login e a sincronização de saves do Xbox. Controles do Xbox continuam funcionando.',
     note: 'Jogos do Game Pass, Forza e Minecraft Bedrock deixam de abrir.',
     svcs: ['XblAuthManager', 'XblGameSave', 'XboxGipSvc', 'XboxNetApiSvc'],
-    detect: `$all = @('XblAuthManager','XblGameSave','XboxGipSvc','XboxNetApiSvc'); $d = 0; foreach ($n in $all) { $s = Get-Service -Name $n -ErrorAction SilentlyContinue; if ($s -and $s.StartType -eq 'Disabled') { $d++ } }; Write-Output (if ($d -ge 3) { '1' } else { '0' })`,
+    detect: `$all = @('XblAuthManager','XblGameSave','XboxGipSvc','XboxNetApiSvc'); $d = 0; foreach ($n in $all) { $s = Get-Service -Name $n -ErrorAction SilentlyContinue; if ($s -and $s.StartType -eq 'Disabled') { $d++ } }; if ($d -ge 3) { Write-Output '1' } else { Write-Output '0' }`,
     revert: `Svc 'XblAuthManager' 'Manual'; Svc 'XblGameSave' 'Manual'; Svc 'XboxGipSvc' 'Manual'; Svc 'XboxNetApiSvc' 'Manual'; Write-Output 'ok'`,
   },
   'Game Bar Removido': {
@@ -503,7 +516,7 @@ const ACTIONS = {
       foreach ($x in $p) { Remove-AppxPackage -Package $x.PackageFullName -ErrorAction SilentlyContinue }
       Set-Val '${HKCU}\\Software\\Microsoft\\Windows\\CurrentVersion\\GameBar' 'UseNexusForGameBarEnabled' 0 'DWord'
       Write-Output 'ok'`,
-    detect: `Write-Output (if (-not (Get-AppxPackage -Name '*XboxGamingOverlay*' -ErrorAction SilentlyContinue)) { '1' } else { '0' })`,
+    detect: `if (-not (Get-AppxPackage -Name '*XboxGamingOverlay*' -ErrorAction SilentlyContinue)) { Write-Output '1' } else { Write-Output '0' }`,
     revert: `
       Set-Val '${HKCU}\\Software\\Microsoft\\Windows\\CurrentVersion\\GameBar' 'UseNexusForGameBarEnabled' 1 'DWord'
       $winget = Get-Command winget -ErrorAction SilentlyContinue
@@ -557,14 +570,14 @@ public class D2 { [StructLayout(LayoutKind.Sequential)] public struct DM { publi
       $p = Get-Val '${HKLM}\\SOFTWARE\\OBS Studio' '(default)'
       if (-not $p) { $p = 'C:\\Program Files\\obs-studio\\bin\\64bit\\obs64.exe' }
       if (Test-Path $p) { Set-Val '${HKCU}\\Software\\Microsoft\\Windows NT\\CurrentVersion\\AppCompatFlags\\Layers' $p '~ RUNASADMIN' 'String'; Write-Output 'ok' } else { Write-Output 'noobs' }`,
-    detect: `$p = Get-Val '${HKLM}\\SOFTWARE\\OBS Studio' '(default)'; if (-not $p) { $p = 'C:\\Program Files\\obs-studio\\bin\\64bit\\obs64.exe' }; $v = Get-Val '${HKCU}\\Software\\Microsoft\\Windows NT\\CurrentVersion\\AppCompatFlags\\Layers' $p; Write-Output (if ($v -match 'RUNASADMIN') { '1' } else { '0' })`,
+    detect: `$p = Get-Val '${HKLM}\\SOFTWARE\\OBS Studio' '(default)'; if (-not $p) { $p = 'C:\\Program Files\\obs-studio\\bin\\64bit\\obs64.exe' }; $v = Get-Val '${HKCU}\\Software\\Microsoft\\Windows NT\\CurrentVersion\\AppCompatFlags\\Layers' $p; if ($v -match 'RUNASADMIN') { Write-Output '1' } else { Write-Output '0' }`,
     revert: `$p = Get-Val '${HKLM}\\SOFTWARE\\OBS Studio' '(default)'; if (-not $p) { $p = 'C:\\Program Files\\obs-studio\\bin\\64bit\\obs64.exe' }; Del-Val '${HKCU}\\Software\\Microsoft\\Windows NT\\CurrentVersion\\AppCompatFlags\\Layers' $p; Write-Output 'ok'`,
   },
   'Pagefile Automático': {
     tag: 'memoria', rec: true, restart: 'reboot', title: 'Memória virtual gerenciada pelo Windows',
     desc: 'Volta o arquivo de paginação para o automático. Otimizadores que desligam ou fixam esse arquivo fazem jogos pesados, como o GTA, fecharem do nada.',
     regs: [{ path: HKLM + '\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Memory Management', name: 'PagingFiles', type: 'String', on: '', off: null }],
-    detect: `$v = Get-Val '${HKLM}\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Memory Management' 'PagingFiles'; Write-Output (if ($null -eq $v -or $v -eq '') { '1' } else { '0' })`,
+    detect: `$v = Get-Val '${HKLM}\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Memory Management' 'PagingFiles'; if ($null -eq $v -or $v -eq '') { Write-Output '1' } else { Write-Output '0' }`,
     revert: `Write-Output 'ok'`,
   },
 };
@@ -698,8 +711,8 @@ async function setDns(provider) {
 async function getCaps() {
   const script = `
     $cv = Get-ItemProperty 'HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion'
-    $cpu = (Get-CimInstance Win32_Processor | Select-Object -First 1)
-    $n = [string]$cpu.Name
+    $cpu = (Get-ItemProperty 'HKLM:\\HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0').ProcessorNameString
+    $n = [string]$cpu
     $vendor = if ($n -match 'AMD') { 'amd' } elseif ($n -match 'Intel') { 'intel' } else { 'other' }
     $x3d = ($n -match 'X3D')
     $x3dDual = ($n -match '79(0|5)0X3D' -or $n -match '99(0|5)0X3D' -or $n -match '79[05]0X3D')
@@ -730,7 +743,9 @@ async function probeTweak(t) {
 }
 
 async function tweaksStatus() {
-  const caps = await getCaps();
+    // getDns roda em paralelo com a leitura dos ajustes: nao ha dependencia entre eles.
+  const dnsPromessa = getDns().catch(() => 'auto');
+const caps = await getCaps();
   const regItems = TWEAKS.filter((t) => tweakRegs(t).length);
   const customItems = TWEAKS.filter((t) => !tweakRegs(t).length);
   const on = {};
@@ -743,29 +758,88 @@ async function tweaksStatus() {
     const r = await ps(`$out = @{}\n${parts.join('\n')}\nWrite-Output (Json $out)`, 120000);
     if (r.ok && r.out) { try { Object.assign(on, JSON.parse(r.out)); } catch (e) {} }
   }
-  await Promise.all(customItems.map(async (t) => {
-    try { on[t.id] = t.probe ? await probeTweak(t) : false; } catch (e) { on[t.id] = false; }
-  }));
+  // Todos os probe num PowerShell so. Antes era um processo por item (8 itens), e cada
+  // powershell.exe custa ~120 ms apenas para iniciar.
+  const comProbe = customItems.filter((t) => t.probe);
+  const semProbe = customItems.filter((t) => !t.probe);
+  semProbe.forEach((t) => { on[t.id] = false; });
+  if (comProbe.length) {
+    const blocos = comProbe.map((t, idx) => {
+      const seguro = String(t.probe).replace(/\r?\n/g, ' ');
+      return `$p['${idx}'] = @( ${seguro} ) -join ' '`;
+    });
+    const scriptP = `$p = @{}
+${blocos.join('\n')}
+Write-Output (Json $p)`;
+    const rp = await ps(scriptP, 120000);
+    if (rp.ok && rp.out) {
+      let vals = null;
+      try { vals = JSON.parse(rp.out); } catch (e) { vals = null; }
+      comProbe.forEach((t, idx) => {
+        const s = vals && vals[String(idx)] != null ? String(vals[String(idx)]).trim() : '';
+        on[t.id] = s.endsWith('1');
+      });
+    } else {
+      comProbe.forEach((t) => { on[t.id] = false; });
+    }
+  }
   const out = TWEAKS.map((t) => ({
     id: t.id, title: t.title, desc: t.desc, note: t.note, tags: t.tags || [], rec: !!t.rec,
     restart: t.restart, blocked: (t.cap === 'rtx' && !caps.rtx) || undefined, on: !!on[t.id],
   }));
-  const dns = await getDns();
+  const dns = await dnsPromessa;
   return { success: true, tweaks: out, dns, tools: [] };
 }
+
+// GUIDs de plano de energia que o app aplica. O detect do plano devolve o GUID ativo, nao '1'.
+const PLANO_GUID = {
+  'Plano de Alta Performance': '8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c',
+  'Modo X3D Correto': '381b4222-f694-41f0-9685-ff5bb260df2e',
+};
 
 async function actionsStatus() {
   const on = {};
   const b = loadBackups();
-  for (const name of ACTION_NAMES) {
+
+  // Monta um unico script que avalia o detect de cada acao e devolve tudo em JSON.
+  // Antes era um PowerShell por acao (18 processos em sequencia, 2.263 ms no total).
+  const itens = ACTION_NAMES.map((name) => ({ name, a: ACTIONS[name] })).filter((x) => x.a && x.a.detect);
+  const semDetect = ACTION_NAMES.filter((name) => {
     const a = ACTIONS[name];
-    let applied = !!b[name];
-    if (a.detect) {
-      const r = await ps(a.detect, 30000);
-      if (r.ok && /(^|\s)(1|active)($|\s)/i.test(r.out)) applied = true;
+    return a && !a.detect;
+  });
+
+  if (itens.length) {
+    const blocos = itens.map(({ name, a }, idx) => {
+      const seguro = String(a.detect).replace(/\r?\n/g, ' ');
+      return `$r['${idx}'] = @( ${seguro} ) -join ' '`;
+    });
+    const script = `$r = @{}
+${blocos.join('\n')}
+Write-Output (Json $r)`;
+    const r = await ps(script, 120000);
+    if (r.ok && r.out) {
+      let valores = null;
+      try { valores = JSON.parse(r.out); } catch (e) { valores = null; }
+      itens.forEach(({ name }, idx) => {
+        const saida = valores && valores[String(idx)] != null ? String(valores[String(idx)]).trim() : '';
+        let aplicado = false;
+        if (saida) {
+          if (/(^|\s)(1|active)($|\s)/i.test(saida)) aplicado = true;
+          const guid = PLANO_GUID[name];
+          if (guid && saida.toLowerCase().includes(guid.toLowerCase())) aplicado = true;
+        }
+        on[name] = aplicado;
+      });
+    } else {
+      // Se o script unico falhar, cai no backup para nao marcar tudo como desligado.
+      itens.forEach(({ name }) => { on[name] = !!b[name]; });
     }
-    on[name] = applied;
   }
+
+  // Sem detect: nao ha como perguntar ao Windows, vale o backup.
+  semDetect.forEach((name) => { on[name] = !!b[name]; });
+
   return { success: true, on };
 }
 

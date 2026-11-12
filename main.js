@@ -284,7 +284,14 @@ function ensureOverlay() {
   });
   overlayWin.setIgnoreMouseEvents(true, { forward: true });
   overlayWin.loadFile(path.join(__dirname, 'src', 'fps-overlay.html'));
-  overlayWin.once('ready-to-show', () => { overlayWin.showInactive(); });
+  // NÃO mostrar no ready-to-show.
+  //
+  // Esta linha chamava showInactive() assim que a janela carregava. O overlay é alwaysOnTop e
+  // transparente, então uma superfície de 300x150 passava a ser composta por cima de tudo desde o
+  // primeiro segundo — e cada atualização de FPS mandava a janela redesenhar. Resultado: o cursor
+  // travava ao abrir o app. A referência (GDZ) não tem nenhum showInactive: o overlay só aparece
+  // quando o usuário liga no menu. Quem mostra agora é applyOverlay(), que só é chamado com
+  // overlay.on = true.
   overlayWin.on('closed', () => { overlayWin = null; });
   return overlayWin;
 }
@@ -378,7 +385,22 @@ H('get-backups', () => ex.getBackups());
 
 H('startup-list', () => ex.startupList());
 H('startup-set', (a) => ex.startupSet(a));
-H('get-recommendations', () => ex.recommendations());
+// Cache de 30 s: cada chamada de ex.recommendations abre dois processos PowerShell (~110 ms
+// cada). A tela inicial pede varias vezes seguidas e o processo principal ficava a 30% de um
+// nucleo nos primeiros 20 s. O resultado muda pouco nesse intervalo, entao guardar evita trabalho
+// repetido sem esconder mudanca real.
+let recCache = { at: 0, valor: null };
+H('get-recommendations', async () => {
+  const agora = Date.now();
+  if (recCache.valor && agora - recCache.at < 30000) return recCache.valor;
+  try {
+    const v = await ex.recommendations();
+    recCache = { at: agora, valor: v };
+    return v;
+  } catch (e) {
+    return recCache.valor || { startupOn: null, tempBytes: null };
+  }
+});
 
 H('clean-scan', () => ex.cleanScan());
 H('clean-run', ({ ids }) => ex.cleanRun(ids || []));

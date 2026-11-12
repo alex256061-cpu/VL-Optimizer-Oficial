@@ -703,6 +703,8 @@
     loaded: () => st.loaded,
     refresh: () => load(true),
     // Recomendados que valem para este PC, na ordem das páginas (anel do Painel).
+    // Mantém o filtro por rec:true — é o critério original e o que dá a contagem correta. Contar
+    // todos os itens inflava o número (48 em vez de 19) e não reflete o que o catálogo recomenda.
     recommended: () => PAGES.filter(p => !p.checksOnly).flatMap(p => pageItems(p)
       .filter(x => x.d.rec && !x.d.blocked).map(x => ({ key: x.it.key, page: p.id, title: x.d.title, on: !!x.d.on }))),
     // Leva para o primeiro recomendado que falta (ou para Desempenho).

@@ -188,28 +188,36 @@ const CATS = [
 
 const yieldNow = () => new Promise((r) => setImmediate(r));
 async function dirSizes(dirs, ageDays, budgetMs) {
-  let bytes = 0, files = 0, n = 0;
+  let bytes = 0, files = 0;
   const started = Date.now();
   const budget = budgetMs || 5000;
   const cutoff = ageDays ? Date.now() - ageDays * 86400000 : 0;
+  const fsp = fs.promises;
+
+  // Versao assincrona: readdir/stat via fs.promises devolvem o controle ao loop de eventos entre
+  // cada operacao, entao a janela continua respondendo enquanto a varredura acontece.
   const walk = async (dir, depth) => {
     if (depth > 14) return;
+    if (Date.now() - started > budget) return;
     let ents;
-    try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch (e) { return; }
+    try { ents = await fsp.readdir(dir, { withFileTypes: true }); } catch (e) { return; }
     for (const e of ents) {
+      if (Date.now() - started > budget) return;
       if (e.isSymbolicLink()) continue;
       const p = path.join(dir, e.name);
       try {
         if (e.isDirectory()) await walk(p, depth + 1);
         else if (e.isFile()) {
-          const st = fs.statSync(p);
+          const st = await fsp.stat(p);
           if (!cutoff || st.mtimeMs < cutoff) { bytes += st.size; files++; }
         }
       } catch (e) {}
-      if (++n % 400 === 0) { await yieldNow(); if (Date.now() - started > budget) { n = -1; break; } }
     }
   };
-  for (const d of dirs) { if (n < 0) break; await walk(d, 0); }
+  for (const d of dirs) {
+    if (Date.now() - started > budget) break;
+    await walk(d, 0);
+  }
   return { bytes, files };
 }
 
@@ -910,7 +918,7 @@ ex.pcinfoGet = async (opts) => {
   if (!force && pcinfoCache.data && Date.now() - pcinfoCache.at < 120000) return pcinfoCache.data;
   const r = await core.ps(String.raw`
     $cv = Get-ItemProperty 'HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion'
-    $cpu = Get-CimInstance Win32_Processor | Select-Object -First 1
+    $cpu = Get-ItemProperty 'HKLM:\\HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0'
     $cpuKey = 'HKLM:\HARDWARE\DESCRIPTION\System\CentralProcessor\0'
     $cpuReg = Get-ItemProperty $cpuKey -ErrorAction SilentlyContinue
     $uc = $cpuReg.'Update Revision'
@@ -1037,33 +1045,53 @@ ex.pcinfoLive = async () => {
 
 ex.getHardware = async () => {
   const r = await core.ps(`
-    $cpu = Get-CimInstance Win32_Processor | Select-Object -First 1
+    $cpu = Get-ItemProperty 'HKLM:\\HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0'
     $gpu = Get-CimInstance Win32_VideoController | Select-Object -First 1
     $m = @(Get-CimInstance Win32_PhysicalMemory)
     $ram = [math]::Round(($m | Measure-Object -Property Capacity -Sum).Sum / 1GB)
     $rate = ($m | Select-Object -First 1).ConfiguredClockSpeed
     $ddr = if (($m | Select-Object -First 1).SMBIOSMemoryType -eq 34) { 'DDR5' } else { 'DDR4' }
-    $o = @{ cpu=$cpu.Name.Trim(); cpuDetail=("$($cpu.NumberOfCores) nucleos . $($cpu.NumberOfLogicalProcessors) threads"); gpu=$gpu.Name; gpuDetail=("driver $($gpu.DriverVersion)"); ram="$ram GB $ddr-$rate"; ramDetail="$($m.Count) pente(s)" }
+    $o = @{ cpu=([string]$cpu.ProcessorNameString).Trim(); cpuDetail=("$([Environment]::ProcessorCount) threads"); gpu=$gpu.Name; gpuDetail=("driver $($gpu.DriverVersion)"); ram="$ram GB $ddr-$rate"; ramDetail="$($m.Count) pente(s)" }
     Write-Output (Json $o)`, 60000);
   try { return JSON.parse(r.out); } catch (e) { return { cpu: '—', gpu: '—', ram: '—' }; }
 };
 
-ex.getStats = async () => {
-  const [r, gpus] = await Promise.all([
-    core.ps(`
-      $cpu = (Get-CimInstance Win32_PerfFormattedData_PerfOS_Processor -Filter "Name='_Total'").PercentProcessorTime
-      $ram = Get-CimInstance Win32_OperatingSystem
-      $ramPct = [math]::Round((($ram.TotalVisibleMemorySize - $ram.FreePhysicalMemory) / $ram.TotalVisibleMemorySize) * 100)
-      Write-Output (Json @{ cpu=[int]$cpu; ram=[int]$ramPct })`, 20000),
-    nvQuery(),
-  ]);
-  let cpu = 0, ram = 0, gpu = 0;
-  try { const j = JSON.parse(r.out); cpu = j.cpu || 0; ram = j.ram || 0; } catch (e) {}
-  if (gpus.length) gpu = Math.round(gpus[0].usage || 0);
-  else {
-    const g = await core.ps(`$g = @(Get-CimInstance Win32_PerfFormattedData_GPUPerformanceCounters_GPUEngine -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'engtype_3D' } | Measure-Object -Property UtilizationPercentage -Sum).Sum; if (-not $g) { $g = 0 }; Write-Output ([int][math]::Min(100, $g))`, 15000);
-    gpu = parseInt(g.out, 10) || 0;
+// Amostra anterior de os.cpus(), para calcular o uso entre duas leituras.
+let cpuAmostra = null;
+function cpuInstantaneo() {
+  const cpus = os.cpus() || [];
+  let idle = 0, total = 0;
+  for (const x of cpus) {
+    const t = x.times;
+    idle += t.idle;
+    total += t.user + t.nice + t.sys + t.irq + t.idle;
   }
+  return { idle, total };
+}
+
+ex.getStats = async () => {
+  // CPU: diferenca entre duas amostras de os.cpus(). A primeira chamada devolve 0 e guarda a base.
+  const agora = cpuInstantaneo();
+  let cpu = 0;
+  if (cpuAmostra) {
+    const di = agora.idle - cpuAmostra.idle;
+    const dt = agora.total - cpuAmostra.total;
+    if (dt > 0) cpu = Math.max(0, Math.min(100, Math.round((1 - di / dt) * 100)));
+  }
+  cpuAmostra = agora;
+
+  // RAM: direto do Node.
+  const totalRam = os.totalmem();
+  const livreRam = os.freemem();
+  const ram = totalRam > 0 ? Math.round(((totalRam - livreRam) / totalRam) * 100) : 0;
+
+  // GPU: nvidia-smi responde em ~120 ms. Sem ele, fica 0.
+  let gpu = 0;
+  try {
+    const r = await core.ps(`& 'C:\\Windows\\System32\\nvidia-smi.exe' --query-gpu=utilization.gpu --format=csv,noheader,nounits`, 8000);
+    if (r.ok && r.out) gpu = parseInt(String(r.out).trim().split('\n')[0], 10) || 0;
+  } catch (e) { }
+
   return { cpu, ram, gpu };
 };
 
@@ -1982,11 +2010,26 @@ ex.autostartSet = async (on) => {
 core.initSteam = () => ex.initSteam();
 
 // ------------------------------ EXTRAS DE UI ------------------------------
+// Varredura de temp em segundo plano: nao bloqueia a resposta do painel.
+let tempAgora = false;
+let tempUltimo = null;
+function agendarTemp() {
+  if (tempAgora) return;
+  tempAgora = true;
+  setTimeout(async () => {
+    try { tempUltimo = await ex.cleanTempSize(); } catch (e) { }
+    tempAgora = false;
+  }, 2000);
+}
+
 ex.recommendations = async () => {
   const st = await ex.startupList();
   let on = 0;
   for (const i of st.items || []) if (i.enabled) on++;
-  return { startupOn: on, tempBytes: await ex.cleanTempSize() };
+  // Nao espera a varredura de temp: devolve o ultimo valor conhecido (ou null na primeira vez) e
+  // deixa a varredura rolando. A tela ja trata tempBytes null sem quebrar.
+  agendarTemp();
+  return { startupOn: on, tempBytes: tempUltimo };
 };
 
 // GPU dedicada por jogo (HKCU\Software\Microsoft\DirectX\UserGpuPreferences)
