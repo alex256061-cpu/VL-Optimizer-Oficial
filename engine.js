@@ -151,7 +151,7 @@ const T = (id, o) => ({ id, ...o });
 
 const TWEAKS = [
   // — Desempenho
-  T('game-mode', {
+  T('game-mode', { padrao: 1,
     cat: 'desempenho', title: 'Modo de Jogo ligado', rec: true, tags: ['FPS mais estável'],
     desc: 'O Windows prioriza o jogo quando você abre um: menos disputa com processos de fundo.',
     reg: [{ path: HKCU + '\\Software\\Microsoft\\GameBar', name: 'AutoGameModeEnabled', type: 'DWord', on: 1, off: 1 }],
@@ -168,7 +168,7 @@ const TWEAKS = [
     desc: 'Apps de fábrica param de rodar escondidos e gastar CPU/RAM.',
     reg: [{ path: HKCU + '\\Software\\Microsoft\\Windows\\CurrentVersion\\BackgroundAccessApplications', name: 'GlobalUserDisabled', type: 'DWord', on: 1, off: 0 }],
   }),
-  T('edge-bg', {
+  T('edge-bg', { rec: true,
     cat: 'desempenho', title: 'Edge sem ficar em segundo plano', tags: ['PC fraco'],
     desc: 'O Edge deixa de continuar residente depois de fechar.',
     reg: [{ path: HKLM + '\\SOFTWARE\\Policies\\Microsoft\\Edge', name: 'BackgroundModeEnabled', type: 'DWord', on: 0, off: 1 }],
@@ -178,6 +178,11 @@ const TWEAKS = [
     desc: 'Mostra "DLSS" escrito no canto do jogo: serve para confirmar qual modelo de DLSS está rodando.',
     reg: [{ path: HKCU + '\\Software\\NVIDIA Corporation\\Global\\NGXCore', name: 'ShowDlssIndicator', type: 'DWord', on: 1, off: 0 }],
     note: 'O preset do DLSS 4.5 fica na NVIDIA App (Sobreposição/Substituição do DLSS).',
+  }),
+  T('dlss-rec', {
+    cat: 'desempenho', title: 'DLSS no modelo recomendado pela NVIDIA', cap: 'rtx', tags: ['Imagem', 'Mais FPS'],
+    desc: 'Os jogos com DLSS passam a usar a versao mais nova que o driver tem, com o modelo que a NVIDIA recomenda para cada modo: o DLSS 4.5 nos modos Desempenho e Ultra Desempenho e o DLSS 4 nos outros. E o botao Recomendado de Substituicao do DLSS na NVIDIA App. A imagem dos modos mais leves melhora, entao da para trocar Qualidade por Desempenho dentro do jogo e ganhar FPS.',
+    note: 'O preset fica na NVIDIA App (Sobreposicao/Substituicao do DLSS).',
   }),
   T('gpu-msi', {
     cat: 'desempenho', title: 'MSI na placa de vídeo', tags: ['Menos atraso'],
@@ -226,7 +231,7 @@ const TWEAKS = [
       Write-Output 'ok'`,
     probe: `if ((Get-Val '${HKCU}\\Control Panel\\Mouse' 'MouseSpeed') -eq '0') { Write-Output '1' } else { Write-Output '0' }`,
   }),
-  T('kbd-repeat', {
+  T('kbd-repeat', { rec: true,
     cat: 'inputlag', title: 'Repetição do teclado rápida', tags: ['Resposta imediata'],
     desc: 'Sem atraso para o caractere começar a repetir.',
     reg: [
@@ -234,10 +239,10 @@ const TWEAKS = [
       { path: HKCU + '\\Control Panel\\Keyboard', name: 'KeyboardSpeed', type: 'String', on: '31', off: '31' },
     ],
   }),
-  T('sticky', {
+  T('sticky', { padrao: "506", rec: true,
     cat: 'inputlag', title: 'Teclas de aderência desligadas', tags: ['Nada abrindo sozinho'],
     desc: 'Apertar Shift cinco vezes não abre mais aquela janela no meio da partida.',
-    reg: [{ path: HKCU + '\\Control Panel\\Accessibility\\StickyKeys', name: 'Flags', type: 'String', on: '506', off: '510' }],
+    reg: [{ path: HKCU + '\\Control Panel\\Accessibility\\StickyKeys', name: 'Flags', type: 'String', on: "0", off: "506" }],
   }),
   T('numlock', {
     cat: 'inputlag', title: 'Num Lock ligado ao iniciar', tags: ['Praticidade'],
@@ -245,7 +250,7 @@ const TWEAKS = [
     reg: [{ path: HKCU + '\\Control Panel\\Keyboard', name: 'InitialKeyboardIndicators', type: 'String', on: '2', off: '0' }],
   }),
   // — Internet
-  T('delivery', {
+  T('delivery', { padrao: 0, rec: true,
     cat: 'live', title: 'Delivery Optimization desligado', tags: ['Internet livre'],
     desc: 'O Windows para de usar sua internet para distribuir atualizações (P2P).',
     reg: [{ path: HKCU + '\\Software\\Microsoft\\Windows\\CurrentVersion\\DeliveryOptimization', name: 'SystemSettingsDownloadMode', type: 'DWord', on: 0, off: 0 }],
@@ -271,7 +276,7 @@ const TWEAKS = [
     off: `Get-NetAdapter | Set-NetAdapterAdvancedProperty -DisplayName 'Interrupt Moderation' -RegistryValue 1 -ErrorAction SilentlyContinue; Write-Output 'ok'`,
     probe: `$p = @(Get-NetAdapterAdvancedProperty -DisplayName 'Interrupt Moderation' -ErrorAction SilentlyContinue | Where-Object { $_.DisplayValue -eq 'Disabled' }); if ($p.Count -gt 0) { Write-Output '1' } else { Write-Output '0' }`,
   }),
-  T('hibernate', {
+  T('hibernate', { padrao: 1, rec: true,
     cat: 'limpeza', title: 'Hibernação desligada', tags: ['Espaço em disco'],
     desc: 'Apaga o hiberfil.sys (tamanho de boa parte da sua RAM) e a inicialização rápida.',
     on: `powercfg /h off; Write-Output 'ok'`,
@@ -295,15 +300,12 @@ const TWEAKS = [
       { path: HKCU + '\\Software\\Microsoft\\Windows\\CurrentVersion\\AdvertisingInfo', name: 'Enabled', type: 'DWord', on: 0, off: 1 },
     ],
   }),
-  T('bing', {
+  T('bing', { rec: true,
     cat: 'tweaks', title: 'Pesquisa na web desligada', tags: ['Privacidade'],
     desc: 'A busca do Windows deixa de consultar a internet/Bing.',
-    reg: [
-      { path: HKLM + '\\SOFTWARE\\Policies\\Microsoft\\Windows\\Windows Search', name: 'DisableWebSearch', type: 'DWord', on: 1, off: 0 },
-      { path: HKLM + '\\SOFTWARE\\Policies\\Microsoft\\Windows\\Windows Search', name: 'BingSearchEnabled', type: 'DWord', on: 0, off: 1 },
-    ],
+    reg: [{ path: HKLM + '\\SOFTWARE\\Policies\\Microsoft\\Windows\\Windows Search', name: 'DisableWebSearch', type: 'DWord', on: 1, off: 0 }],
   }),
-  T('activity', {
+  T('activity', { rec: true,
     cat: 'tweaks', title: 'Histórico de atividades desligado', tags: ['Privacidade'],
     desc: 'O Windows para de publicar e enviar o que você abriu.',
     reg: [
@@ -311,7 +313,7 @@ const TWEAKS = [
       { path: HKLM + '\\SOFTWARE\\Policies\\Microsoft\\Windows\\System', name: 'UploadUserActivities', type: 'DWord', on: 0, off: 1 },
     ],
   }),
-  T('widgets', {
+  T('widgets', { padrao: 0,
     cat: 'tweaks', title: 'Widgets (notícias e clima) desligados', rec: true, tags: ['Mais FPS'],
     desc: 'O painel de notícias sai da barra e deixa de carregar em segundo plano.',
     reg: [{ path: ADV, name: 'TaskbarDa', type: 'DWord', on: 0, off: 1 }],
@@ -323,12 +325,12 @@ const TWEAKS = [
     reg: [{ path: HKLM + '\\SOFTWARE\\Policies\\Microsoft\\Windows\\LocationAndSensors', name: 'DisableLocation', type: 'DWord', on: 1, off: 0 }],
   }),
   // — Windows: praticidade
-  T('end-task', {
+  T('end-task', { rec: true,
     cat: 'tweaks', title: 'Encerrar tarefa no botão direito', tags: ['Praticidade'],
     desc: 'Botão "Finalizar tarefa" direto no menu da barra de tarefas.',
     reg: [{ path: ADV, name: 'TaskbarEndTask', type: 'DWord', on: 1, off: 0 }],
   }),
-  T('file-ext', {
+  T('file-ext', { rec: true,
     cat: 'tweaks', title: 'Mostrar extensões de arquivo', tags: ['Praticidade'],
     desc: 'Vê .exe, .jpg e afins no nome, sem esconder nada.',
     reg: [{ path: ADV, name: 'HideFileExt', type: 'DWord', on: 0, off: 1 }],
@@ -363,6 +365,13 @@ const TWEAKS = [
     cat: 'tweaks', title: 'Botão Visão de Tarefas escondido', tags: ['Aparência'],
     desc: 'Tira o botão de visão de tarefas da barra.',
     reg: [{ path: ADV, name: 'ShowTaskViewButton', type: 'DWord', on: 0, off: 1 }],
+  }),
+  T('taskbar-left', {
+    cat: 'tweaks', title: 'Barra de tarefas à esquerda', tags: ['Visual'],
+    desc: 'Botão Iniciar e ícones no canto esquerdo, como no Windows 10.',
+    note: 'Só existe no Windows 11.',
+    cap: 'win11',
+    reg: [{ path: ADV, name: 'TaskbarAl', type: 'DWord', on: 0, off: 1 }],
   }),
   T('search-icon', {
     cat: 'tweaks', title: 'Busca só com ícone', tags: ['Aparência'],
@@ -443,7 +452,7 @@ const ACTIONS = {
       { path: HKLM + '\\SOFTWARE\\Microsoft\\WindowsUpdate\\UX\\Settings', name: 'ActiveHoursStart', type: 'DWord', on: 0, off: 0 },
       { path: HKLM + '\\SOFTWARE\\Microsoft\\WindowsUpdate\\UX\\Settings', name: 'ActiveHoursEnd', type: 'DWord', on: 23, off: 23 },
     ],
-    detect: `if ((Get-Val '${HKLM}\\SOFTWARE\\Microsoft\\WindowsUpdate\\UX\\Settings' 'ActiveHoursEnd') -eq 23) { Write-Output '1' } else { Write-Output '0' }`,
+    detect: `$h = Get-Val '${HKLM}\\SOFTWARE\\Microsoft\\WindowsUpdate\\UX\\Settings' 'ActiveHoursEnd'; if ($null -ne $h -and [int]$h -ge 0) { Write-Output '1' } else { Write-Output '0' }`,
     revert: `Del-Val '${HKLM}\\SOFTWARE\\Microsoft\\WindowsUpdate\\UX\\Settings' 'ActiveHoursStart'; Del-Val '${HKLM}\\SOFTWARE\\Microsoft\\WindowsUpdate\\UX\\Settings' 'ActiveHoursEnd'; Write-Output 'ok'`,
   },
   'Desativar Notificações': {
@@ -736,7 +745,14 @@ async function probeTweak(t) {
   if (t.probe) { const r = await ps(t.probe); return r.ok && r.out.trim().endsWith('1'); }
   const regs = tweakRegs(t);
   if (!regs.length) return false;
-  const parts = regs.map((r) => `$v = Get-Val '${r.path}' '${r.name.replace(/'/g, "''")}'; if ($null -ne $v -and [string]$v -eq '${String(r.on).replace(/'/g, "''")}') { $c++ }`);
+    const padraoT = (t.padrao !== undefined) ? String(t.padrao).replace(/'/g, "''") : null;
+  const parts = regs.map((r) => {
+    const alvo = String(r.on).replace(/'/g, "''");
+    if (padraoT !== null) {
+      return `$v = Get-Val '${r.path}' '${r.name.replace(/'/g, "''")}'; if ($null -eq $v) { $v = '${padraoT}' }; if ([string]$v -eq '${alvo}') { $c++ }`;
+    }
+    return `$v = Get-Val '${r.path}' '${r.name.replace(/'/g, "''")}'; if ($null -ne $v -and [string]$v -eq '${alvo}') { $c++ }`;
+  });
   const r = await ps(`$c = 0\n${parts.join('\n')}\nWrite-Output $c`);
   const n = parseInt(r.out, 10) || 0;
   return n >= regs.length;
@@ -752,8 +768,18 @@ const caps = await getCaps();
   if (regItems.length) {
     const parts = regItems.map((t) => {
       const regs = tweakRegs(t);
-      const cond = regs.map((r) => `(@(Get-Val '${esc(r.path)}' '${esc(r.name)}').Count -gt 0 -and [string](Get-Val '${esc(r.path)}' '${esc(r.name)}') -eq '${esc(String(r.on))}')`).join(' -and ');
-      return `$out['${t.id}'] = if (${cond}) { $true } else { $false }`;
+      // quando o tweak declara um valor padrao e o registro nao existe, o Windows assume esse
+      // padrao. Sem isso, AutoGameModeEnabled ausente (que significa Modo de Jogo LIGADO) contava
+      // como desligado.
+      const padraoT = (t.padrao !== undefined) ? String(t.padrao).replace(/'/g, "''") : null;
+      const cond = regs.map((r) => {
+        const alvo = String(r.on).replace(/'/g, "''");
+        if (padraoT !== null) {
+          return `$v = Get-Val '${esc(r.path)}' '${esc(r.name)}'; if ($null -eq $v) { $v = '${padraoT}' }; if ([string]$v -eq '${alvo}') { $ok++ }`;
+        }
+        return `$v = Get-Val '${esc(r.path)}' '${esc(r.name)}'; if ($null -ne $v -and [string]$v -eq '${alvo}') { $ok++ }`;
+      }).join('\n');
+      return `$ok = 0\n${cond}\n$out['${t.id}'] = ($ok -ge ${regs.length})`;
     });
     const r = await ps(`$out = @{}\n${parts.join('\n')}\nWrite-Output (Json $out)`, 120000);
     if (r.ok && r.out) { try { Object.assign(on, JSON.parse(r.out)); } catch (e) {} }
@@ -766,11 +792,11 @@ const caps = await getCaps();
   if (comProbe.length) {
     const blocos = comProbe.map((t, idx) => {
       const seguro = String(t.probe).replace(/\r?\n/g, ' ');
-      return `$p['${idx}'] = @( ${seguro} ) -join ' '`;
+      return `$__probes['${idx}'] = @( ${seguro} ) -join ' '`;
     });
-    const scriptP = `$p = @{}
+    const scriptP = `$__probes = @{}
 ${blocos.join('\n')}
-Write-Output (Json $p)`;
+Write-Output (Json $__probes)`;
     const rp = await ps(scriptP, 120000);
     if (rp.ok && rp.out) {
       let vals = null;
