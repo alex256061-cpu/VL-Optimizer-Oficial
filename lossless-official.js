@@ -64,7 +64,7 @@ function buildSettings(config) {
   const scale = Number.isFinite(factor) ? Math.min(Math.max(factor, 1), 3.5) : 1.5;
   const sharp = Number.isFinite(Number(c.sharpness)) ? Math.min(Math.max(Number(c.sharpness), 0), 100) : 0;
   const flow = Number.isFinite(Number(c.flowScale)) ? Math.min(Math.max(Number(c.flowScale), 0.5), 2.0) : 1.0;
-  const target = Number.isFinite(Number(c.targetFps)) ? Number(c.targetFps) : 100;
+  const target = Number.isFinite(Number(c.targetFps)) ? Number(c.targetFps) : 300;
   const multiplier = Number.isFinite(Number(c.multiplier)) ? Number(c.multiplier) : 2;
   const latency = Number.isFinite(Number(c.maxFrameLatency)) ? Number(c.maxFrameLatency) : 1;
   const queue = Number.isFinite(Number(c.queueTarget)) ? Number(c.queueTarget) : 1;

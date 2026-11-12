@@ -1678,11 +1678,11 @@
 
                   <span style="font-size:11px;font-weight:700;color:var(--text3)">FPS alvo</span>
 
-                  <span style="font-size:13px;font-weight:900;color:var(--purple);font-family:'JetBrains Mono',monospace" id="ls-target-val">100</span>
+                  <span style="font-size:13px;font-weight:900;color:var(--purple);font-family:'JetBrains Mono',monospace" id="ls-target-val">300</span>
 
                 </div>
 
-                <input type="range" id="ls-target-fps" min="30" max="300" step="1" value="100"
+                <input type="range" id="ls-target-fps" min="30" max="300" step="1" value="300"
 
                   oninput="document.getElementById('ls-target-val').textContent=this.value"
 
@@ -3839,7 +3839,7 @@
 
       lsfg3Multiplier: parseInt(document.getElementById('ls-multiplier')?.value || '2'),
 
-      lsfg3Target:    parseInt(document.getElementById('ls-target-fps')?.value || '100'),
+      lsfg3Target:    parseInt(document.getElementById('ls-target-fps')?.value || '300'),
 
       lsfg2Mode:      g('ls-lsfg2-mode'),
 

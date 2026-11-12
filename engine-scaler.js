@@ -132,7 +132,7 @@ function mountScaler(ex) {
       sharpness,
       frameGeneration: fg,
       multiplier: Number(c.multiplier) || Number(c.lsfg3Multiplier) || 2,
-      targetFps: Number(c.targetFps) || Number(c.lsfg3Target) || 100,
+      targetFps: Number(c.targetFps) || Number(c.lsfg3Target) || 300,
       flowScale: Number(c.flowScale) || 1.0,
       queueTarget: Number(c.queueTarget) || 1,
       maxFrameLatency: Number(c.maxFrameLatency) || 1,
