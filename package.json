@@ -13,7 +13,8 @@
   },
   "devDependencies": {
     "electron": "^33.0.0",
-    "electron-builder": "26.18.0"
+    "electron-builder": "26.18.0",
+    "wrangler": "^4.161.0"
   },
   "dependencies": {
     "electron-updater": "^6.8.11"
