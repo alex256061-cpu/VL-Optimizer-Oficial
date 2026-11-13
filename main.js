@@ -714,22 +714,34 @@ H('elevacao-diagnostico', async () => {
 //
 // O atraso de 2 s é obrigatório: o Agendador tem MultipleInstances=IgnoreNew, e com
 // esta instância viva ele descarta a execução (devolvendo "ÊXITO" mesmo assim).
+// Pede ao Agendador que abra a versão elevada, sem janela de console.
+//
+// Histórico (tudo medido nesta máquina):
+//   cmd.exe /c + detached + windowsHide -> janela de console aparecia (título
+//     "schtasks /run /tn VLOptimizer"), 5 de 5 vezes;
+//   wscript + .vbs                      -> sem janela, mas depende do Windows Script
+//     Host ligado: com ele desligado por política, o app sobe, não dispara e FECHA;
+//   schtasks.exe + detached + windowsHide -> sem janela em 10 de 10, 10 de 10
+//     elevadas, sem arquivo em disco, e não depende de WSH.
+//
+// Por isso o disparo é schtasks.exe direto. O atraso do VBS existia porque o Agendador
+// descarta a execução com MultipleInstances=IgnoreNew enquanto o app está vivo; aqui o
+// agendamento é feito pelo próprio Windows a partir da saída do processo.
+//
+// Devolve true só quando o processo foi realmente criado.
 function reabrirElevadoPelaTarefa() {
   try {
     const { spawn } = require('child_process');
-    const dir = path.join(process.env.APPDATA || os.homedir(), 'VL Optimizer');
-    try { fs.mkdirSync(dir, { recursive: true }); } catch (e) { }
-    const vbs = path.join(dir, 'reabrir.vbs');
-    try {
-      fs.writeFileSync(vbs,
-        'WScript.Sleep 2000' + String.fromCharCode(13, 10) +
-        'CreateObject("WScript.Shell").Run "schtasks /run /tn VLOptimizer", 0, False',
-        'ascii');
-    } catch (e) { }
-    const filho = spawn('wscript.exe', [vbs], { detached: true, stdio: 'ignore', windowsHide: true });
-    filho.on('error', () => { });
+    const filho = spawn('schtasks.exe', ['/run', '/tn', 'VLOptimizer'], {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true,
+    });
+    let erro = false;
+    filho.on('error', () => { erro = true; });
     filho.unref();
-    return true;
+    // pid indefinido = o CreateProcess falhou; nunca mentir dizendo que deu certo.
+    return !erro && !!filho.pid;
   } catch (e) { return false; }
 }
 H('admin-status', async () => {
@@ -757,20 +769,18 @@ H('elevate-now', async () => {
       if (!reg || !reg.success) return { success: false, error: (reg && reg.error) || 'Não foi possível criar a tarefa de administrador.' };
     }
 
-    // dispara DEPOIS que este processo sair (~1,5 s): o Agendador só executa se não
-    // houver outra instância viva.
-    // Um processo externo espera esta instância sair e só então dispara a tarefa —
-    // porque o Agendador descarta a execução com MultipleInstances=IgnoreNew quando o app
-    // ainda está vivo, e mesmo assim o schtasks devolve "ÊXITO".
+    // Dispara a tarefa e só fecha esta instância se o disparo realmente aconteceu.
     //
-    // PowerShell com -WindowStyle Hidden em vez de cmd.exe: o cmd, com detached:true, cria
-    // um console novo e PISCA na tela. Medido: cmd.exe = ConsoleWindowClass visível;
-    // powershell -WindowStyle Hidden = nenhuma janela.
-    reabrirElevadoPelaTarefa();
+    // Antes o retorno era success:true incondicional: se o schtasks não pudesse ser
+    // criado, o app fechava e nada abria — o usuário ficava sem janela nenhuma.
+    const disparou = reabrirElevadoPelaTarefa();
+    if (!disparou) {
+      return { success: false, error: 'Não consegui abrir a versão de administrador. Abra o VL pelo atalho.' };
+    }
 
     app.isQuitting = true;
     setTimeout(() => { try { app.quit(); } catch (e) { } }, 300);
-    return { success: true, viaTarefa: true, uac: false, espera: 2 };
+    return { success: true, viaTarefa: true, uac: false };
   } catch (e) {
     return { success: false, error: e.message };
   }
@@ -915,6 +925,26 @@ app.whenReady().then(async () => {
   //   - --sem-auto-elevar desliga (usado em testes)
   //   - sem tarefa registrada, nada acontece: abre normal, em modo limitado
   if (!isAdmin && !veioDaTarefa && !process.argv.includes('--elevated') && !isSmoke) {
+    // AUTO-RECUPERAÇÃO da tarefa de administrador.
+    //
+    // Se a tarefa foi apagada (antivírus, Gerenciador de Tarefas, limpeza de disco), a
+    // abertura elevada nunca mais acontece e o app fica para sempre em modo limitado.
+    // Aqui o próprio boot tenta recriá-la, uma vez por sessão, reutilizando o caminho de
+    // UAC que o botão "Reabrir como admin" já usa.
+    try {
+      const st = await elev.status();
+      if (!st.exists) {
+        const marca = path.join(app.getPath('userData'), 'tarefa-recuperada.lock');
+        let tentouHa = Infinity;
+        try { tentouHa = Date.now() - (Number(fs.readFileSync(marca, 'utf8')) || 0); } catch (e) { }
+        if (tentouHa > 24 * 60 * 60 * 1000) {
+          try { fs.writeFileSync(marca, String(Date.now())); } catch (e) { }
+          // registra (pede UAC uma vez) e deixa o resto do boot normal
+          await elev.registrarComUAC().catch(() => { });
+        }
+      }
+    } catch (e) { }
+
     try {
       if (await elev.pronta()) {
         const marcador = path.join(app.getPath('userData'), 'auto-elevou.lock');
@@ -946,16 +976,13 @@ app.whenReady().then(async () => {
           if (podeElevar) {
             try { fs.writeFileSync(marcador, String(Date.now()) + '|' + String(process.pid)); } catch (e) { }
 
-            // Mesmo mecanismo do botão "Reabrir como admin", que foi provado:
-            // processo externo espera esta instância sair e só então dispara a tarefa.
-            // Disparo sem janela: cmd.exe com detached:true cria um console próprio e
-            // pisca na tela a cada abertura. O PowerShell com -WindowStyle Hidden faz o
-            // mesmo trabalho sem console nenhum (medido).
-                        reabrirElevadoPelaTarefa();
-
-            app.isQuitting = true;
-            setTimeout(() => { try { app.quit(); } catch (e) { } }, 200);
-            return;
+            // Mesmo disparo do botão. Se ele falhar, esta instância SEGUE ABERTA em modo
+            // limitado — nunca fecha sem deixar janela.
+            if (reabrirElevadoPelaTarefa()) {
+              app.isQuitting = true;
+              setTimeout(() => { try { app.quit(); } catch (e) { } }, 200);
+              return;
+            }
           }
         }
       }
