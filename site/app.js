@@ -24,21 +24,43 @@ const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 })();
 
 (function prices() {
+  // Cada preço é atualizado isoladamente: um elemento inesperado é ignorado em vez de
+  // derrubar o script inteiro (isso já deixou o site invisível uma vez).
+  //
+  // A página tem dois formatos de preço:
+  //   <small>R$</small><b data-price="lifetime">99</b><span>,00</span>
+  //     -> o <b> guarda o inteiro e o <span> guarda os centavos
+  //   R$ <span data-price="monthly">40</span>/mês
+  //     -> o próprio elemento guarda o número inteiro, sem centavos
   document.querySelectorAll('[data-price]').forEach((b) => {
-    const plan = b.dataset.price;
-    const value = plan === 'monthly' ? CONFIG.monthlyPrice : CONFIG.lifetimePrice;
-    const [int, cents] = Number(value).toFixed(2).split('.');
-    b.textContent = int;
-    const box = b.parentElement;
-    const centsEl = box.querySelector('span');
-    if (centsEl) centsEl.textContent = ',' + cents;
-    const small = box.querySelector('small');
-    if (small) small.textContent = CONFIG.currency;
-  });
-  const mob = document.querySelector('[data-mobile-price]');
-  if (mob) mob.textContent = Number(CONFIG.lifetimePrice).toFixed(0);
-})();
+    try {
+      if (!b) return;
 
+      const plano = b.dataset.price;
+      // mapa explícito: 'free' NÃO pode cair no preço do vitalício
+      const valor = plano === 'free' ? 0
+        : plano === 'monthly' ? CONFIG.monthlyPrice
+          : CONFIG.lifetimePrice;
+
+      const [inteiro, centavos] = Number(valor).toFixed(2).split('.');
+
+      // o <b> recebe só o inteiro
+      b.textContent = inteiro;
+
+      const box = b.parentElement;
+      if (!box) return;
+
+      // o <span> de centavos é o irmão que começa com vírgula ",00"
+      const irmaos = [...box.children].filter((el) => el !== b && el.tagName === 'SPAN');
+      const centavosEl = irmaos.find((el) => /^,\d{2}$/.test((el.textContent || '').trim()));
+      if (centavosEl) centavosEl.textContent = ',' + centavos;
+
+      // o <small> é o "R$"
+      const small = box.querySelector('small');
+      if (small && !small.querySelector('[data-price]')) small.textContent = CONFIG.currency;
+    } catch (e) { }
+  });
+})();
 /* ── checkout ── */
 (function checkout() {
   document.querySelectorAll('[data-buy]').forEach((btn) => {

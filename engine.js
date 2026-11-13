@@ -137,13 +137,42 @@ async function restoreBackup(key) {
     const r2 = await ps(st.custom.revert);
     if (!r2.ok) return { success: false, error: r2.err || 'falha ao reverter' };
   }
-  delete b[key];
-  saveBackups();
-  return { success: run.ok || !!st.custom, error: run.ok ? undefined : (run.err || 'falha ao restaurar') };
+  // Conferir se o registro voltou mesmo ao valor original antes de descartar o backup.
+  // ps() devolve ok:true apenas quando o PowerShell nao deu erro, nao quando a mudanca
+  // aconteceu. Sem esta conferencia, um comando que roda sem efeito apagava o backup.
+  let confere = true;
+  if (st.reg && st.reg.length) {
+    const partes = st.reg.map((r) => {
+      const nome = String(r.name).replace(/'/g, "''");
+      const caminho = String(r.path).replace(/'/g, "''");
+      return "$v = $null; $e = $false; try { $v = (Get-ItemProperty -LiteralPath '" + caminho + "' -Name '" + nome + "' -ErrorAction Stop).'" + nome + "'; $e = $true } catch {}; $o += @{ name='" + nome + "'; exists=$e; value=$v }";
+    });
+    const script = "$o = @()" + String.fromCharCode(10) + partes.join(String.fromCharCode(10)) + String.fromCharCode(10) + "Write-Output (Json $o)";
+    const rl = await ps(script, 30000);
+    if (rl.ok) {
+      try {
+        const atual = JSON.parse(rl.out);
+        for (const original of st.reg) {
+          const agora = (atual || []).find((x) => x.name === original.name);
+          if (!agora) continue;
+          if (!!original.exists !== !!agora.exists) { confere = false; break; }
+          if (original.exists && String(agora.value) !== String(original.value)) { confere = false; break; }
+        }
+      } catch (e) { }
+    }
+  }
+
+  const deuCerto = confere && (run.ok || !!st.custom);
+  if (deuCerto) {
+    delete b[key];
+    saveBackups();
+  }
+  return { success: deuCerto, error: deuCerto ? undefined : 'o Windows nao voltou ao valor original; o backup foi mantido' };
 }
 
 // ── Catálogo ──
 // Cada item: { id, cat, title, desc, note, tags, rec, restart, reg[], svc[], on, off }
+let ehAdminCache = null;
 const HKCU = 'HKCU:';
 const HKLM = 'HKLM:';
 const ADV = HKCU + '\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced';
@@ -264,19 +293,69 @@ const TWEAKS = [
   }),
   T('eee', {
     cat: 'live', title: 'EEE desligado (sem queda de cabo)', tags: ['Rede'],
-    desc: 'Tira o Energy-Efficient Ethernet: acabam os picos de ping e desconexões.',
-    on: `Get-NetAdapter | Set-NetAdapterAdvancedProperty -DisplayName 'Energy-Efficient Ethernet' -DisplayValue 'Disabled' -ErrorAction SilentlyContinue; Write-Output 'ok'`,
-    off: `Get-NetAdapter | Set-NetAdapterAdvancedProperty -DisplayName 'Energy-Efficient Ethernet' -DisplayValue 'Enabled' -ErrorAction SilentlyContinue; Write-Output 'ok'`,
-    probe: `$p = @(Get-NetAdapterAdvancedProperty -DisplayName 'Energy-Efficient Ethernet' -ErrorAction SilentlyContinue | Where-Object { $_.DisplayValue -eq 'Disabled' }); if ($p.Count -gt 0) { Write-Output '1' } else { Write-Output '0' }`,
+    desc: 'Tira a economia de energia da placa de rede: acabam os picos de ping e as desconexoes.',
+    // Usa -RegistryKeyword e nao -DisplayName: o nome muda com o idioma do Windows
+    // ('Energy-Efficient Ethernet' em ingles, 'Energia Eficiente Ethernet' em portugues).
+    on: `$n = 0
+foreach ($x in @('*EEE','AdvancedEEE','EnableGreenEthernet','PowerSavingMode')) {
+  foreach ($prop in @(Get-NetAdapterAdvancedProperty -RegistryKeyword $x -ErrorAction SilentlyContinue)) {
+    $alvo = @($prop.ValidDisplayValues) | Where-Object { $_ -match '^(Disabled|Desactivado|Desativado|Off|No)$' } | Select-Object -First 1
+    try {
+      if ($alvo) { Set-NetAdapterAdvancedProperty -Name $prop.Name -RegistryKeyword $x -DisplayValue $alvo -ErrorAction Stop }
+      else { Set-NetAdapterAdvancedProperty -Name $prop.Name -RegistryKeyword $x -RegistryValue 0 -ErrorAction Stop }
+      $n++
+    } catch { }
+  }
+}
+Write-Output ("mudou=$n")`,
+    off: `$n = 0
+foreach ($x in @('*EEE','AdvancedEEE','EnableGreenEthernet','PowerSavingMode')) {
+  foreach ($prop in @(Get-NetAdapterAdvancedProperty -RegistryKeyword $x -ErrorAction SilentlyContinue)) {
+    $alvo = @($prop.ValidDisplayValues) | Where-Object { $_ -match '^(Enabled|Activado|Ativado|On|Yes) } | Select-Object -First 1
+    try {
+      if ($alvo) { Set-NetAdapterAdvancedProperty -Name $prop.Name -RegistryKeyword $x -DisplayValue $alvo -ErrorAction Stop }
+      else { Set-NetAdapterAdvancedProperty -Name $prop.Name -RegistryKeyword $x -RegistryValue 1 -ErrorAction Stop }
+      $n++
+    } catch { }
+  }
+}
+Write-Output ("mudou=$n") } | Select-Object -First 1
+    try {
+      if ($alvo) { Set-NetAdapterAdvancedProperty -Name $prop.Name -RegistryKeyword $x -DisplayValue $alvo -ErrorAction Stop }
+      else { Set-NetAdapterAdvancedProperty -Name $prop.Name -RegistryKeyword $x -RegistryValue 0 -ErrorAction Stop }
+      $n++
+    } catch { }
+  }
+}
+Write-Output ("mudou=$n")`,
+    // Confere TODAS as propriedades que o comando desliga. Antes olhava so o *EEE e
+    // dizia "aplicado" mesmo com o EnableGreenEthernet ligado.
+    probe: `$tem = 0; $tudoOff = $true
+foreach ($x in @('*EEE','AdvancedEEE','EnableGreenEthernet','PowerSavingMode')) {
+  foreach ($p in @(Get-NetAdapterAdvancedProperty -RegistryKeyword $x -ErrorAction SilentlyContinue)) {
+    $tem++
+    if ($p.DisplayValue -notmatch '^(Disabled|Desactivado|Desativado|Off|No)$') { $tudoOff = $false }
+  }
+}
+if ($tem -eq 0 -or $tudoOff) { Write-Output '1' } else { Write-Output '0' }`,
   }),
   T('nic-intmod', {
     cat: 'live', title: 'Interrupt Moderation desligado', tags: ['Ping'],
-    desc: 'Menos latência na placa de rede (micro-pacotes chegam na hora).',
-    on: `Get-NetAdapter | Set-NetAdapterAdvancedProperty -DisplayName 'Interrupt Moderation' -RegistryValue 0 -ErrorAction SilentlyContinue; Write-Output 'ok'`,
-    off: `Get-NetAdapter | Set-NetAdapterAdvancedProperty -DisplayName 'Interrupt Moderation' -RegistryValue 1 -ErrorAction SilentlyContinue; Write-Output 'ok'`,
-    probe: `$p = @(Get-NetAdapterAdvancedProperty -DisplayName 'Interrupt Moderation' -ErrorAction SilentlyContinue | Where-Object { $_.DisplayValue -eq 'Disabled' }); if ($p.Count -gt 0) { Write-Output '1' } else { Write-Output '0' }`,
-  }),
-  T('hibernate', { padrao: 1, rec: true,
+    desc: 'Menos latencia na placa de rede (os micro-pacotes chegam na hora).',
+    on: `$n = 0
+foreach ($prop in @(Get-NetAdapterAdvancedProperty -RegistryKeyword '*InterruptModeration' -ErrorAction SilentlyContinue)) {
+  try { Set-NetAdapterAdvancedProperty -Name $prop.Name -RegistryKeyword '*InterruptModeration' -RegistryValue 0 -ErrorAction Stop; $n++ } catch { }
+}
+Write-Output ("mudou=$n")`,
+    off: `$n = 0
+foreach ($prop in @(Get-NetAdapterAdvancedProperty -RegistryKeyword '*InterruptModeration' -ErrorAction SilentlyContinue)) {
+  try { Set-NetAdapterAdvancedProperty -Name $prop.Name -RegistryKeyword '*InterruptModeration' -RegistryValue 1 -ErrorAction Stop; $n++ } catch { }
+}
+Write-Output ("mudou=$n")`,
+    probe: `$p = @(Get-NetAdapterAdvancedProperty -RegistryKeyword '*InterruptModeration' -ErrorAction SilentlyContinue)
+if ($p.Count -eq 0) { Write-Output '1' }
+else { $off = @($p | Where-Object { [int]$_.RegistryValue -eq 0 }); if ($off.Count -eq $p.Count) { Write-Output '1' } else { Write-Output '0' } }`,
+  }),  T('hibernate', { padrao: 1, rec: true,
     cat: 'limpeza', title: 'Hibernação desligada', tags: ['Espaço em disco'],
     desc: 'Apaga o hiberfil.sys (tamanho de boa parte da sua RAM) e a inicialização rápida.',
     on: `powercfg /h off; Write-Output 'ok'`,
@@ -869,6 +948,26 @@ Write-Output (Json $r)`;
   return { success: true, on };
 }
 
+async function ehAdmin() {
+  if (ehAdminCache !== null) return ehAdminCache;
+  try {
+    const r = await ps("$id = [Security.Principal.WindowsIdentity]::GetCurrent(); $p = New-Object Security.Principal.WindowsPrincipal($id); Write-Output ($p.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator))", 15000);
+    ehAdminCache = String(r.out || "").trim().toLowerCase() === "true";
+  } catch (e) { ehAdminCache = false; }
+  return ehAdminCache;
+}
+
+// Mensagem especifica quando o Windows barra por falta de permissao.
+async function erroDePermissao(err) {
+  const e = String(err || "");
+  if (/acesso negado|access denied|denied/i.test(e)) {
+    const adm = await ehAdmin();
+    if (!adm) return "Precisa abrir o VL Optimizer como administrador para este ajuste. Feche e abra com o botao direito > Executar como administrador.";
+    return "O Windows bloqueou esta mudanca mesmo como administrador. Pode ser politica da empresa ou antivirus.";
+  }
+  return e || "o Windows nao aceitou a mudanca.";
+}
+
 async function applyTweak(id, want) {
   const t = tweakById(id);
   if (!t) return { success: false, error: 'ajuste desconhecido' };
@@ -892,7 +991,8 @@ async function applyTweak(id, want) {
       if (!r.ok) return { success: false, error: r.err || 'falha' };
     }
     const now = await probeTweak(t);
-    return { success: now, on: now, error: now ? undefined : 'o Windows não aceitou a mudança.' };
+    if (now) return { success: true, on: true };
+    return { success: false, on: now, error: await erroDePermissao(t && t._ultimoErro) };
   }
   // desligar = restaurar o backup exato
   const st = loadBackups()[key];
@@ -906,7 +1006,8 @@ async function applyTweak(id, want) {
     await ps(lines.join('\n'), 60000);
   }
   const now = await probeTweak(t);
-  return { success: !now, on: now, error: now ? 'não foi possível desfazer.' : undefined };
+  if (!now) return { success: true, on: false };
+  return { success: false, on: now, error: 'nao foi possivel desfazer. ' + await erroDePermissao() };
 }
 
 async function runAction(name) {

@@ -8,7 +8,7 @@ const core = require('./engine');
 
 const ex = {};
 
-const APP_DATA = () => process.env.LOPT_DATA_DIR || path.join(os.tmpdir(), 'l-optimizer-data');
+const APP_DATA = () => process.env.LOPT_DATA_DIR || path.join(process.env.LOCALAPPDATA || os.homedir(), 'VLOptimizer', 'data');
 const fileIn = (name) => path.join(APP_DATA(), name);
 function readJson(file, fallback) { try { return JSON.parse(fs.readFileSync(fileIn(file), 'utf8')); } catch (e) { return fallback; } }
 function writeJson(file, v) { try { fs.mkdirSync(APP_DATA(), { recursive: true }); fs.writeFileSync(fileIn(file), JSON.stringify(v, null, 1), 'utf8'); } catch (e) {} }
@@ -817,6 +817,30 @@ function parseFivemValues(xml) {
   return v;
 }
 
+// Verifica se algum dos processos está aberto (por nome, sem o .exe).
+// Usado pelo FiveM antes de mexer no arquivo de configuração: com o jogo aberto,
+// a alteração seria sobrescrita quando ele fechasse.
+async function processRunning(nomes) {
+  const lista = (Array.isArray(nomes) ? nomes : [nomes])
+    .filter(Boolean)
+    .map((x) => String(x).replace(/[^A-Za-z0-9._-]/g, ""));
+  if (!lista.length) return false;
+
+  // montar o filtro do PowerShell: $_.ProcessName -ieq "FiveM" -or ...
+  const partes = lista.map((x) => "$_.ProcessName -ieq " + String.fromCharCode(34) + x + String.fromCharCode(34));
+  const filtro = partes.join(" -or ");
+
+  try {
+    const script =
+      "$r = @(Get-Process -ErrorAction SilentlyContinue | Where-Object { " + filtro + " });" +
+      " if ($r.Count -gt 0) { Write-Output " + String.fromCharCode(39) + "1" + String.fromCharCode(39) + " } else { Write-Output " + String.fromCharCode(39) + "0" + String.fromCharCode(39) + " }";
+    const r = await core.ps(script, 15000);
+    return String(r.out || "").trim() === "1";
+  } catch (e) {
+    return false;
+  }
+}
+
 ex.fivemGfxStatus = async () => {
   const file = fivemSettingsFile();
   const running = processRunning(['FiveM', 'FiveM_b2372_GTAProcess', 'GTA5']);
@@ -1252,6 +1276,52 @@ async function sysSample() {
 
   return lastSys;
 }
+// FPS por aplicativo, para a lista do medidor mostrar o número ao lado de cada jogo.
+//
+// startListCapture() e listCap nunca existiram: fpsStatus() explodia com ReferenceError
+// logo no começo e a tela do medidor ficava sem nenhum dado. Aqui está a peça que faltava.
+//
+// O medidor principal continua sendo o PresentMon (startPM/fps.frames), preso ao jogo alvo.
+// Esta captura é leve: reaproveita as amostras do alvo e guarda por nome de processo.
+const listCap = {
+  apps: new Map(),      // nome normalizado do processo -> { frames: [{t, ft}], fps }
+  started: false,
+  denied: false,
+  lastPoll: 0,
+  timer: null,
+};
+
+// Liga a captura. Idempotente: chamar várias vezes não empilha timers.
+function startListCapture() {
+  if (listCap.started) return;
+  listCap.started = true;
+  listCap.timer = setInterval(() => {
+    try {
+      // Copia as amostras recentes do alvo atual para o registro por aplicativo.
+      // fps.frames já é alimentado pelo PresentMon; só replicamos.
+      const alvo = (fps.targetName || "jogo").replace(/\.exe$/i, "").toLowerCase();
+      if (!fps.frames.length) return;
+      let rec = listCap.apps.get(alvo);
+      if (!rec) { rec = { frames: [] }; listCap.apps.set(alvo, rec); }
+      rec.frames = fps.frames.slice(-600);
+      // FPS médio dos últimos segundos
+      const agora = Date.now();
+      const recentes = rec.frames.filter((f) => agora - f.t <= 3000);
+      if (recentes.length > 2) {
+        const soma = recentes.reduce((s, f) => s + f.ft, 0);
+        rec.fps = soma > 0 ? Math.round(recentes.length / (soma / 1000)) : 0;
+      } else {
+        rec.fps = 0;
+      }
+      // solta apps sem quadro há mais de 15 s
+      for (const [nome, r] of listCap.apps) {
+        if (r.frames.length && agora - r.frames[r.frames.length - 1].t > 15000) listCap.apps.delete(nome);
+      }
+    } catch (e) { }
+  }, 1000);
+  if (listCap.timer.unref) listCap.timer.unref();
+}
+
 let sysAmostra = null;
 ex.fpsStatus = async () => {
   if (!fps.proc && !fps.targetPid) {
@@ -1948,7 +2018,39 @@ ex.lsStop = async () => {
 ex.lsStatus = async () => ({ running: await ex.lsRunning(), engine: scalingCfg().engine || null, needsFirstRun: !ex.lsRead().exists });
 
 // ────────────────────────────── MISC ──────────────────────────────
-ex.getUser = () => ({ username: os.userInfo().username, email: os.userInfo().username + '@local', plan: 'pro', lifetime: true, features: ['*'] });
+// Perfil da conta logada, no formato que o plano.js espera:
+//   { plan: 'pro'|'free', features: ['*'] | [...], lifetime, licenseExpiresAt, email, username }
+//
+// Antes devolvia 'pro' fixo: todo mundo tinha tudo liberado e o plano pago não valia nada.
+// Agora lê do Supabase. Sem login (ou sem as chaves configuradas), devolve grátis.
+//
+// O app desktop já sabe o plano pelo canal conta-plano; esta função existe porque o
+// plano.js do src/ chama window.gdzOpt.getUser() direto.
+ex.getUser = async () => {
+  try {
+    const conta = require('./supabase');
+    const p = await conta.perfil();
+    if (p) {
+      return {
+        username: p.name || os.userInfo().username,
+        email: p.email || (os.userInfo().username + '@local'),
+        plan: p.plan === 'pro' ? 'pro' : 'free',
+        lifetime: !!p.lifetime,
+        licenseExpiresAt: p.validade || null,
+        features: Array.isArray(p.features) && p.features.length ? p.features : (p.plan === 'pro' ? ['*'] : ['painel']),
+      };
+    }
+  } catch (e) { }
+  // sem conta: grátis, só o painel
+  return {
+    username: os.userInfo().username,
+    email: os.userInfo().username + '@local',
+    plan: 'free',
+    lifetime: false,
+    licenseExpiresAt: null,
+    features: ['painel'],
+  };
+};
 ex.getBackups = () => Object.keys(core.loadBackups());
 ex.restoreAll = async () => {
   const b = core.loadBackups();
@@ -1961,7 +2063,37 @@ ex.restoreAll = async () => {
   return { success: true, count: n, message: `Configurações restauradas (${n} otimiza${n === 1 ? 'ção' : 'ões'}).` };
 };
 ex.updateStatus = () => ({ available: false, version: require('electron').app.getVersion(), current: require('electron').app.getVersion() });
-ex.offers = () => ({ offers: [] });
+// Planos vendidos, no formato que o plano.js espera.
+//
+// Antes devolvia lista vazia fixa: o modal de planos nunca mostrava preço e caía sempre no
+// botão genérico. Agora traz os planos reais e, se a rede falhar, usa o fallback local com
+// os mesmos preços do site — assim o cliente sempre vê uma oferta com valor.
+ex.offers = async () => {
+  const fallback = {
+    offers: [
+      { id: 'mensal', nome: 'Mensal', priceCents: 4000, dias: 30, destaque: false },
+      { id: 'vitalicio', nome: 'Vitalicio', priceCents: 9900, dias: null, destaque: true },
+    ],
+  };
+
+  try {
+    const r = await fetch('https://vl-optimizer.pages.dev/api/planos', { headers: { Accept: 'application/json' } });
+    if (r.ok) {
+      const j = await r.json();
+      if (j && Array.isArray(j.planos) && j.planos.length) {
+        return { offers: j.planos.map((p) => ({
+          id: p.id,
+          nome: p.nome,
+          priceCents: p.valorCents || Math.round(Number(p.valor || 0) * 100),
+          dias: p.dias,
+          destaque: !!p.destaque,
+        })) };
+      }
+    }
+  } catch (e) { }
+
+  return fallback;
+};
 ex.telemetryConsent = () => ({ consented: true });
 // Resgate de chave: a validação fica no banco (chave inexistente, já usada ou cancelada).
 // O supabase.js é carregado sob demanda para não travar o motor quando não há login.

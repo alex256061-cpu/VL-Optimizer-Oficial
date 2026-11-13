@@ -97,7 +97,10 @@ export async function onRequestPost({ request, env }) {
     const dados = await r.json();
 
     if (!r.ok) {
-      return responder(env, { erro: 'Não foi possível gerar o PIX.', detalhe: dados }, 502);
+      // O detalhe do Mercado Pago pode trazer dados internos: fica no log da Function,
+      // não na resposta para o navegador do cliente.
+      console.error('MP pix falhou:', JSON.stringify(dados).slice(0, 500));
+      return responder(env, { erro: 'Não foi possível gerar o PIX. Tente de novo ou fale no Discord.' }, 502);
     }
 
     const tx = (dados.point_of_interaction && dados.point_of_interaction.transaction_data) || {};

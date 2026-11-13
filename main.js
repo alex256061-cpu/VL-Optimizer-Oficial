@@ -1,5 +1,5 @@
 // main.js — VL Optimizer (Electron)
-const { app, BrowserWindow, ipcMain, shell, screen, nativeTheme, globalShortcut } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, screen, nativeTheme, globalShortcut, Notification } = require('electron');
 
 // Rastreio de janelas (temporario): registra toda janela criada e toda pagina carregada.
 try {
@@ -410,16 +410,21 @@ H('logout', () => { const r = conta.sair(); esquecerSessao(); return r; });
 H('ir-para-login', () => { conta.sair(); esquecerSessao(); if (win && !win.isDestroyed()) win.loadFile(path.join(__dirname, 'src', 'login.html')); return { success: true }; });
 H('recuperar-senha', (a) => conta.recuperar(a && a.email));
 H('conta-status', () => ({ configurado: conta.configurado() }));
-// Plano do usuario logado: 'premium' libera os itens trancados; 'free' mantem o cadeado.
-// Sem as chaves do Supabase, devolve premium para nao bloquear quem ja usa o app.
-// Plano do usuario logado, no mesmo formato da referencia: plan 'free'/'pro' e a lista de
-// features por pagina ('*' libera tudo). Sem as chaves do banco, devolve semLogin para o app
-// liberar todas as paginas (ninguem fica trancado fora do ar).
+// Plano do usuario logado: plan 'free'/'pro' e a lista de features por pagina
+// ('*' libera tudo).
+//
+// REGRA: sem sessao valida NAO e premium. Antes, banco sem chaves, usuario deslogado e
+// falha de rede devolviam plan 'pro' com ['*'] — ou seja, quem se deslogava ganhava o
+// plano completo. Agora esses tres casos caem em gratis e a tela de login abre.
+const PLANO_GRATIS = { plan: 'free', features: ['painel'], lifetime: false, licenseExpiresAt: null, expirada: false };
+
 H('conta-plano', async () => {
-  if (!conta.configurado()) return { semLogin: true, plan: 'pro', features: ['*'] };
+  if (!conta.configurado()) return { ...PLANO_GRATIS, semLogin: true, semBanco: true };
   try {
     const s = await conta.sessao();
-    if (!s || !s.valid) return { semLogin: true, plan: 'pro', features: ['*'] };
+    if (!s || !s.valid) return { ...PLANO_GRATIS, semLogin: true };
+    // plano expirado tambem volta para gratis, mantendo o motivo para a tela explicar
+    if (s.user.expirada) return { ...PLANO_GRATIS, semLogin: false, expirada: true, email: s.user.email, nome: s.user.name };
     return {
       plan: s.user.plan,
       features: s.user.features,
@@ -429,7 +434,11 @@ H('conta-plano', async () => {
       nome: s.user.name,
       email: s.user.email,
     };
-  } catch (e) { return { semLogin: true, plan: 'pro', features: ['*'], erro: e.message }; }
+  } catch (e) {
+    // erro de rede: nao da para confirmar o plano, entao trata como gratis.
+    // A tela mostra o aviso em vez de liberar tudo.
+    return { ...PLANO_GRATIS, semLogin: true, erro: e.message };
+  }
 });
 H('update-status', () => {
   // Estado do auto-update (GitHub Releases). Sem rede ou sem release publicado, devolve o estado
@@ -544,7 +553,21 @@ H('fps-base-mark', () => ex.fpsBaseMark());
 H('fps-base-clear', () => ex.fpsBaseClear());
 H('measure-bottleneck', (a) => ex.measureBottleneck(a));
 H('bn-find-game', () => ex.bnFindGame());
-H('bn-notify', () => ({ success: true }));
+H('bn-notify', (a) => {
+  // Avisa pelo sistema quando o gargalo for detectado. Antes era um stub que dizia
+  // "success" e nao mostrava nada.
+  try {
+    if (!Notification.isSupported()) return { success: false, error: 'Este Windows nao permite notificacao.' };
+    const texto = (a && a.texto) || 'O gargalo do seu PC foi medido. Abra o VL para ver.';
+    const titulo = (a && a.titulo) || 'VL Optimizer';
+    const notif = new Notification({ title: titulo, body: String(texto).slice(0, 200), silent: false });
+    notif.on('click', () => { if (win && !win.isDestroyed()) { win.show(); win.focus(); } });
+    notif.show();
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
 
 H('ram-clean', () => feat.ramClean());
 H('ram-status', () => ({ success: true, ...feat.ramState() }));

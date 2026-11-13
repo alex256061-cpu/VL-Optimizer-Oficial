@@ -1,0 +1,61 @@
+/*
+   Correção de responsividade do hero.
+   
+   O site só ficava bom em telas grandes: abaixo de 1040px o hero virava uma coluna e o
+   título (que usa clamp grande) dominava a tela. Em janelas de 820–1040px, muito comuns,
+   o resultado era texto gigante sem hierarquia.
+
+   Aqui:
+     - 1280px+ : duas colunas, como já era
+     - 1040px+ : duas colunas com título menor
+     -  760px+ : duas colunas mais justas, título controlado
+     -  560px+ : uma coluna com título moderado
+     -  360px+ : uma coluna compacta
+*/
+
+/* tela grande: título não exagera */
+@media (min-width: 1440px) {
+  .hero-copy h1 { font-size: clamp(56px, 4.6vw, 76px); }
+}
+
+/* notebook: duas colunas com respiro menor */
+@media (max-width: 1280px) {
+  .hero {
+    grid-template-columns: 1.05fr .95fr;
+    gap: 32px;
+    padding-top: clamp(100px, 13vh, 140px);
+  }
+  .hero-copy h1 { font-size: clamp(44px, 4.2vw, 62px); }
+  .hero-art { transform: scale(.92); }
+}
+
+/* entre notebook e tablet: mantém duas colunas, título menor */
+@media (min-width: 1041px) and (max-width: 1180px) {
+  .hero { gap: 24px; }
+  .hero-copy h1 { font-size: clamp(40px, 3.9vw, 52px); letter-spacing: -.03em; }
+  .hero-copy .lead { font-size: 15px; }
+}
+
+/* tablet deitado: uma coluna, mas com título controlado */
+@media (max-width: 1040px) {
+  .hero-copy h1 { font-size: clamp(38px, 6vw, 54px); }
+}
+
+/* tablet em pé */
+@media (max-width: 820px) {
+  .hero-copy h1 { font-size: clamp(32px, 8vw, 46px); }
+  .hero-copy .lead { font-size: 15px; }
+  .hero-actions .btn { width: 100%; }
+}
+
+/* celular */
+@media (max-width: 560px) {
+  .hero-copy h1 { font-size: clamp(28px, 9.5vw, 38px); }
+  .hero-copy .lead { font-size: 14px; }
+  .hero { padding-top: 96px; }
+}
+
+/* celular pequeno */
+@media (max-width: 400px) {
+  .hero-copy h1 { font-size: 27px; }
+}

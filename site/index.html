@@ -9,19 +9,20 @@
 <meta property="og:type" content="website">
 <meta property="og:title" content="VL Optimizer — otimização de PC para quem joga">
 <meta property="og:description" content="Ajustes reversíveis, limpeza de verdade, FPS ao vivo e VL Scaling. Um painel só, sem mensalidade.">
-<meta property="og:image" content="assets/shots/dashboard.png">
+<meta property="og:image" content="assets/shots/painel.png">
 <link rel="icon" href="assets/icon.png">
 <link rel="canonical" href="https://vl-optimizer.pages.dev/">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="VL Optimizer — otimização de PC para quem joga">
 <meta name="twitter:description" content="Ajustes reversíveis, limpeza real, FPS ao vivo e VL Scaling. Um painel só, sem mensalidade obrigatória.">
-<meta name="twitter:image" content="assets/shots/dashboard.png">
+<meta name="twitter:image" content="assets/shots/painel.png">
 <meta property="og:url" content="https://vl-optimizer.pages.dev/">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800;900&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css">
-<link rel="stylesheet" href="recursos.css">
+<link rel="stylesheet" href="styles.css?v=2026111302">
+<link rel="stylesheet" href="recursos.css?v=2026111302">
+<link rel="stylesheet" href="responsivo.css?v=2026111302">
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -29,7 +30,7 @@
   "name": "VL Optimizer",
   "description": "Otimizador de PC para jogadores: ajustes reversíveis, limpeza, medidor de FPS, VL Scaling e OptiScaler.",
   "brand": { "@type": "Brand", "name": "VL" },
-  "image": "assets/shots/dashboard.png",
+  "image": "assets/shots/painel.png",
   "offers": [
     {
       "@type": "Offer",
@@ -254,15 +255,15 @@
     <div class="showcase-grid reveal">
       <div class="shot-frame">
         <div class="shot-bar"><i></i><i></i><i></i><span id="shotTitle">Painel</span></div>
-        <img id="shotImg" src="assets/shots/dashboard.png" alt="Tela do VL Optimizer" width="1400" height="880" decoding="async">
+        <img id="shotImg" src="assets/shots/painel.png" alt="Tela do VL Optimizer" width="1400" height="880" decoding="async">
       </div>
       <div class="shot-tabs" role="tablist" aria-label="Telas do app">
-        <button class="shot-tab active" data-img="assets/shots/dashboard.png" data-title="Painel" role="tab" aria-selected="true"><b>Painel</b><span>recomendações e atalhos</span></button>
-        <button class="shot-tab" data-img="assets/shots/scaling.png" data-title="VL Scaling" role="tab" aria-selected="false"><b>VL Scaling</b><span>frame generation e nitidez</span></button>
-        <button class="shot-tab" data-img="assets/shots/jogos.png" data-title="Meus jogos" role="tab" aria-selected="false"><b>Meus jogos</b><span>capas, tamanho e cache</span></button>
-        <button class="shot-tab" data-img="assets/shots/fps.png" data-title="Medidor de FPS" role="tab" aria-selected="false"><b>FPS</b><span>ao vivo, 1% low e overlay</span></button>
-        <button class="shot-tab" data-img="assets/shots/limpeza.png" data-title="Limpeza" role="tab" aria-selected="false"><b>Limpeza</b><span>tamanho real por categoria</span></button>
-        <button class="shot-tab" data-img="assets/shots/pcinfo-simple.png" data-title="PC Info" role="tab" aria-selected="false"><b>PC Info</b><span>peças e sensores</span></button>
+        <button class="shot-tab active" data-img="assets/shots/painel.png" data-title="Painel" role="tab" aria-selected="true"><b>Painel</b><span>recomendações e atalhos</span></button>
+        <button class="shot-tab" data-img="assets/shots/desempenho.png" data-title="Desempenho" role="tab" aria-selected="false"><b>Desempenho</b><span>plano de energia e modo de jogo</span></button>
+        <button class="shot-tab" data-img="assets/shots/windows.png" data-title="Windows" role="tab" aria-selected="false"><b>Windows</b><span>privacidade e praticidade</span></button>
+        <button class="shot-tab" data-img="assets/shots/limpeza.png" data-title="Limpeza" role="tab" aria-selected="false"><b>Limpeza</b><span>tamanho real de cada pasta</span></button>
+        <button class="shot-tab" data-img="assets/shots/hardware.png" data-title="Hardware" role="tab" aria-selected="false"><b>Hardware</b><span>o que a sua máquina tem</span></button>
+        <button class="shot-tab" data-img="assets/shots/gargalo.png" data-title="Gargalo" role="tab" aria-selected="false"><b>Gargalo</b><span>o que segura o seu FPS</span></button>
       </div>
     </div>
   </section>
@@ -310,7 +311,7 @@
           <li>VL Scaling e otimização por jogo</li>
           <li>Modo Live e Input Lag</li>
         </ul>
-        <a class="btn btn-ghost btn-block" data-buy="monthly" href="#">Assinar mensal</a>
+        <a class="btn btn-ghost btn-block" data-buy="monthly" href="#precos">Assinar mensal</a>
       </article>
 
       <article class="plan plan-featured">
@@ -325,7 +326,7 @@
           <li>7 dias de garantia</li>
           <li>Suporte no Discord</li>
         </ul>
-        <a class="btn btn-primary btn-block" data-buy="lifetime" href="#">Comprar vitalício</a>
+        <a class="btn btn-primary btn-block" data-buy="lifetime" href="#precos">Comprar vitalício</a>
         <p class="pay">Pix · cartão · liberado na hora</p>
       </article>
 
@@ -426,7 +427,7 @@
         <h2>Ficou na dúvida? Chama no Discord.</h2>
         <p>Suporte direto com quem fez o VL: dúvida de ajuste, print de erro, sugestão de recurso ou ajuda para configurar o scaling. A comunidade também ajuda.</p>
         <div class="support-actions">
-          <a class="btn btn-primary" id="discordBtn" href="#" data-discord>Entrar no Discord</a>
+          <a class="btn btn-primary" id="discordBtn" href="#suporte" data-discord>Entrar no Discord</a>
           <a class="btn btn-ghost" href="#faq">Ver dúvidas frequentes</a>
         </div>
         <p class="support-small">Pedidos de reembolso e problemas de compra: use o mesmo Discord ou o e-mail da sua nota fiscal.</p>
@@ -494,7 +495,7 @@
 
 <div class="mobile-buy"><b>R$ <span data-price="lifetime">99</span><small>vitalício · ou R$ <span data-price="monthly">40</span>/mês</small></b><a class="btn btn-primary" href="#precos">Comprar</a></div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
-<script src="app.js"></script>
-<script src="checkout.js"></script>
+<script src="app.js?v=2026111302"></script>
+<script src="checkout.js?v=2026111302"></script>
 </body>
 </html>
