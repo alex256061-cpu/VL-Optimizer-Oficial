@@ -97,11 +97,36 @@ export async function onRequestGet({ request, env }) {
       return responder({ status, liberado: false, erro: 'Falha ao liberar: ' + t.slice(0, 120) });
     }
 
+    // 3.1 gravar a venda para o painel (falha aqui não impede a liberação)
+    let valorVenda = 0;
+    let planoVenda = 'mensal';
+    try {
+      valorVenda = Number(pag.transaction_amount || 0);
+      planoVenda = pag.metadata && pag.metadata.plano ? String(pag.metadata.plano) : (dias ? 'mensal' : 'vitalicio');
+      await fetch(base + '/rest/v1/rpc/registrar_venda', {
+        method: 'POST',
+        headers: {
+          apikey: env.SUPABASE_SERVICE,
+          Authorization: 'Bearer ' + env.SUPABASE_SERVICE,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          p_pagamento: String(idPagamento),
+          p_email: emailLimpo,
+          p_plano: planoVenda,
+          p_valor: valorVenda,
+          p_dias: dias === null || dias === undefined ? null : Number(dias),
+          p_metodo: pag.payment_method_id || 'pix',
+        }),
+      });
+    } catch (e) { }
+
     return responder({
       status,
       liberado: true,
       email: emailLimpo,
       dias: dias === null || dias === undefined ? 'vitalício' : Number(dias) + ' dias',
+      venda: valorVenda,
     });
   } catch (e) {
     return responder({ status, liberado: false, erro: 'Falha de conexão com o banco.' }, 502);

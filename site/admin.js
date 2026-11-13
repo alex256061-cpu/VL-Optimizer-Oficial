@@ -7,7 +7,7 @@
  */
 (function () {
   const $ = (id) => document.getElementById(id);
-  let dados = { resumo: null, usuarios: [], pcs: [] };
+  let dados = { resumo: null, usuarios: [], pcs: [], vendas: null, licencas: [], chaves: null, hardware: null };
 
   // ── utilidades ──
   function data(iso) {
@@ -48,6 +48,13 @@
       a.classList.add('on');
       const tab = $('tab-' + a.dataset.tab);
       if (tab) tab.classList.add('on');
+
+      // carrega a aba sob demanda (evita consultar tudo ao abrir)
+      const qual = a.dataset.tab;
+      if (qual === 'vendas' && !dados.vendas) carregarVendas($('vend-periodo')?.value || 30).catch((e) => console.warn(e));
+      if (qual === 'licencas' && !dados.licencas.length) carregarLicencas($('lic-filtro')?.value).catch((e) => console.warn(e));
+      if (qual === 'chaves' && !dados.chaves) carregarChaves().catch((e) => console.warn(e));
+      if (qual === 'graficos' && !dados.hardware) carregarHardware().catch((e) => console.warn(e));
     };
   });
 
@@ -71,6 +78,138 @@
 
     pintarUsuarios();
     pintarPcs();
+  }
+
+
+  // ── VENDAS ──
+  async function carregarVendas(periodo) {
+    const dias = Number(periodo || 30);
+    const v = await rpc('admin_vendas', { p_dias: dias });
+    dados.vendas = v || {};
+
+    const n = (x) => (x == null ? '—' : x);
+    $('v-total').textContent = 'R$ ' + Number(v.total || 0).toFixed(2).replace('.', ',');
+    $('v-qtd').textContent = n(v.quantidade);
+    $('v-ticket').textContent = 'R$ ' + Number(v.ticket || 0).toFixed(2).replace('.', ',');
+    $('v-vital').textContent = n(v.vitalicios);
+
+    // gráfico de barras por dia
+    const g = $('grafico-vendas');
+    const pordia = v.por_dia || [];
+    if (!pordia.length) {
+      g.innerHTML = '<div class="adm-vazio">Sem vendas no período.</div>';
+    } else {
+      const max = Math.max(...pordia.map((d) => Number(d.total) || 0), 1);
+      g.innerHTML = pordia.map((d) => {
+        const h = Math.max(4, Math.round((Number(d.total) / max) * 100));
+        const dt = String(d.dia).slice(8, 10) + '/' + String(d.dia).slice(5, 7);
+        return '<div class="adm-barra" title="R$ ' + Number(d.total).toFixed(2) + '">' +
+          '<div class="adm-barra-valor">' + d.qtd + '</div>' +
+          '<div class="adm-barra-preenchida" style="height:' + h + '%"></div>' +
+          '<div class="adm-barra-dia">' + dt + '</div></div>';
+      }).join('');
+    }
+
+    // tabela
+    const tb = $('tb-vendas');
+    const ult = v.ultimas || [];
+    if (!ult.length) {
+      tb.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:26px;opacity:.6">Nenhuma venda registrada ainda.</td></tr>';
+    } else {
+      tb.innerHTML = ult.map((x) => '<tr>' +
+        '<td class="num">' + data(x.criado_em) + '</td>' +
+        '<td class="email">' + esc(x.email) + '</td>' +
+        '<td>' + esc(x.plano || '—') + '</td>' +
+        '<td class="num">R$ ' + Number(x.valor || 0).toFixed(2).replace('.', ',') + '</td>' +
+        '<td>' + esc(x.metodo || '—') + '</td></tr>').join('');
+    }
+  }
+
+  // ── LICENÇAS ──
+  async function carregarLicencas(filtro) {
+    const l = await rpc('admin_licencas', { p_filtro: filtro || null });
+    dados.licencas = Array.isArray(l) ? l : [];
+
+    const tb = $('tb-licencas');
+    if (!dados.licencas.length) {
+      tb.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:26px;opacity:.6">Nenhuma licença encontrada.</td></tr>';
+      return;
+    }
+    tb.innerHTML = dados.licencas.map((x) => {
+      const sit = { ativa: 'ativa', vencida: 'vencido', vencida_7d: 'vencido', vitalicio: 'vitalicio', sem_prazo: 'vitalicio' }[x.situacao] || 'gratis';
+      const rot = { ativa: 'Ativa', vencida: 'Vencida', vencida_7d: 'Vencida', vitalicio: 'Vitalícia', sem_prazo: 'Sem prazo' }[x.situacao] || x.situacao;
+      const dias = x.lifetime || x.vence_em === null ? '∞' : (x.dias_restantes == null ? '—' : x.dias_restantes + 'd');
+      return '<tr>' +
+        '<td class="email">' + esc(x.email) + '</td>' +
+        '<td>' + esc(x.name || '—') + '</td>' +
+        '<td><span class="tag ' + sit + '">' + rot + '</span></td>' +
+        '<td class="num">' + (x.lifetime ? '—' : data(x.vence_em)) + '</td>' +
+        '<td class="num">' + dias + '</td></tr>';
+    }).join('');
+  }
+
+  // ── CHAVES ──
+  async function carregarChaves() {
+    const c = await rpc('admin_chaves', {});
+    dados.chaves = c || {};
+
+    $('ck-total').textContent = c.total ?? '—';
+    $('ck-livres').textContent = c.livres ?? '—';
+    $('ck-usadas').textContent = c.usadas ?? '—';
+    $('ck-cancel').textContent = c.canceladas ?? '—';
+
+    const tb = $('tb-chaves');
+    const lista = c.lista || [];
+    if (!lista.length) {
+      tb.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:26px;opacity:.6">Nenhuma chave gerada ainda.</td></tr>';
+      return;
+    }
+    tb.innerHTML = lista.map((k) => {
+      const sit = k.cancelada ? 'cancelada' : (k.usado_em ? 'usada' : 'livre');
+      const rot = { cancelada: 'Cancelada', usada: 'Usada', livre: 'Disponível' }[sit];
+      const cls = { cancelada: 'vencido', usada: 'gratis', livre: 'ativo' }[sit];
+      return '<tr>' +
+        '<td class="num" style="color:var(--text);font-weight:700">' + esc(k.codigo) + '</td>' +
+        '<td>' + esc(k.plano) + (k.dias ? ' · ' + k.dias + 'd' : ' · vitalício') + '</td>' +
+        '<td><span class="tag ' + cls + '">' + rot + '</span></td>' +
+        '<td>' + esc(k.usado_por_email || '—') + '</td>' +
+        '<td class="num">' + (k.usado_em ? data(k.usado_em) : '—') + '</td>' +
+        '<td>' + (!k.cancelada && !k.usado_em ? '<button class="adm-acao perigo" data-cancelar="' + esc(k.codigo) + '">Cancelar</button>' : '—') + '</td></tr>';
+    }).join('');
+
+    tb.querySelectorAll('[data-cancelar]').forEach((b) => {
+      b.onclick = async () => {
+        if (!confirm('Cancelar a chave ' + b.dataset.cancelar + '?')) return;
+        try { await rpc('admin_cancelar_chave', { p_codigo: b.dataset.cancelar }); carregarChaves(); }
+        catch (e) { alert('Não foi possível: ' + e.message); }
+      };
+    });
+  }
+
+  // ── HARDWARE ──
+  async function carregarHardware() {
+    const hw = await rpc('admin_hardware', {});
+    dados.hardware = hw || {};
+
+    const pintar = (id, lista) => {
+      const el = $(id);
+      const arr = Array.isArray(lista) ? lista : [];
+      if (!arr.length) { el.innerHTML = '<div class="adm-vazio">Nenhum dado ainda. O aplicativo envia quando o cliente entra.</div>'; return; }
+      const max = Math.max(...arr.map((x) => Number(x.qtd) || 0), 1);
+      el.innerHTML = arr.map((x) => {
+        const pct = Math.round((Number(x.qtd) / max) * 100);
+        const nome = x.nome || x.faixa || '?';
+        return '<div class="adm-barra-linha">' +
+          '<div class="adm-barra-nome" title="' + esc(nome) + '">' + esc(nome) + '</div>' +
+          '<div class="adm-barra-trilha"><div class="adm-barra-fill" style="width:' + pct + '%"></div></div>' +
+          '<div class="adm-barra-qtd">' + x.qtd + '</div></div>';
+      }).join('');
+    };
+
+    pintar('graf-gpu', hw.gpus);
+    pintar('graf-cpu', hw.cpus);
+    pintar('graf-ram', hw.ramos);
+    pintar('graf-sis', hw.sistemas);
   }
 
   function pintarUsuarios() {
@@ -161,6 +300,39 @@
   }
 
   $('busca')?.addEventListener('input', pintarUsuarios);
+  $('vend-periodo')?.addEventListener('change', () => carregarVendas($('vend-periodo').value).catch(() => { }));
+  $('lic-filtro')?.addEventListener('change', () => carregarLicencas($('lic-filtro').value).catch(() => { }));
+
+  // gerar chaves
+  $('ch-plano')?.addEventListener('change', () => {
+    const vitalicio = $('ch-plano').value === 'vitalicio';
+    $('ch-dias').disabled = vitalicio;
+    $('ch-dias').value = vitalicio ? '' : '30';
+  });
+
+  $('ch-criar')?.addEventListener('click', async () => {
+    const aviso = $('ch-aviso');
+    const b = $('ch-criar');
+    const qtd = Number($('ch-qtd').value || 1);
+    const plano = $('ch-plano').value;
+    const dias = Number($('ch-dias').value || 30);
+
+    b.disabled = true; b.textContent = 'Gerando...';
+    try {
+      const r = await rpc('admin_criar_chaves', { qtd, p_plano: plano, p_dias: dias });
+      if (r && r.erro) throw new Error(r.erro);
+      const codigos = (r.chaves || []).map((c) => c.codigo);
+      aviso.className = 'adm-aviso ok';
+      aviso.textContent = codigos.length + ' chave(s) criada(s).';
+      $('ch-novas').innerHTML = '<div style="font-family:monospace;font-size:13px;color:var(--text);line-height:1.9;background:rgba(255,255,255,.04);padding:14px;border-radius:9px">' +
+        codigos.map((c) => esc(c)).join('<br>') + '</div>';
+      carregarChaves();
+    } catch (e) {
+      aviso.className = 'adm-aviso erro';
+      aviso.textContent = 'Não foi possível: ' + e.message;
+    }
+    b.disabled = false; b.textContent = 'Gerar';
+  });
   $('filtro-plano')?.addEventListener('change', pintarUsuarios);
 
   // form de liberar

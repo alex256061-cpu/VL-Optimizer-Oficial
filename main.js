@@ -73,7 +73,7 @@ function createWindow() {
   (async () => {
     let logado = false;
     if (conta.configurado()) {
-      try { const s = await conta.sessao(); logado = !!(s && s.valid); } catch (e) { }
+      try { const s = await conta.sessao(); logado = !!(s && s.valid); if (logado) setTimeout(() => conta.enviarHardware().catch(() => {}), 3000); } catch (e) { }
     } else {
       logado = true;
     }
@@ -404,7 +404,7 @@ const H = (name, fn) => ipcMain.handle(name, async (e, arg) => {
 
 H('get-user', () => conta.usuario());
 H('check-session', () => conta.sessao());
-H('login', async (a) => { const r = await conta.entrar(a && a.email, a && a.password); esquecerSessao(); return r; });
+H('login', async (a) => { const r = await conta.entrar(a && a.email, a && a.password); esquecerSessao(); if (r && r.success) setTimeout(() => conta.enviarHardware().catch(() => {}), 2500); return r; });
 H('register', (a) => conta.registrar(a && a.name, a && a.email, a && a.password));
 H('logout', () => { const r = conta.sair(); esquecerSessao(); return r; });
 H('ir-para-login', () => { conta.sair(); esquecerSessao(); if (win && !win.isDestroyed()) win.loadFile(path.join(__dirname, 'src', 'login.html')); return { success: true }; });
