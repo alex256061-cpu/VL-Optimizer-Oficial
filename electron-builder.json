@@ -33,6 +33,7 @@
                   "escrever-settings.js",
                   "gdz-launch.js",
                   "features.js",
+                  "elevacao.js",
                   "assets/**/*",
                   "src/**/*",
                   "bin/**/*",
@@ -65,6 +66,7 @@
                 "requestedExecutionLevel":  "asInvoker"
             },
     "nsis":  {
+                 "include":  "instalador-tarefa.nsh",
                  "oneClick":  false,
                  "perMachine":  false,
                  "allowElevation":  true,

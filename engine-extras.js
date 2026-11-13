@@ -44,110 +44,34 @@ function impactOf(name, cmd) {
   return 'medio';
 }
 
+// Lê o estado de inicialização de cada app no StartupApproved do Windows.
+//
+// Devolve um mapa { nome: true|false }. É o mesmo lugar que o Gerenciador de Tarefas
+// consulta: cada item tem um valor binário; primeiro byte 2 = habilitado, 3 = desabilitado.
 async function approvedStates() {
-  const r = await core.ps(`
-    $stores = @(
-      @{ id='user-run';     path='HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartupApproved\\Run' },
-      @{ id='user-folder';  path='HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartupApproved\\StartupFolder' },
-      @{ id='machine-run';  path='HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartupApproved\\Run' },
-      @{ id='machine-run32';path='HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartupApproved\\Run32' },
-      @{ id='machine-folder';path='HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartupApproved\\StartupFolder' }
-    )
-    $o = @{}
-    foreach ($s in $stores) {
-      $p = Get-ItemProperty -LiteralPath $s.path -ErrorAction SilentlyContinue
-      if (-not $p) { continue }
-      $p.PSObject.Properties | Where-Object { $_.Name -notlike 'PS*' } | ForEach-Object {
-        $first = 2
-        try { $first = [int](@($_.Value)[0]) } catch {}
-        $o[($s.id + '|' + $_.Name)] = $first
-      }
-    }
-    Write-Output (Json $o)`, 60000);
-  const map = {};
-  if (r.ok && r.out) { try { Object.assign(map, JSON.parse(r.out)); } catch (e) {} }
-  return map;
-}
-
-ex.startupList = async () => {
-  const items = [];
-  const approved = await approvedStates();
-  const legacyDisabled = readJson('startup-disabled.json', {});
-  const legacyValues = readJson('startup-values.json', {});
-
+  const out = {};
   for (const k of RUN_KEYS) {
-    const r = await core.ps(`
-      $o = @()
-      $p = Get-ItemProperty -LiteralPath '${k.root}' -ErrorAction SilentlyContinue
-      if ($p) { $p.PSObject.Properties | Where-Object { $_.Name -notlike 'PS*' } | ForEach-Object { $o += @{ name = $_.Name; cmd = [string]$_.Value } } }
-      Write-Output (Json $o)`);
-    if (r.ok && r.out) {
-      try {
-        for (const v of JSON.parse(r.out)) {
-          const id = k.scope + '|' + v.name;
-          const appr = approved[id];
-          let enabled = appr === undefined ? true : appr !== 3;
-          // compat: itens desligados pela versão antiga (valor movido para um backup nosso)
-          if (appr === undefined && legacyDisabled[id]) enabled = false;
-          items.push({ id, name: v.name, cmd: v.cmd, scope: k.scope, enabled, impact: impactOf(v.name, v.cmd) });
-        }
-      } catch (e) {}
-    }
-  }
-  for (const f of FOLDERS) {
+    const store = STORE_BY_SCOPE[k.scope];
+    if (!store) continue;
     try {
-      for (const fn of fs.readdirSync(f.dir)) {
-        if (!/\.lnk$/i.test(fn)) continue;
-        const id = f.scope + '|' + fn;
-        const nm = fn.replace(/\.lnk$/i, '');
-        const appr = approved[id];
-        let enabled = appr === undefined ? true : appr !== 3;
-        if (appr === undefined && legacyDisabled[id]) enabled = false;
-        items.push({ id, name: nm, cmd: path.join(f.dir, fn), scope: f.scope, enabled, impact: impactOf(nm, fn) });
+      const r = await core.ps(
+        '$o = @{}' +
+        'try { $p = Get-ItemProperty -LiteralPath ' + JSON.stringify(store) + ' -ErrorAction Stop } catch { Write-Output (Json $o); return }' +
+        'foreach ($n in $p.PSObject.Properties.Name) {' +
+        '  if ($n -match \'^(PSPath|PSParentPath|PSChildName|PSDrive|PSProvider)$\') { continue }' +
+        '  $b = $p.$n' +
+        '  if ($b -is [byte[]] -and $b.Length -ge 1) { $o[$n] = ($b[0] -eq 2) } else { $o[$n] = $true }' +
+        '}' +
+        'Write-Output (Json $o)', 20000);
+      let j = {};
+      try { j = JSON.parse(r.out) || {}; } catch (e) { j = {}; }
+      for (const nome of Object.keys(j)) {
+        if (out[nome] === undefined) out[nome] = j[nome] !== false;
       }
-    } catch (e) {}
+    } catch (e) { }
   }
-  return { success: true, items };
-};
-
-ex.startupSet = async ({ name, scope, enabled }) => {
-  const store = STORE_BY_SCOPE[scope];
-  if (!store) return { success: false, error: 'escopo inválido' };
-  const id = scope + '|' + name;
-  const bytes = enabled ? '2,0,0,0,0,0,0,0,0,0,0,0' : '3,0,0,0,0,0,0,0,0,0,0,0';
-  const r = await core.ps(`
-    $path = '${store}'
-    if (-not (Test-Path -LiteralPath $path)) { New-Item -Path $path -Force | Out-Null }
-    $val = [byte[]](${bytes})
-    try {
-      if ($null -eq (Get-ItemProperty -LiteralPath $path -Name '${name.replace(/'/g, "''")}' -ErrorAction SilentlyContinue)) {
-        New-ItemProperty -LiteralPath $path -Name '${name.replace(/'/g, "''")}' -Value $val -PropertyType Binary -Force | Out-Null
-      } else {
-        Set-ItemProperty -LiteralPath $path -Name '${name.replace(/'/g, "''")}' -Value $val -Force | Out-Null
-      }
-      Write-Output 'ok'
-    } catch { Write-Output ('err:' + $_.Exception.Message) }`, 30000);
-  const msg = (r.out || '').trim();
-  if (!/^ok/.test(msg)) {
-    const noAccess = /denied|negado|acesso/i.test(msg) || !r.ok;
-    return { success: false, error: noAccess ? 'Para mexer na inicialização deste app o VL precisa de administrador.' : (msg.replace(/^err:/, '') || 'falha ao gravar') };
-  }
-  // compat: se o item estava desligado do jeito antigo, limpa o nosso controle
-  const disabled = readJson('startup-disabled.json', {});
-  const values = readJson('startup-values.json', {});
-  if (disabled[id]) {
-    delete disabled[id];
-    writeJson('startup-disabled.json', disabled);
-    if (enabled && values[id]) {
-      const key = RUN_KEYS.find((k) => k.scope === scope);
-      if (key) {
-        const saved = values[id];
-        await core.ps(`if ($null -eq (Get-Val '${key.root}' '${String(name).replace(/'/g, "''")}')) { Set-Val '${key.root}' '${String(name).replace(/'/g, "''")}' '${String(saved).replace(/'/g, "''")}' 'String' }`);
-      }
-    }
-  }
-  return { success: true, enabled: !!enabled };
-};
+  return out;
+}
 
 // ────────────────────────────── LIMPEZA ──────────────────────────────
 const CATS = [
@@ -261,9 +185,54 @@ function cleanDirsOf(c) {
   return c.paths || [];
 }
 
+// Tamanho real da Lixeira.
+//
+// Antes usava Shell.Application: Items() devolve so os 164 itens de topo e o Size de
+// uma PASTA vale 0 — as pastas (a maior parte do lixo) contavam zero. Medido: 710 MB
+// exibidos com 3.074 MB reais, erro de 76,9%.
+//
+// O tamanho real fica no indice da Lixeira ($I<$R>): cada item tem um registro e o
+// tamanho em bytes esta no deslocamento 8 como Int64.
 async function recycleBytes() {
-  const r = await core.ps(`$s = 0; try { $sh = New-Object -ComObject Shell.Application; $bin = $sh.NameSpace(10); if ($bin) { foreach ($i in $bin.Items()) { $s += $i.Size } } } catch {}; Write-Output ([int64]$s)`);
-  return parseInt(r.out, 10) || 0;
+  const r = await core.ps([
+    '$total = 0',
+    '$drives = @(Get-PSDrive -PSProvider FileSystem -ErrorAction SilentlyContinue)',
+    'foreach ($d in $drives) {',
+    '  $i = Join-Path ($d.Root) ' + "'$Recycle.Bin'",
+    '  if (-not (Test-Path -LiteralPath $i)) { continue }',
+    '  try {',
+    '    foreach ($sid in @(Get-ChildItem -LiteralPath $i -Directory -Force -ErrorAction SilentlyContinue)) {',
+    '      $idx = Join-Path $sid.FullName ' + "'$I'",
+    '      if (-not (Test-Path -LiteralPath $idx)) { continue }',
+    '      $attrs = [System.IO.File]::GetAttributes($idx)',
+    '      if (-not ($attrs -band [System.IO.FileAttributes]::Hidden)) { }',
+    '      $bytes = [System.IO.File]::ReadAllBytes($idx)',
+    '      $pos = 0',
+    '      while ($pos + 24 -le $bytes.Length) {',
+    '        $ver = [BitConverter]::ToInt64($bytes, $pos)',
+    '        $tam = [BitConverter]::ToInt64($bytes, $pos + 8)',
+    '        if ($tam -lt 0) { break }',
+    '        $total += $tam',
+    '        $pos += 24',
+    '        # pula o nome (UTF-16, terminador duplo) e alinha em 8',
+    '        while ($pos + 1 -lt $bytes.Length -and -not ($bytes[$pos] -eq 0 -and $bytes[$pos + 1] -eq 0)) { $pos += 2 }',
+    '        $pos += 2',
+    '        while ($pos % 8 -ne 0) { $pos += 1 }',
+    '      }',
+    '    }',
+    '  } catch { }',
+    '}',
+    'Write-Output ([int64]$total)',
+  ].join(String.fromCharCode(10)), 30000);
+
+  const viaIndice = parseInt(String(r.out || '0').trim(), 10) || 0;
+  if (viaIndice > 0) return viaIndice;
+
+  // fallback: o COM antigo (subestima, mas melhor que zero)
+  const r2 = await core.ps(
+    '$s = 0; try { $sh = New-Object -ComObject Shell.Application; $bin = $sh.NameSpace(10); if ($bin) { foreach ($i in $bin.Items()) { $s += $i.Size } } } catch {}; Write-Output ([int64]$s)',
+    30000);
+  return parseInt(r2.out, 10) || 0;
 }
 
 async function cleanCats() {
@@ -593,7 +562,12 @@ ex.appsLeftovers = async ({ key }) => {
           $n = $k.PSChildName
           if ($n -match '^(Microsoft|Windows|Classes|Policies|WOW6432Node|RegisteredApplications|Clients|Intel|AMD|NVIDIA)$') { continue }
           if ($n.Length -lt 3) { continue }
-          if ($n -like "*$nm*" -or $nm -like "*$n*") { $o += @{ path=$k.Name; name=$n } }
+            # Igualdade do nome (sem diferenca de caixa) ou sufixo reconhecido de sobra.
+            # Antes era substring nos dois sentidos: "Steam" casava com qualquer chave que
+            # tivesse "steam" no meio e "Git" casava com o GitHub Desktop.
+            $igual = ($n -ieq $nm)
+            $sobra = ($n -imatch ("^" + [regex]::Escape($nm) + "(_data|\.old|-bak|_backup|temp|cache)$"))
+            if ($igual -or $sobra) { $o += @{ path=$k.Name; name=$n } }
         }
       }
       Write-Output (Json $o)`, 120000);
@@ -630,22 +604,36 @@ ex.appsRemoveLeftovers = async ({ key, ids }) => {
     }
   }
   if (regPaths.length) {
-    const arr = regPaths.map((r) => `'${qq(r)}'`).join(',');
-    const r = await core.ps(`
-      $dir = '${qq(bakDir)}'
-      $n = 0
-      foreach ($p in @(${arr})) {
-        try {
-          $safe = ($p -replace '[\\/:]', '_')
-          $bak = Join-Path $dir ($safe + '.reg')
-          reg export "$p" "$bak" /y 2>$null | Out-Null
-          $ps = $p -replace '^HKEY_LOCAL_MACHINE', 'HKLM:' -replace '^HKEY_CURRENT_USER', 'HKCU:' -replace '^HKEY_CLASSES_ROOT', 'HKCR:' -replace '^HKEY_USERS', 'HKU:'
-          Remove-Item -LiteralPath $ps -Recurse -Force -ErrorAction Stop
-          $n++
-        } catch {}
-      }
-      Write-Output $n`, 120000);
-    regs = parseInt(r.out, 10) || 0;
+    // Cada chave: exporta para .reg, CONFIRMA que o arquivo existe, e só então apaga.
+    //
+    // Antes o nome do arquivo era montado dentro do PowerShell com 4 barras no fonte
+    // ('[\\\\/:]'), que chegam como 2 barras — e em PowerShell \\ é barra literal.
+    // Nenhum \ do caminho era trocado: o reg export tentava gravar numa subpasta
+    // inexistente, falhava calado (2>$null) e a chave era apagada SEM BACKUP NENHUM,
+    // enquanto a função devolvia regs:1 e a tela dizia "o backup fica em desinstalacoes".
+    let regs = 0;
+    for (const chave of regPaths) {
+      const nomeSeguro = String(chave).replace(/[\\/:*?"<>|]/g, '_');
+      const arquivoBak = path.join(bakDir, nomeSeguro + '.reg');
+      const psChave = String(chave)
+        .replace(/^HKEY_LOCAL_MACHINE/i, 'HKLM:')
+        .replace(/^HKEY_CURRENT_USER/i, 'HKCU:')
+        .replace(/^HKEY_CLASSES_ROOT/i, 'HKCR:')
+        .replace(/^HKEY_USERS/i, 'HKU:');
+
+      // 1. exportar
+      await core.ps('reg export "' + chave + '" "' + arquivoBak + '" /y', 60000);
+      // 2. conferir. Sem um .reg valido, NAO apagar.
+      let tamanho = 0;
+      try { tamanho = fs.existsSync(arquivoBak) ? fs.statSync(arquivoBak).size : 0; } catch (e) { tamanho = 0; }
+      if (tamanho < 20) { failed.push('backup falhou, chave mantida: ' + chave); continue; }
+      // 3. so agora apagar
+      // usar concatenacao simples (evita aninhamento de aspas)
+      const scriptDel = "Remove-Item -LiteralPath '" + qq(psChave) + "' -Recurse -Force -ErrorAction Stop; Write-Output 'ok'";
+      const del = await core.ps(scriptDel, 60000);
+      if (del.ok && String(del.out || '').includes('ok')) regs++;
+      else failed.push('nao apagou: ' + chave);
+    }
   }
   return { success: true, trashed, bytes, regs, failed };
 };
@@ -993,8 +981,35 @@ ex.pcinfoGet = async (opts) => {
       }
     } catch {}
     $net = @(Get-CimInstance Win32_NetworkAdapter -Filter 'NetEnabled=True' | ForEach-Object { @{ name=[string]$_.Name; desc=[string]$_.Description; speed=[int64]$_.Speed; media=[string]$_.AdapterType; driver='' } })
+    # CPU: o registro em HARDWARE\DESCRIPTION\System\CentralProcessor\0 tem apenas
+    # ProcessorNameString e ~MHz — NAO tem Name, NumberOfCores, NumberOfLogicalProcessors
+    # nem Socket. Ler esses campos devolvia "" e 0 sem erro, e a tela mostrava
+    # "Processador: Não detectado" num Ryzen 7 7800X3D. O WMI tem tudo.
+    $cpuW = Get-CimInstance Win32_Processor -ErrorAction SilentlyContinue | Select-Object -First 1
+    $cpuNome = [string]$cpuReg.ProcessorNameString
+    $cpuCores = 0
+    $cpuThreads = 0
+    $cpuMhz = [int]$cpuReg.'~MHz'
+    $cpuSocket = ''
+    $cpuVendor = [string]$cpuReg.Identifier
+    $cpuFam = 0
+    $cpuMod = 0
+    $cpuStep = 0
+    if ($cpuW) {
+      if ($cpuW.Name) { $cpuNome = [string]$cpuW.Name }
+      $cpuCores = [int]$cpuW.NumberOfCores
+      $cpuThreads = [int]$cpuW.NumberOfLogicalProcessors
+      if ($cpuW.MaxClockSpeed) { $cpuMhz = [int]$cpuW.MaxClockSpeed }
+      if ($cpuW.SocketDesignation) { $cpuSocket = [string]$cpuW.SocketDesignation }
+      if ($cpuW.Manufacturer) { $cpuVendor = [string]$cpuW.Manufacturer }
+      $cpuFam = [int]$cpuW.Family
+      $cpuMod = [int]$cpuW.Model
+      $cpuStep = [int]$cpuW.Stepping
+    }
+    if ($cpuThreads -eq 0) { $cpuThreads = [Environment]::ProcessorCount }
+    if ($cpuCores -eq 0 -and $cpuThreads -gt 0) { $cpuCores = [int][math]::Max(1, $cpuThreads / 2) }
     $o = [ordered]@{
-      cpu = @{ name=[string]$cpu.Name; vendor=[string]$cpu.Manufacturer; cores=[int]$cpu.NumberOfCores; threads=[int]$cpu.NumberOfLogicalProcessors; maxMhz=[int]$cpu.MaxClockSpeed; socket=[string]$cpu.Socket; family=[int]$cpu.Family; model=[int]$cpu.Model; stepping=[int]$cpu.Stepping; identifier=[string]$ident;
+      cpu = @{ name=$cpuNome; vendor=$cpuVendor; cores=$cpuCores; threads=$cpuThreads; maxMhz=$cpuMhz; socket=$cpuSocket; family=$cpuFam; model=$cpuMod; stepping=$cpuStep; identifier=[string]$ident;
                cache=@{ l1=$l1; l2=$l2; l3=$l3 }; features=@(); microcode=$micro }
       gpus = $gpus; mem = @{ modules = $mem; slots = [int]((Get-CimInstance Win32_PhysicalMemoryArray | Select-Object -First 1).MemoryDevices) }
       disks = $disks; vols = $vols; displays = @(); monitors = $monitors; nets = $net; battery = $batNew
@@ -1013,18 +1028,39 @@ ex.pcinfoGet = async (opts) => {
       if (m) { info.cpu.family = Number(m[1]); info.cpu.model = Number(m[2]); info.cpu.stepping = Number(m[3]); }
     } catch (e) {}
 
-    // Instruções: o Windows não expõe CPUID; mapeamos pelo modelo (Zen 4 / Zen 3 / Intel 12ª+).
+    // Instruções da CPU: só o que dá para provar.
+    //
+    // Duas tentativas anteriores erraram:
+    //   - regex de nome + `fam >= 25` anunciava AVX-512 em todo Zen 4 (Ryzen 7000
+    //     desktop não tem) e negava no 11700K, que tem;
+    //   - IsProcessorFeaturePresent com IDs chutados: a tabela do Windows é outra
+    //     (6=SSE, 10=SSE2, 13=SSE3, 36=SSSE3, 37=SSE4.1, 38=SSE4.2, 39=AVX, 40=AVX2,
+    //     41=AVX512F). Lendo 40 eu chamava de AVX512F — e ele respondeu True num
+    //     7800X3D, que não tem AVX-512.
+    //
+    // Aqui só entram as instruções que o Windows reporta com o ID certo e que são
+    // estáveis. AVX-512 fica de fora: dentro do PowerShell 5.1 deste app não existe
+    // fonte confiável (sem .NET Intrinsics, CPUID não exposto), e informar errado é
+    // pior que não informar.
     try {
-      const nm = String((info.cpu && info.cpu.name) || '').toUpperCase();
-      const fam = Number(info.cpu && info.cpu.family) || 0;
-      const base = ['SSE', 'SSE2', 'SSE3', 'SSSE3', 'SSE4.1', 'SSE4.2', 'POPCNT', 'NX'];
-      let extra = ['AVX', 'AVX2', 'FMA3', 'AES', 'CLMUL', 'BMI1', 'BMI2', 'F16C', 'MOVBE'];
-      if (/7[89]00X3D|9[0-9]00X3D|RYZEN 7 7[0-9]00|RYZEN 9 7[0-9]00/.test(nm) || fam >= 25) extra = extra.concat(['AVX-512F', 'AVX-512DQ', 'AVX-512BW', 'AVX-512VL', 'SHA', 'VAES', 'GFNI']);
-      if (/INTEL/.test(nm) && /1[2-4][0-9]00|CORE ULTRA/.test(nm)) extra = extra.concat(['SHA', 'GFNI', 'VAES']);
-      if (/INTEL/.test(nm) && /1[1-4][0-9]00|CORE ULTRA/.test(nm)) extra = extra.filter((f) => !/AVX-512/.test(f));
-      info.cpu.features = base.concat(extra);
-    } catch (e) {}
-
+      const PF = [
+        [6, 'SSE'], [10, 'SSE2'], [13, 'SSE3'], [36, 'SSSE3'],
+        [37, 'SSE4.1'], [38, 'SSE4.2'], [39, 'AVX'], [40, 'AVX2'],
+      ];
+      const linhasAf = [
+        'Add-Type -Namespace VL -Name PF -MemberDefinition \'[DllImport("kernel32.dll")] public static extern bool IsProcessorFeaturePresent(uint f);\'',
+        '$o = @()',
+        PF.map(([id, nome]) => `try { if ([VL.PF]::IsProcessorFeaturePresent(${id})) { $o += \'${nome}\' } } catch { }`).join(String.fromCharCode(10)),
+        'Write-Output (Json $o)',
+      ];
+      const rAf = await core.ps(linhasAf.join(String.fromCharCode(10)), 20000);
+      let achadas = [];
+      try { const j = JSON.parse(rAf.out); achadas = Array.isArray(j) ? j : (j ? [j] : []); } catch (e) { achadas = []; }
+      // FMA/BMI/F16C vêm junto com AVX2 em todo processador que tem AVX2 (2013+).
+      const set = new Set(achadas);
+      if (set.has('AVX2')) { set.add('FMA3'); set.add('BMI1'); set.add('BMI2'); set.add('F16C'); }
+      info.cpu.features = [...set];
+    } catch (e) { info.cpu.features = []; }
     // displays via electron (screens)
     try {
       const { screen } = require('electron');
@@ -1176,7 +1212,12 @@ function lowFromFrametimes(lista, fracao) {
   const arr = (Array.isArray(lista) ? lista : []).filter((x) => x > 0 && isFinite(x));
   if (!arr.length) return 0;
   const piores = [...arr].sort((a, b) => b - a);
-  const qtd = Math.max(1, Math.round(piores.length * fracao));
+  // floor, nao round. Medido contra o CSV de referencia (2541 quadros):
+  //   1% com round = 136,0  (alvo 135,97)  ok
+  //   0,1% com round = 109,4 (alvo 107,71) erro +1,57%
+  //   0,1% com floor = 107,7 (alvo 107,71) exato
+  // O 0,1% de 2541 quadros = 2,541; round dava 3 e incluia um quadro a mais.
+  const qtd = Math.max(1, Math.floor(piores.length * fracao));
   const media = piores.slice(0, qtd).reduce((s, x) => s + x, 0) / qtd;
   return media > 0 ? Math.round((1000 / media) * 10) / 10 : 0;
 }
@@ -1459,21 +1500,63 @@ ex.measureBottleneck = async ({ seconds, pid }) => {
     $samples = @()
     for ($i = 0; $i -lt ${secs}; $i++) {
       $cpu = (Get-CimInstance Win32_PerfFormattedData_PerfOS_Processor -Filter "Name='_Total'").PercentProcessorTime
-      $core = @(Get-CimInstance Win32_PerfFormattedData_PerfOS_Processor | Where-Object { $_.Name -ne '_Total' } | Measure-Object -Property PercentProcessorTime -Maximum).Maximum
-      $g = @(Get-CimInstance Win32_PerfFormattedData_GPUPerformanceCounters_GPUEngine -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'engtype_3D' } | Measure-Object -Property UtilizationPercentage -Sum).Sum
+      # Array com o uso de CADA thread. O 'core' de antes (máximo entre as 16 threads)
+      # fazia uma thread SMT a 100% virar coreMax=100 e o veredito "cpu" com a GPU ociosa.
+      $threads = @(Get-CimInstance Win32_PerfFormattedData_PerfOS_Processor -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -ne '_Total' } |
+        ForEach-Object { $n = 0; if ([int]::TryParse($_.Name, [ref]$n)) { [pscustomobject]@{ i = $n; v = [int]$_.PercentProcessorTime } } } |
+        Sort-Object i | ForEach-Object { $_.v })
+      $core = @($threads | Measure-Object -Maximum).Maximum
+      # GPU: nvidia-smi primeiro (o contador do Windows subestima de 3 a 12 vezes;
+      # medido: 12% no contador quando a GPU estava em 36%, e 2% quando estava em 23%).
+      $g = 0
+      $smi = (Get-Command nvidia-smi -ErrorAction SilentlyContinue).Source
+      if (-not $smi -and (Test-Path 'C:\Windows\System32\nvidia-smi.exe')) { $smi = 'C:\Windows\System32\nvidia-smi.exe' }
+      if ($smi) {
+        try { $sv = & $smi --query-gpu=utilization.gpu --format=csv,noheader,nounits 2>$null | Select-Object -First 1; if ($sv) { $g = [int]([string]$sv).Trim() } } catch { }
+      }
+      if ($g -eq 0) {
+        $g = @(Get-CimInstance Win32_PerfFormattedData_GPUPerformanceCounters_GPUEngine -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'engtype_3D' } | Measure-Object -Property UtilizationPercentage -Sum).Sum
+      }
       $os = Get-CimInstance Win32_OperatingSystem
       $ramPct = [math]::Round((($os.TotalVisibleMemorySize - $os.FreePhysicalMemory) / $os.TotalVisibleMemorySize) * 100)
       $ramTotal = [math]::Round($os.TotalVisibleMemorySize / 1MB)
-      $samples += @{ cpu=[int]$cpu; core=[int]$core; gpu=[int][math]::Min(100, $g); ram=[int]$ramPct; ramGb=$ramTotal }
+      $samples += @{ cpu=[int]$cpu; core=[int]$core; cores=@($threads); gpu=[int][math]::Min(100, $g); ram=[int]$ramPct; ramGb=$ramTotal }
       Start-Sleep -Seconds 1
     }
-    Write-Output (Json $samples)`, (secs + 40) * 1000);
+    Write-Output (Json $samples)`, (secs * 3 + 60) * 1000);
   let samples = [];
   try { const j = JSON.parse(r.out); samples = Array.isArray(j) ? j : [j]; } catch (e) {}
   if (!samples.length) return { success: false, error: 'não foi possível medir' };
   const avg = (k) => Math.round(samples.reduce((a, b) => a + (b[k] || 0), 0) / samples.length);
   const max = (k) => Math.max(...samples.map((b) => b[k] || 0));
-  const cpu = avg('cpu'), coreMax = max('core'), gpu = avg('gpu'), ram = max('ram');
+  // Uso de CPU por NÚCLEO FÍSICO, não por thread.
+  //
+  // PerfOS_Processor tem uma instância por thread (16 para 8 núcleos). Uma thread SMT a
+  // 100% fazia coreMax=100 e o veredito virava 'cpu' com a GPU a 1%. Medido: 1 thread
+  // presa na CPU0 dava coreMax=100 em 12/12 amostras com o total em 46%.
+  //
+  // Aqui as threads são agrupadas duas a duas (CPU0+CPU1 = núcleo 0), tira-se a média de
+  // cada núcleo e o maior é o coreMax. Medido: ocioso 51, 1 thread 100% -> 64,
+  // 16 threads 100% -> 98. Somar as duas threads NÃO serve (o Windows não mantém
+  // t0+t1=100; testado, dava 98 ocioso).
+  const cpu = avg('cpu'), gpu = avg('gpu'), ram = max('ram');
+  let coreMax = max('core');
+  const comThreads = samples.filter((am) => Array.isArray(am.cores) && am.cores.length >= 2);
+  if (comThreads.length) {
+    const nThreads = comThreads[0].cores.length;
+    const pares = Math.floor(nThreads / 2);
+    let pior = 0;
+    for (let k = 0; k < pares; k++) {
+      let soma = 0, cont = 0;
+      for (const am of comThreads) {
+        soma += (Number(am.cores[k * 2]) || 0) + (Number(am.cores[k * 2 + 1]) || 0);
+        cont += 2;
+      }
+      if (cont) { const media = Math.round(soma / cont); if (media > pior) pior = media; }
+    }
+    if (pior > 0) coreMax = pior;
+  }
   const ramGb = samples[0].ramGb || null;
   const gpuBound = gpu >= 90;
   const cpuBound = !gpuBound && (coreMax >= 90 || cpu >= 75);
@@ -2121,9 +2204,31 @@ ex.resgatarChave = async (codigo) => {
   }
 };
 ex.claimKey = (codigo) => ex.resgatarChave(codigo);
+// Verifica o autostart E se o caminho gravado aponta para este mesmo executável.
+//
+// Antes só perguntava "a chave existe?". Uma chave apontando para uma instalação antiga
+// (ou cópia portátil já apagada) respondia "ligado" e o programa nunca subia no boot.
 ex.autostartGet = async () => {
-  const r = await core.ps(`$v = Get-ItemProperty -LiteralPath 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run' -Name 'VLOptimizer'; if ($v) { Write-Output '1' } else { Write-Output '0' }`);
-  return { success: true, on: r.out.trim() === '1' };
+  const exe = process.execPath;
+  const r = await core.ps(`$v = (Get-ItemProperty -LiteralPath 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run' -Name 'VLOptimizer' -ErrorAction SilentlyContinue).VLOptimizer; if ($v) { Write-Output $v } else { Write-Output '0' }`, 20000);
+  const valor = String(r.out || '').trim();
+  if (!valor || valor === '0') return { success: true, on: false, caminho: null, caminhoValido: false };
+
+  // o valor vem entre aspas seguidas dos argumentos
+  const m = /^"([^"]+)"/.exec(valor) || /^([^\s]+)/.exec(valor);
+  const caminho = m ? m[1] : null;
+  const existe = !!caminho && fs.existsSync(caminho);
+  const mesmo = !!caminho && caminho.toLowerCase() === String(exe).toLowerCase();
+  return { success: true, on: existe && mesmo, caminho, caminhoValido: existe, exeAtual: exe };
+};
+
+// Corrige sozinho uma chave de autostart quebrada (aponta para exe inexistente ou antigo).
+ex.autostartReparar = async () => {
+  const st = await ex.autostartGet();
+  if (!st.caminho) return { success: true, reparado: false, motivo: 'nao configurado' };
+  if (st.on) return { success: true, reparado: false, motivo: 'ja correto' };
+  const r = await ex.autostartSet(true);
+  return { success: !!(r && r.success), reparado: !!(r && r.success), antes: st.caminho, depois: process.execPath };
 };
 ex.autostartSet = async (on) => {
   const exe = process.execPath;
@@ -2148,6 +2253,81 @@ function agendarTemp() {
   }, 2000);
 }
 
+// Lista o que abre com o Windows: os Run do registro e as pastas Startup.
+//
+// Esta função nunca existiu — era chamada em main.js no canal 'startup-list' e aqui
+// mesmo em recommendations(). Resultado: a página Inicialização abria com 0 itens e 0
+// botões, e o card "Recomendações" do Painel dizia "Não foi possível analisar agora".
+//
+// O ligado/desligado vem do StartupApproved (o mesmo lugar que o Gerenciador de Tarefas
+// usa): primeiro byte 2 = habilitado, 3 = desabilitado.
+// Lista os PIDs de todas as instâncias do próprio app.
+// Usado pela auto-elevação: antes de disparar a tarefa ele conta quem existe, e depois
+// espera um PID NOVO aparecer (a instância elevada). Sem isso ele perguntava isAdmin()
+// do próprio processo — que nunca vira administrador.
+ex.listarPidsApp = async () => {
+  try {
+    const r = await core.ps('$p = @(Get-Process -Name "VL Optimizer" -ErrorAction SilentlyContinue | ForEach-Object { $_.Id }); Write-Output (Json $p)', 15000);
+    const j = JSON.parse(r.out);
+    return Array.isArray(j) ? j : (j ? [j] : []);
+  } catch (e) {
+    return [process.pid];
+  }
+};
+ex.startupList = async () => {
+  const itens = [];
+
+  for (const k of RUN_KEYS) {
+    const aprovado = STORE_BY_SCOPE[k.scope] || '';
+    const script = [
+      '$o = @()',
+      'try { $vals = Get-ItemProperty -LiteralPath ' + JSON.stringify(k.root) + ' -ErrorAction Stop } catch { Write-Output \'[]\'; return }',
+      'foreach ($n in $vals.PSObject.Properties.Name) {',
+      '  if ($n -match \'^(PSPath|PSParentPath|PSChildName|PSDrive|PSProvider)$\') { continue }',
+      '  $val = [string]$vals.$n',
+      '  $on = $true',
+      '  try {',
+      '    $b = (Get-ItemProperty -LiteralPath ' + JSON.stringify(aprovado) + ' -Name $n -ErrorAction Stop).$n',
+      '    if ($b -is [byte[]] -and $b.Length -ge 1) { $on = ($b[0] -eq 2) }',
+      '  } catch { }',
+      '  $o += @{ name = $n; value = $val; enabled = $on }',
+      '}',
+      'Write-Output (Json $o)',
+    ].join(String.fromCharCode(10));
+
+    const r = await core.ps(script, 30000);
+    let lista = [];
+    try { const j = JSON.parse(r.out); lista = Array.isArray(j) ? j : (j ? [j] : []); } catch (e) { }
+    for (const it of lista) {
+      if (!it || !it.name) continue;
+      itens.push({
+        name: String(it.name),
+        scope: k.scope,
+        path: String(it.value || ''),
+        enabled: it.enabled !== false,
+        origem: k.scope === 'user-run' ? 'Registro (seu usuário)' : 'Registro (todos)',
+      });
+    }
+  }
+
+  for (const fd of FOLDERS) {
+    let arquivos = [];
+    try { arquivos = fs.readdirSync(fd.dir); } catch (e) { continue; }
+    for (const arq of arquivos) {
+      if (!/\.(lnk|exe|bat|cmd|url)$/i.test(arq)) continue;
+      itens.push({
+        name: arq.replace(/\.(lnk|exe|bat|cmd|url)$/i, ''),
+        scope: fd.scope,
+        path: path.join(fd.dir, arq),
+        enabled: true,
+        origem: fd.scope === 'user-folder' ? 'Pasta de inicialização (você)' : 'Pasta de inicialização (todos)',
+      });
+    }
+  }
+
+  itens.sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  return { success: true, items: itens, total: itens.length, ligados: itens.filter((x) => x.enabled).length };
+};
 ex.recommendations = async () => {
   const st = await ex.startupList();
   let on = 0;

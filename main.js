@@ -28,6 +28,7 @@ const os = require('os');
 const core = require('./engine');
 const ex = require('./engine-extras');
 const feat = require('./features');
+const elev = require('./elevacao');
 const updater = require('./updater');
 const conta = require('./supabase');
 require('./engine-scaler').mountScaler(ex);
@@ -44,6 +45,8 @@ const isTest = ['--smoke', '--shots', '--uitest'].some((a) => process.argv.inclu
 let isAdmin = false;
 let elevateFailed = false;
 let win = null;
+// Ligada enquanto a janela é recriada após um crash: no 'closed' desse caso não se sai do app.
+let recriandoJanela = false;
 let scalingWin = null;
 let overlayWin = null;
 
@@ -56,6 +59,7 @@ function dataDir() {
 }
 core.setDataDir(dataDir());
 ex.fpsRestore();
+
 
 function createWindow() {
   win = new BrowserWindow({
@@ -326,7 +330,23 @@ function createWindow() {
       app.exit(0);
     });
   }
-  win.on('closed', () => { win = null; });
+  // Fechar pelo X / Alt+F4 / botão de fechar = sair do app.
+  //
+  // O overlay do FPS é outra BrowserWindow: sem isto, fechar a janela principal deixava o
+  // overlay vivo, o que impedia 'window-all-closed' de disparar e mantinha o processo e o
+  // lock de instância única presos por 20 s.
+  //
+  // Só age quando NÃO estiver numa recriação: se o renderer caiu e o app está se
+  // recuperando, o 'closed' vem de um fechamento programático, não do usuário.
+  win.on('closed', () => {
+    win = null;
+    if (app.isQuitting) return;              // já está saindo: nada a fazer
+    if (recriandoJanela) return;             // veio de uma recriação: não sair
+    app.isQuitting = true;
+    try { if (overlayWin && !overlayWin.isDestroyed()) overlayWin.destroy(); } catch (e) { }
+    try { if (scalingWin && !scalingWin.isDestroyed()) scalingWin.destroy(); } catch (e) { }
+    app.quit();
+  });
 }
 
 // ── Overlay de FPS ──
@@ -433,6 +453,42 @@ H('logout', () => { const r = conta.sair(); esquecerSessao(); return r; });
 H('ir-para-login', () => { conta.sair(); esquecerSessao(); if (win && !win.isDestroyed()) win.loadFile(path.join(__dirname, 'src', 'login.html')); return { success: true }; });
 H('recuperar-senha', (a) => conta.recuperar(a && a.email));
 H('conta-status', () => ({ configurado: conta.configurado() }));
+// Abre o site no navegador do sistema.
+// O src/plano.js chama este canal no botão "Ver planos" e em cada botão de plano do
+// modal. Ele estava em CANAIS_LIVRES mas NÃO tinha handler: o invoke rejeitava e clicar
+// em "Ver planos" não fazia nada — quem queria comprar não conseguia.
+const SITE = 'https://vl-optimizer.pages.dev';
+H('open-site', (a) => {
+  const pedido = (a && a.page) || 'planos';
+  const plan = a && a.plan ? String(a.plan) : '';
+  const cupom = a && a.coupon ? String(a.coupon) : '';
+
+  // Página do site correspondente ao pedido
+  const paginas = {
+    planos: SITE + '/#precos',
+    precos: SITE + '/#precos',
+    conta: SITE + '/conta',
+    resgatar: SITE + '/resgatar',
+    entrar: SITE + '/entrar',
+    criar: SITE + '/criar-conta',
+    bandeja: SITE + '/#precos',
+  };
+  let url = paginas[pedido] || paginas.planos;
+
+  // Plano e cupom vão na URL para o checkout já abrir escolhido
+  const q = [];
+  if (plan) q.push('plano=' + encodeURIComponent(plan));
+  if (cupom) q.push('cupom=' + encodeURIComponent(cupom));
+  if (q.length) url += (url.includes('?') ? '&' : '?') + q.join('&');
+
+  try {
+    shell.openExternal(url);
+    return { success: true, url };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
 // Plano do usuario logado: plan 'free'/'pro' e a lista de features por pagina
 // ('*' libera tudo).
 //
@@ -448,6 +504,20 @@ H('conta-plano', async () => {
     if (!s || !s.valid) return { ...PLANO_GRATIS, semLogin: true };
     // plano expirado tambem volta para gratis, mantendo o motivo para a tela explicar
     if (s.user.expirada) return { ...PLANO_GRATIS, semLogin: false, expirada: true, email: s.user.email, nome: s.user.name };
+
+    // Plano ligado a outro PC (formatou, trocou de maquina, ou copiou a sessao).
+    // O banco ja recusa; antes o cliente ignorava essa resposta e liberava tudo.
+    if (s.user.pcAprovado === false) {
+      return {
+        ...PLANO_GRATIS,
+        semLogin: false,
+        outraMaquina: true,
+        pcBound: !!s.user.pcBound,
+        reason: s.user.reason || 'other_device',
+        email: s.user.email,
+        nome: s.user.name,
+      };
+    }
     return {
       plan: s.user.plan,
       features: s.user.features,
@@ -492,8 +562,33 @@ H('get-stats', () => ex.getStats());
 H('get-mem-stats', () => ex.getMemStats());
 H('get-processes', () => ex.getProcesses());
 H('kill-process', ({ pid }) => ex.killProcess(pid));
-H('autostart-get', () => ex.autostartGet());
-H('autostart-set', ({ on }) => ex.autostartSet(on));
+H('autostart-get', async () => {
+  // Com a tarefa agendada, quem inicia no logon é ela — e já elevada. A chave Run do
+  // usuário (abaixo) fica como reserva para quando a tarefa não existe.
+  try {
+    const viaTarefa = await elev.autostartAtivo();
+    if (viaTarefa) return { success: true, on: true, supported: true, via: 'tarefa' };
+  } catch (e) {}
+  const r = await ex.autostartGet();
+  return { ...r, supported: true, via: 'run-key' };
+});
+H('autostart-set', async ({ on }) => {
+  // Com tarefa registrada: liga/desliga só o gatilho de logon dela (sem UAC, e o
+  // processo já sobe elevado). Sem tarefa: usa a chave Run do usuário, como antes.
+  const st = await elev.status().catch(() => ({ exists: false }));
+  if (st && st.exists) {
+    const r = await elev.autostartSet(!!on);
+    if (r.success) return { success: true, on: !!on, via: 'tarefa' };
+  }
+  try {
+    // Ligar o autostart não pode deixar a tarefa desligada E a chave Run elevando
+    // em dobro: se há tarefa, o gatilho dela já foi tratado acima.
+    const r = await ex.autostartSet(!!on);
+    return { ...r, via: 'run-key' };
+  } catch (e) {
+    return { success: false, on: false, error: e.message };
+  }
+});
 
 H('tweaks-status', () => core.tweaksStatus());
 H('actions-status', () => core.actionsStatus());
@@ -595,21 +690,62 @@ H('bn-notify', (a) => {
 H('ram-clean', () => feat.ramClean());
 H('ram-status', () => ({ success: true, ...feat.ramState() }));
 H('ram-auto-set', ({ on }) => feat.ramAutoSet(on));
-H('admin-status', () => ({ admin: isAdmin, failed: elevateFailed }));
-H('elevate-now', async () => {
-  const marker = path.join(app.getPath('userData'), 'elevated.lock');
-  try { fs.unlinkSync(marker); } catch (e) {}
-  const ok = await feat.elevate(app.isPackaged ? null : app.getAppPath());
-  if (ok) {
-    for (let i = 0; i < 40; i++) {
-      await new Promise((r) => setTimeout(r, 200));
-      if (fs.existsSync(marker)) { app.exit(0); return { success: true }; }
-    }
-    return { success: false, error: 'A janela elevada não abriu. Feche o app e abra como administrador.' };
-  }
-  return { success: false, error: 'Elevação cancelada.' };
+H('elevacao-diagnostico', async () => {
+  // Diagnóstico da elevação: o que o app vê e o que a tarefa diz.
+  try {
+    const st = await elev.status();
+    return {
+      execPath: process.execPath,
+      isAdmin: await elev.isAdmin(),
+      veioDaTarefa: elev.veioDaTarefa(),
+      argv: process.argv.slice(1),
+      tarefa: st,
+      pronta: await elev.pronta(),
+    };
+  } catch (e) { return { erro: e.message }; }
 });
+H('admin-status', async () => {
+  // "podeElevar": existe tarefa agendada com RunLevel Highest apontando para este exe.
+  // Com ela, reabrir como admin não pede UAC. Sem ela, o botão pede UAC uma vez
+  // (e aproveita para criar a tarefa, para nunca mais pedir).
+  let podeElevar = false;
+  try { podeElevar = await elev.pronta(); } catch (e) {}
+  return { admin: isAdmin, failed: elevateFailed, podeElevar, viaTarefa: elev.veioDaTarefa() };
+});
+H('elevate-now', async () => {
+  // "Reabrir como admin" pelo caminho que FUNCIONA.
+  //
+  // Medido: a tarefa "VLOptimizer" abre o app ELEVADO sem UAC, mas o Agendador tem
+  // MultipleInstances=IgnoreNew — com uma instância viva ele DESCARTA a execução e ainda
+  // assim o schtasks devolve "ÊXITO". Fechar antes de disparar também não serve: quem
+  // teria que disparar é o processo que acabou de morrer.
+  //
+  // Solução: um processo externo curto espera o app sair e só então dispara a tarefa.
+  // Nada disso pede UAC — a elevação vem da própria tarefa.
+  try {
+    const st = await elev.status();
+    if (!(st.exists && st.ready)) {
+      const reg = await elev.registrarComUAC();
+      if (!reg || !reg.success) return { success: false, error: (reg && reg.error) || 'Não foi possível criar a tarefa de administrador.' };
+    }
 
+    // dispara DEPOIS que este processo sair (~1,5 s): o Agendador só executa se não
+    // houver outra instância viva.
+    const { spawn } = require('child_process');
+    const filho = spawn('cmd.exe', ['/c', 'ping -n 2 127.0.0.1 >nul & schtasks /run /tn VLOptimizer'], {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true,
+    });
+    filho.unref();
+
+    app.isQuitting = true;
+    setTimeout(() => { try { app.quit(); } catch (e) { } }, 300);
+    return { success: true, viaTarefa: true, uac: false, espera: 2 };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
 H('pcinfo-get', (e, opts) => ex.pcinfoGet(opts));
 H('pcinfo-live', () => ex.pcinfoLive());
 
@@ -638,7 +774,16 @@ H('gdz-scaling-artifacts', () => ex.scalingArtifacts());
 
 ipcMain.on('minimize-window', () => win && win.minimize());
 ipcMain.on('maximize-window', () => { if (!win) return; if (win.isMaximized()) win.unmaximize(); else win.maximize(); });
-ipcMain.on('close-window', () => win && win.close());
+ipcMain.on('close-window', () => {
+  // log para diagnóstico: prova que o clique chegou e o que aconteceu
+  try {
+    const dir = path.join(process.env.LOCALAPPDATA || os.homedir(), 'VLOptimizer');
+    try { fs.mkdirSync(dir, { recursive: true }); } catch (e) { }
+    fs.appendFileSync(path.join(dir, 'crash.log'), '[' + new Date().toISOString() + '] close-window: pedido de fechar (elevado=' + isAdmin + ')' + String.fromCharCode(10));
+  } catch (e) { }
+  if (win && !win.isDestroyed()) win.close();
+  else { app.isQuitting = true; app.quit(); }
+});
 ipcMain.on('logout', () => win && win.close());
 ipcMain.on('open-scaling-window', () => createScaling());
 
@@ -715,15 +860,82 @@ app.whenReady().then(async () => {
     return;
   }
 
-  // Administrador: sem elevação, serviços/DISM/energia falham. Tenta uma vez e, se o UAC for
-  // cancelado, segue em modo limitado com aviso na tela.
-  isAdmin = await feat.isAdmin();
-  if (isAdmin && process.argv.includes('--elevated')) {
+  // Administrador: sem elevação, serviços/DISM/energia falham.
+  //
+  // A partir da 1.4.2 o app abre elevado SEM UAC: o instalador registra a tarefa
+  // agendada "VLOptimizer" (RunLevel HighestAvailable) e toda abertura passa por ela
+  // (`schtasks /run`). Quando o Windows dispara a tarefa, o processo chega com
+  // --elevated-from-task. Ver elevacao.js.
+  isAdmin = await elev.isAdmin();
+  const veioDaTarefa = elev.veioDaTarefa();
+  if (isAdmin && (veioDaTarefa || process.argv.includes('--elevated'))) {
     // instância elevada: deixa o marcador para a original saber que subiu
     try { fs.writeFileSync(path.join(app.getPath('userData'), 'elevated.lock'), String(Date.now())); } catch (e) {}
   }
-  // A elevação é sob demanda: o app abre sempre; a faixa no topo oferece "Reabrir como admin".
-  // (auto-elevação no start se mostrou frágil: se o UAC é cancelado a janela não abria)
+
+  // ── Auto-elevação no boot (igual ao GDZ) ────────────────────────────────
+  //
+  // A tarefa "VLOptimizer" abre o app ELEVADO sem UAC. O Agendador tem
+  // MultipleInstances=IgnoreNew: com uma instância viva ele descarta a execução e mesmo
+  // assim o schtasks devolve "ÊXITO". Por isso o disparo é feito por um processo externo
+  // curto, ~2 s depois que esta instância sair.
+  //
+  // Guardas:
+  //   - a instância elevada chega com --elevated-from-task e não entra aqui (sem laço)
+  //   - auto-elevou.lock impede nova tentativa por 15 s
+  //   - --sem-auto-elevar desliga (usado em testes)
+  //   - sem tarefa registrada, nada acontece: abre normal, em modo limitado
+  if (!isAdmin && !veioDaTarefa && !process.argv.includes('--elevated') && !isSmoke) {
+    try {
+      if (await elev.pronta()) {
+        const marcador = path.join(app.getPath('userData'), 'auto-elevou.lock');
+
+        // O lock guarda "QUANDO|QUEM" (timestamp|pid). Só vale se o processo que tentou
+        // ainda estiver vivo e a tentativa for recente.
+        //
+        // Só com timestamp (15 s) a elevação alternava: fechar e reabrir dentro da janela
+        // caía no lock e abria não elevado, mesmo sem nenhuma instância viva.
+        let podeTentar = true;
+        try {
+          const bruto = String(fs.readFileSync(marcador, 'utf8') || '').trim();
+          const [quandoTxt, pidTxt] = bruto.split('|');
+          const quando = Number(quandoTxt) || 0;
+          const pidAntigo = Number(pidTxt) || 0;
+          if (quando && Date.now() - quando < 15000 && pidAntigo && pidAntigo !== process.pid) {
+            // ainda dentro da janela E o processo dono do lock continua vivo?
+            let vivo = false;
+            try { process.kill(pidAntigo, 0); vivo = true; } catch (e) { vivo = false; }
+            if (vivo) podeTentar = false;
+          }
+        } catch (e) { podeTentar = true; }
+
+        if (podeTentar) {
+          // Arquivo de desligamento: a tarefa não repassa os argumentos desta instância
+          // para a elevada, então --sem-auto-elevar não chegaria lá. O arquivo chega.
+          const desligado = path.join(app.getPath('userData'), 'auto-elevar-off.lock');
+          const podeElevar = !fs.existsSync(desligado);
+          if (podeElevar) {
+            try { fs.writeFileSync(marcador, String(Date.now()) + '|' + String(process.pid)); } catch (e) { }
+
+            // Mesmo mecanismo do botão "Reabrir como admin", que foi provado:
+            // processo externo espera esta instância sair e só então dispara a tarefa.
+            const { spawn } = require('child_process');
+            const filho = spawn('cmd.exe', ['/c', 'ping -n 3 127.0.0.1 >nul & schtasks /run /tn VLOptimizer'], {
+              detached: true,
+              stdio: 'ignore',
+              windowsHide: true,
+            });
+            filho.unref();
+
+            app.isQuitting = true;
+            setTimeout(() => { try { app.quit(); } catch (e) { } }, 200);
+            return;
+          }
+        }
+      }
+    } catch (e) { }
+  }
+
   createWindow();
   startTicker();
   try {
@@ -736,6 +948,21 @@ app.whenReady().then(async () => {
     globalShortcut.register('Control+Alt+B', async () => {
       const r = await ex.fpsBaseMark();
       if (win && !win.isDestroyed()) win.webContents.send('fps-hotkey', r);
+    });
+  } catch (e) {}
+
+  // Saída de emergência: Ctrl+Shift+Q encerra o app.
+  //
+  // Quando o app roda ELEVADO, o clique no botão X é filtrado pelo UIPI e a janela não
+  // fecha (medido pelo auditor: clique sintético não chega; só WC_SYSCOMMAND/SC_CLOSE de
+  // um processo de integridade igual passa). O atalho global é registrado por ESTE
+  // processo, que já está elevado — a mensagem nasce com o mesmo nível e atravessa.
+  // app.exit(0) sai na hora, sem depender de fechar janela.
+  try {
+    globalShortcut.register('Control+Shift+Q', () => {
+      try { fs.appendFileSync(path.join(process.env.LOCALAPPDATA || os.homedir(), 'VLOptimizer', 'crash.log'), '[' + new Date().toISOString() + '] atalho Ctrl+Shift+Q: saindo' + String.fromCharCode(10)); } catch (e) { }
+      app.isQuitting = true;
+      app.exit(0);
     });
   } catch (e) {}
   feat.autoStart();
@@ -802,17 +1029,29 @@ app.on("render-process-gone", (event, webContents, details) => {
   // Saída normal do app: qualquer filho que caia agora é consequência, não causa.
   if (logSaidaNormal()) return;
 
-  // 'killed' = encerrado de fora (Gerenciador de Tarefas, taskkill). Não é falha.
-  if (motivo === "killed" || motivo === "launch-failed") {
-    logCrash("renderer encerrado de fora (" + motivo + ")");
+  // Quem caiu: a janela principal ou uma secundária (overlay do FPS, scaling)?
+  //
+  // Antes a comparação era `webContents !== win.webContents`. Depois de uma recriação o
+  // webContents é outro objeto, então os crashes seguintes eram classificados como
+  // "secundário" e o contador de anti-laço nunca chegava a 2: o freio não existia.
+  // Agora compara também pelo id e pelo estado da janela.
+  const ehPrincipal = (() => {
+    if (!win || win.isDestroyed()) return false;
+    try { if (webContents === win.webContents) return true; } catch (e) { }
+    try { if (webContents && win.webContents && webContents.id === win.webContents.id) return true; } catch (e) { }
+    // janela principal viva mas sem webContents válido: é ela que caiu
+    try { return !win.webContents || win.webContents.isDestroyed(); } catch (e) { return false; }
+  })();
+
+  if (!ehPrincipal) {
+    logCrash("renderer secundário caiu (" + motivo + "); janela principal segue");
     return;
   }
 
-  // Só a janela PRINCIPAL interessa. Sem este filtro, o crash do overlay do FPS
-  // recriava a janela principal e o usuário ficava com duas na tela.
-  if (!win || win.isDestroyed() || webContents !== win.webContents) {
-    logCrash("renderer secundário caiu (" + motivo + "); janela principal segue");
-    return;
+  // 'killed' = encerrado de fora (Gerenciador de Tarefas, taskkill, ou OOM do sistema).
+  // Antes era ignorado e a janela ficava na tela, congelada, sem renderer nenhum.
+  if (motivo === "killed") {
+    logCrash("renderer da janela principal encerrado de fora; recriando a janela");
   }
 
   logCrash("janela principal caiu: " + motivo + " (exitCode " + ((details && details.exitCode) || 0) + ")");
@@ -836,7 +1075,9 @@ app.on("render-process-gone", (event, webContents, details) => {
     setTimeout(() => {
       // Se o app já está fechando, não ressuscitar a janela: travaria o fechamento.
       if (app.isQuitting) { logCrash("app fechando; nao recriar"); return; }
-      try { if (!win || win.isDestroyed()) createWindow(); } catch (e) { logCrash("falha ao recriar: " + e.message); }
+      recriandoJanela = true;
+      try { if (!win || win.isDestroyed()) createWindow(); } catch (e) { logCrash('falha ao recriar: ' + e.message); }
+      finally { setTimeout(() => { recriandoJanela = false; }, 1500); }
     }, 250);
   } catch (e) { logCrash("falha ao agendar recriação: " + e.message); }
 });
@@ -853,4 +1094,15 @@ app.on("web-contents-created", (event, wc) => {
   wc.on("responsive", () => logCrash("janela voltou a responder"));
   wc.on("did-fail-load", (e, code, desc, url) => logCrash("falha ao carregar " + url + ": " + desc + " (" + code + ")"));
 });
-process.on('uncaughtException', (e) => { try { fs.appendFileSync(path.join(os.tmpdir(), 'lopt-error.log'), String(e && e.stack || e) + '\n'); } catch (_) {} });
+// Erro nao tratado no processo principal.
+//
+// Antes gravava em %TEMP%\lopt-error.log e nao fazia mais nada. O arquivo nem existia
+// nas verificacoes (o TEMP do app e outro), entao o suporte ficava cego. Agora vai para
+// a pasta de dados do app, que e a mesma que o crash.log usa.
+process.on('uncaughtException', (e) => {
+  try {
+    const dir = path.join(process.env.LOCALAPPDATA || os.homedir(), 'VLOptimizer');
+    try { fs.mkdirSync(dir, { recursive: true }); } catch (_) { }
+    fs.appendFileSync(path.join(dir, 'crash.log'), '[' + new Date().toISOString() + '] erro nao tratado: ' + String((e && e.stack) || e) + String.fromCharCode(10));
+  } catch (_) { }
+});

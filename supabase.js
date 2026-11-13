@@ -179,7 +179,14 @@ async function renovar(s) {
     method: 'POST',
     body: JSON.stringify({ refresh_token: s.refresh_token }),
   });
-  if (!r.ok) { gravarSessao(null); return null; }
+  if (!r.ok) {
+    // status 0 = nao houve resposta (sem rede, DNS, servidor fora). Nao e revogacao.
+    // Antes o app apagava a sessao e mandava quem pagou para a tela de login por
+    // causa de 3 segundos sem internet.
+    if (r.status === 0) return null;
+    gravarSessao(null);
+    return null;
+  }
   const novo = {
     access_token: r.dados.access_token,
     refresh_token: r.dados.refresh_token || s.refresh_token,
@@ -367,7 +374,19 @@ async function sessao() {
   const p = await perfil(s);
   if (!p) return { valid: false };
   const v = await verificarPc(s);
-  return { valid: true, user: { ...p, ...v } };
+  // O verificar_pc devolve reason ('other_device'), pcBound e success. O spread
+  // simples perdia o 'success', e o conta-plano so olhava 'expirada'. Resultado:
+  // o plano vitalicio funcionava em QUALQUER PC, bastando copiar o sessao.json.
+  return {
+    valid: true,
+    user: {
+      ...p,
+      ...v,
+      pcAprovado: !(v && v.success === false),
+      reason: (v && v.reason) || null,
+      pcBound: !!(v && v.pcBound),
+    },
+  };
 }
 
 function sair() {
