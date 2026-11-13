@@ -668,11 +668,20 @@ if (!obteveLock) {
   app.quit();
 } else {
   app.on('second-instance', () => {
-    // Segunda abertura: traz a janela existente para a frente em vez de criar outra.
-    if (win && !win.isDestroyed()) {
+    // Segunda abertura: em vez de subir outra cópia, reaproveita esta.
+    //
+    // Se a janela principal morreu (o overlay segura o processo vivo), antes eu não fazia
+    // nada e a nova abertura também saía — o app ficava impossível de abrir. Agora recria.
+    try {
+      if (!win || win.isDestroyed()) {
+        createWindow();
+        return;
+      }
       if (win.isMinimized()) win.restore();
       win.show();
       win.focus();
+    } catch (e) {
+      logCrash('falha ao tratar segunda abertura: ' + e.message);
     }
   });
   iniciar();
@@ -738,6 +747,27 @@ app.whenReady().then(async () => {
 });
 
 }
+
+// ── Vigia do zumbi ─────────────────────────────────────────────────────────
+// O lock de instância única só é liberado quando o processo dono termina. Se a janela
+// principal cair e o overlay segurar o processo vivo, o app fica sem janela nenhuma e
+// toda abertura nova sai calada — foi o "abriu uma vez e não abre mais".
+// Aqui, se a janela principal ficou destruída por mais de 20 s, o app se encerra e
+// libera o lock para a próxima abertura.
+let semJanelaDesde = 0;
+setInterval(() => {
+  try {
+    if (app.isQuitting) return;
+    const semJanela = !win || win.isDestroyed();
+    if (!semJanela) { semJanelaDesde = 0; return; }
+    if (!semJanelaDesde) { semJanelaDesde = Date.now(); return; }
+    if (Date.now() - semJanelaDesde > 20000) {
+      logCrash('janela principal ausente ha 20 s; encerrando para liberar o lock');
+      app.isQuitting = true;
+      app.quit();
+    }
+  } catch (e) { }
+}, 5000).unref();
 
 // Marca que o app está fechando: usado pela recuperação de crash para não
 // recriar a janela no meio da saída.
