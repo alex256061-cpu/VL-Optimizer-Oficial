@@ -40,12 +40,44 @@ function New-Key($p) { if (-not (Test-Path -LiteralPath $p)) { New-Item -Path $p
 function Get-Val($p, $n) { try { (Get-ItemProperty -LiteralPath $p -Name $n -ErrorAction Stop).$n } catch { $null } }
 function Set-Val($p, $n, $v, $t) {
   New-Key $p
-  $cur = Get-Val $p $n
-  if ($null -eq $cur) { New-ItemProperty -LiteralPath $p -Name $n -Value $v -PropertyType $t -Force | Out-Null }
-  else { Set-ItemProperty -LiteralPath $p -Name $n -Value $v -Force | Out-Null }
+  # O tipo precisa ser respeitado TAMBÉM quando o valor já existe.
+  #
+  # Set-ItemProperty não aceita -PropertyType: ele grava no tipo que já está lá. Numa
+  # restauração o valor quase sempre existe, então um Binary voltava como String e o
+  # conteúdo virava o texto "1 2 3 255". Aqui a chave é removida e recriada com o tipo
+  # pedido sempre que o tipo atual for diferente.
+  $tipoAtual = $null
+  try {
+    $k = Get-Item -LiteralPath $p -ErrorAction Stop
+    if ($k.GetValueNames() -contains $n) { $tipoAtual = [string]$k.GetValueKind($n) }
+  } catch { }
+  $mesmoTipo = $false
+  if ($tipoAtual) {
+    $mapa = @{ DWord = 'DWord'; String = 'String'; QWord = 'QWord'; Binary = 'Binary'; MultiString = 'MultiString'; ExpandString = 'ExpandString' }
+    if ($mapa.ContainsKey($t)) { $mesmoTipo = ($tipoAtual -ieq $mapa[$t]) }
+  }
+  if ($tipoAtual -and $mesmoTipo) {
+    Set-ItemProperty -LiteralPath $p -Name $n -Value $v -Force -ErrorAction Stop | Out-Null
+  } else {
+    if ($tipoAtual) { Remove-ItemProperty -LiteralPath $p -Name $n -Force -ErrorAction SilentlyContinue }
+    New-ItemProperty -LiteralPath $p -Name $n -Value $v -PropertyType $t -Force -ErrorAction Stop | Out-Null
+  }
 }
 function Del-Val($p, $n) { Remove-ItemProperty -LiteralPath $p -Name $n -ErrorAction SilentlyContinue }
-function Svc($n, $mode) { $s = Get-Service -Name $n -ErrorAction SilentlyContinue; if ($s) { Set-Service -Name $n -StartupType $mode -ErrorAction SilentlyContinue; if ($mode -eq 'Disabled') { Stop-Service -Name $n -Force -ErrorAction SilentlyContinue } else { Start-Service -Name $n -ErrorAction SilentlyContinue } } }
+function Svc($n, $mode) {
+  # -ErrorAction Stop e conferir o StartType depois: no HKLM sem administrador o
+  # Set-Service dava "Acesso negado", o SilentlyContinue engolia e a função devolvia
+  # sucesso — o app dizia "concluído" com o serviço ainda ligado.
+  $s = Get-Service -Name $n -ErrorAction SilentlyContinue
+  if (-not $s) { return }
+  try {
+    Set-Service -Name $n -StartupType $mode -ErrorAction Stop
+    if ($mode -eq 'Disabled') { Stop-Service -Name $n -Force -ErrorAction SilentlyContinue }
+    else { Start-Service -Name $n -ErrorAction SilentlyContinue }
+  } catch {
+    throw ("nao foi possivel mudar o servico " + $n + ": " + $_.Exception.Message)
+  }
+}
 function Json($o) { ConvertTo-Json -InputObject $o -Compress -Depth 8 }
 `;
 
@@ -77,7 +109,18 @@ const BACKUP_FILE = () => path.join(DATA_DIR, 'backups.json');
 let backs = null;
 function loadBackups() {
   if (backs) return backs;
-  try { backs = JSON.parse(fs.readFileSync(BACKUP_FILE(), 'utf8')); } catch (e) { backs = {}; }
+  try {
+    const txt = fs.readFileSync(BACKUP_FILE(), 'utf8');
+    const j = JSON.parse(txt);
+    backs = (j && typeof j === 'object') ? j : {};
+  } catch (e) {
+    // Arquivo NAO existe: normal, comeca vazio.
+    if (e && e.code === 'ENOENT') { backs = {}; return backs; }
+    // Arquivo existe e nao abre (truncado, gravacao cortada): guardar copia e comecar vazio.
+    // Antes devolvia {} e a gravacao seguinte sobrescrevia tudo — o desfazer do usuario sumia.
+    try { fs.copyFileSync(BACKUP_FILE(), BACKUP_FILE() + '.corrompido-' + Date.now()); } catch (_) { }
+    backs = {};
+  }
   return backs;
 }
 function saveBackups() {
@@ -127,8 +170,22 @@ async function restoreBackup(key) {
   const lines = [];
   for (const r of st.reg) {
     if (r.exists) {
-      const lit = typeof r.value === 'string' ? `'${String(r.value).replace(/'/g, "''")}'` : String(r.value);
-      lines.push(`Set-Val '${r.path}' '${r.name}' ${lit} '${typeof r.value === 'number' ? 'DWord' : 'String'}'`);
+      // Tipo do valor. Binary e MultiString eram gravados como String: um array
+      // [1,2,3,255] virava o texto "1 2 3 255" e o registro ficava corrompido para sempre.
+      const tipo = r.kind || (typeof r.value === 'number' ? 'DWord' : 'String');
+      if (tipo === 'Binary') {
+        const bytes = Array.isArray(r.value) ? r.value.join(',') : String(r.value || '');
+        lines.push(`Set-Val '${r.path}' '${r.name}' ${bytes} 'Binary'`);
+      } else if (tipo === 'MultiString') {
+        const itens = (Array.isArray(r.value) ? r.value : [String(r.value == null ? '' : r.value)])
+          .map((x) => String(x).replace(/'/g, "''")).join("','");
+        lines.push(`Set-Val '${r.path}' '${r.name}' '${itens}' 'MultiString'`);
+      } else if (tipo === 'QWord') {
+        lines.push(`Set-Val '${r.path}' '${r.name}' ${Number(r.value) || 0} 'QWord'`);
+      } else {
+        const lit = typeof r.value === 'string' ? `'${String(r.value).replace(/'/g, "''")}'` : String(r.value);
+        lines.push(`Set-Val '${r.path}' '${r.name}' ${lit} '${tipo}'`);
+      }
     } else {
       lines.push(`Del-Val '${r.path}' '${r.name}'`);
     }
@@ -177,7 +234,11 @@ async function restoreBackup(key) {
     }
   }
 
-  const deuCerto = confere && (run.ok || !!st.custom);
+  // run.ok = o PowerShell executou sem erro; NAO quer dizer que a mudanca aconteceu.
+  // Antes um comando sem efeito apagava o backup. So descarta com a conferencia aprovada.
+  // Itens so de servico/custom nao tem registro para conferir: ai vale o resultado do comando.
+  const temReg = !!(st.reg && st.reg.length);
+  const deuCerto = temReg ? confere : (run.ok || !!st.custom);
   if (deuCerto) {
     delete b[key];
     saveBackups();

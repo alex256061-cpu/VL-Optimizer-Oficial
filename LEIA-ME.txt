@@ -19,7 +19,7 @@ Requisitos
 
 Instalacao
 ----------
-1. Abra Instalar-VL-Optimizer-1.2.2.exe
+1. Abra Instalar-VL-Optimizer-1.4.6.exe
 2. O Windows vai avisar que o aplicativo nao tem assinatura digital. Clique em
    "Mais informacoes" e depois em "Executar assim mesmo". Esse aviso aparece em qualquer
    programa baixado da internet que nao tenha certificado de assinatura.
@@ -104,3 +104,19 @@ Licencas de terceiros
 PresentMon: resources/app/bin/PresentMon.LICENSE.txt
 FSR (AMD, MIT): resources/app/FSR.LICENSE.txt
 Lossless Scaling: resources/app/native/lossless/Licenses.txt
+
+
+ATALHOS E SAIDA DE EMERGENCIA
+-----------------------------
+- Ctrl + Alt + B  : marca a base de FPS dentro do jogo
+- Ctrl + Shift + Q: encerra o VL Optimizer na hora
+
+O VL abre como administrador automaticamente (sem pedir senha). Quando ele roda
+elevado, o botao X pode nao responder ao clique - isso e uma protecao do proprio
+Windows, que nao deixa um clique comum mandar fechar um programa elevado.
+
+Se o X nao responder, faca um destes:
+1. Aperte Ctrl + Shift + Q (o mais rapido)
+2. Gerenciador de Tarefas > detalhes > encerrar "VL Optimizer"
+
+O atalho Ctrl + Shift + Q funciona sempre, elevado ou nao.
