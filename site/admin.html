@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Painel · VL Optimizer</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="assets/icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="admin.css?v=2">
+</head>
+<body class="adm">
+
+<div class="adm-carregando" id="carregando"><div><span class="adm-spin"></span> Carregando o painel...</div></div>
+
+<div class="adm-layout" id="painel" style="display:none">
+
+  <!-- menu lateral -->
+  <aside class="adm-menu">
+    <div class="adm-marca">
+      <img src="assets/icon.png" alt="">
+      <div><b>VL <span>Optimizer</span></b><small>Painel</small></div>
+    </div>
+
+    <nav class="adm-nav">
+      <a class="adm-item on" data-tab="resumo">Resumo</a>
+      <a class="adm-item" data-tab="usuarios">Usuários</a>
+      <a class="adm-item" data-tab="pcs">Computadores</a>
+      <a class="adm-item" data-tab="liberar">Liberar acesso</a>
+    </nav>
+
+    <div class="adm-pe">
+      <div class="adm-quem" id="quem">—</div>
+      <a class="adm-sair" id="sair">Sair</a>
+    </div>
+  </aside>
+
+  <!-- conteúdo -->
+  <main class="adm-conteudo">
+
+    <!-- RESUMO -->
+    <section class="adm-tab on" id="tab-resumo">
+      <div class="adm-cabeca">
+        <h1>Resumo</h1>
+        <p>Números da conta: quem entrou, quem pagou e quantos PCs estão ligados.</p>
+      </div>
+
+      <div class="adm-cards" id="cards">
+        <div class="adm-card"><div class="adm-card-n" id="c-usuarios">—</div><div class="adm-card-r">Usuários</div></div>
+        <div class="adm-card"><div class="adm-card-n" id="c-pagos">—</div><div class="adm-card-r">Contas pagas</div></div>
+        <div class="adm-card"><div class="adm-card-n" id="c-gratis">—</div><div class="adm-card-r">Contas grátis</div></div>
+        <div class="adm-card"><div class="adm-card-n" id="c-pcs">—</div><div class="adm-card-r">Computadores</div></div>
+      </div>
+
+      <div class="adm-bloco">
+        <h2>Licenças</h2>
+        <div class="adm-linhas">
+          <div class="adm-linha"><span>Ativas</span><b id="l-ativas">—</b></div>
+          <div class="adm-linha"><span>Vencidas</span><b id="l-vencidas">—</b></div>
+          <div class="adm-linha"><span>Vitalícias</span><b id="l-vital">—</b></div>
+        </div>
+      </div>
+
+      <div class="adm-bloco">
+        <h2>Novas contas</h2>
+        <div class="adm-linhas">
+          <div class="adm-linha"><span>Últimos 7 dias</span><b id="l-7d">—</b></div>
+          <div class="adm-linha"><span>Últimos 30 dias</span><b id="l-30d">—</b></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- USUÁRIOS -->
+    <section class="adm-tab" id="tab-usuarios">
+      <div class="adm-cabeca">
+        <h1>Usuários</h1>
+        <p>Todos que criaram conta. Você pode liberar, renovar ou tirar o acesso.</p>
+      </div>
+
+      <div class="adm-filtros">
+        <input type="search" id="busca" placeholder="Procurar por e-mail ou nome...">
+        <select id="filtro-plano">
+          <option value="">Todos</option>
+          <option value="ativo">Ativos</option>
+          <option value="vitalicio">Vitalícios</option>
+          <option value="vencido">Vencidos</option>
+          <option value="gratis">Grátis</option>
+        </select>
+      </div>
+
+      <div class="adm-tabela-wrap">
+        <table class="adm-tabela">
+          <thead>
+            <tr>
+              <th>E-mail</th>
+              <th>Nome</th>
+              <th>Plano</th>
+              <th>Vence</th>
+              <th>PCs</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody id="tb-usuarios"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- PCs -->
+    <section class="adm-tab" id="tab-pcs">
+      <div class="adm-cabeca">
+        <h1>Computadores</h1>
+        <p>Máquinas ligadas às contas. Cada conta tem o seu limite.</p>
+      </div>
+      <div class="adm-tabela-wrap">
+        <table class="adm-tabela">
+          <thead>
+            <tr><th>PC</th><th>Conta</th><th>Placa</th><th>ID</th><th>Último acesso</th></tr>
+          </thead>
+          <tbody id="tb-pcs"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- LIBERAR -->
+    <section class="adm-tab" id="tab-liberar">
+      <div class="adm-cabeca">
+        <h1>Liberar acesso</h1>
+        <p>Para quem pagou por fora: digite o e-mail da conta e escolha o prazo.</p>
+      </div>
+
+      <div class="adm-form">
+        <label>E-mail da conta</label>
+        <input type="email" id="lib-email" placeholder="cliente@gmail.com">
+
+        <label>Prazo</label>
+        <select id="lib-dias">
+          <option value="30">30 dias</option>
+          <option value="90">90 dias</option>
+          <option value="365">365 dias</option>
+          <option value="">Vitalício</option>
+        </select>
+
+        <button class="adm-btn" id="lib-ok">Liberar</button>
+        <div class="adm-aviso" id="lib-aviso"></div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<div class="adm-bloqueio" id="bloqueio" style="display:none">
+  <div>
+    <h2>Acesso restrito</h2>
+    <p id="bloqueio-txt">Só administradores veem esta página.</p>
+    <a class="btn btn-primary" href="/conta">Voltar para a minha conta</a>
+  </div>
+</div>
+
+<script src="supabase-client.js?v=2"></script>
+<script src="admin.js?v=2"></script>
+</body>
+</html>

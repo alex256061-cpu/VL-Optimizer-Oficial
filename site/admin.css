@@ -1,0 +1,180 @@
+/* admin.css — painel administrativo */
+
+body.adm {
+  background: var(--bg);
+  min-height: 100vh;
+}
+
+.adm-carregando {
+  position: fixed; inset: 0; z-index: 60;
+  background: var(--bg); display: grid; place-items: center;
+  font-size: 13px; color: var(--muted);
+}
+.adm-carregando div { display: flex; align-items: center; gap: 11px; }
+
+.adm-spin {
+  width: 15px; height: 15px;
+  border: 2px solid rgba(255, 255, 255, 0.28);
+  border-top-color: var(--red); border-radius: 50%;
+  animation: admGirar 0.6s linear infinite;
+}
+@keyframes admGirar { to { transform: rotate(360deg); } }
+
+.adm-layout {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  min-height: 100vh;
+}
+
+/* ── menu lateral ── */
+.adm-menu {
+  background: #0b0611;
+  border-right: 1px solid var(--line);
+  display: flex; flex-direction: column;
+  padding: 22px 14px;
+  position: sticky; top: 0; height: 100vh;
+}
+
+.adm-marca {
+  display: flex; align-items: center; gap: 10px;
+  padding: 0 8px 22px; border-bottom: 1px solid var(--line); margin-bottom: 18px;
+}
+.adm-marca img { width: 30px; height: 30px; border-radius: 9px; }
+.adm-marca b { display: block; font-size: 13px; font-weight: 800; color: var(--text); }
+.adm-marca b span { color: var(--red); }
+.adm-marca small { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; }
+
+.adm-nav { display: grid; gap: 3px; flex: 1; }
+.adm-item {
+  display: block; padding: 10px 12px; border-radius: 9px;
+  font-size: 13.5px; font-weight: 600; color: var(--muted);
+  cursor: pointer; text-decoration: none; transition: 0.15s;
+}
+.adm-item:hover { background: rgba(255, 255, 255, 0.04); color: var(--text); }
+.adm-item.on { background: rgba(255, 31, 46, 0.12); color: #ff6b74; font-weight: 800; }
+
+.adm-pe { border-top: 1px solid var(--line); padding-top: 14px; }
+.adm-quem { font-size: 11.5px; color: var(--muted); margin-bottom: 8px; word-break: break-all; }
+.adm-sair { font-size: 12px; color: var(--muted); cursor: pointer; text-decoration: none; }
+.adm-sair:hover { color: var(--red); }
+
+/* ── conteúdo ── */
+.adm-conteudo { padding: 34px 38px 70px; max-width: 1100px; }
+
+.adm-tab { display: none; }
+.adm-tab.on { display: block; }
+
+.adm-cabeca { margin-bottom: 28px; }
+.adm-cabeca h1 { font-size: 27px; font-weight: 900; letter-spacing: -0.02em; color: var(--text); margin: 0 0 7px; }
+.adm-cabeca p { font-size: 13.5px; color: var(--muted); margin: 0; line-height: 1.6; }
+
+/* cards */
+.adm-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 13px; margin-bottom: 26px; }
+.adm-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--line);
+  border-radius: 14px; padding: 20px;
+}
+.adm-card-n { font-size: 32px; font-weight: 900; color: var(--text); letter-spacing: -0.03em; line-height: 1; }
+.adm-card-r { font-size: 11.5px; color: var(--muted); margin-top: 7px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; }
+
+/* blocos */
+.adm-bloco {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--line);
+  border-radius: 14px; padding: 20px 22px; margin-bottom: 14px;
+}
+.adm-bloco h2 { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0 0 14px; }
+.adm-linhas { display: grid; gap: 10px; }
+.adm-linha { display: flex; justify-content: space-between; align-items: center; font-size: 13.5px; color: var(--muted); }
+.adm-linha b { color: var(--text); font-weight: 800; font-size: 15px; }
+
+/* filtros */
+.adm-filtros { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+.adm-filtros input, .adm-filtros select {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line);
+  border-radius: 9px; padding: 10px 13px;
+  color: var(--text); font-size: 13px; font-family: inherit; outline: none;
+}
+.adm-filtros input { flex: 1; min-width: 220px; }
+.adm-filtros input:focus, .adm-filtros select:focus { border-color: rgba(255, 31, 46, 0.5); }
+
+/* tabela */
+.adm-tabela-wrap {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--line);
+  border-radius: 14px; overflow: auto;
+}
+.adm-tabela { width: 100%; border-collapse: collapse; font-size: 13px; }
+.adm-tabela th {
+  text-align: left; padding: 13px 15px;
+  font-size: 10.5px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: 0.07em; color: var(--muted);
+  border-bottom: 1px solid var(--line); white-space: nowrap;
+}
+.adm-tabela td { padding: 12px 15px; border-bottom: 1px solid rgba(255, 255, 255, 0.04); color: var(--muted); }
+.adm-tabela tr:last-child td { border-bottom: 0; }
+.adm-tabela tr:hover td { background: rgba(255, 255, 255, 0.02); }
+.adm-tabela .email { color: var(--text); font-weight: 600; }
+.adm-tabela .num { font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+
+.tag {
+  display: inline-block; font-size: 10.5px; font-weight: 800;
+  padding: 3px 9px; border-radius: 999px;
+  text-transform: uppercase; letter-spacing: 0.05em;
+}
+.tag.ativo { background: rgba(60, 220, 130, 0.12); color: #7ee6a8; border: 1px solid rgba(60, 220, 130, 0.3); }
+.tag.vitalicio { background: rgba(90, 160, 255, 0.13); color: #8fbcff; border: 1px solid rgba(90, 160, 255, 0.3); }
+.tag.vencido { background: rgba(255, 60, 60, 0.12); color: #ff9a9a; border: 1px solid rgba(255, 60, 60, 0.3); }
+.tag.gratis { background: rgba(255, 255, 255, 0.06); color: var(--muted); border: 1px solid var(--line); }
+
+.adm-acao {
+  border: 1px solid var(--line); background: rgba(255, 255, 255, 0.04);
+  color: var(--text); font-size: 11.5px; font-weight: 700;
+  padding: 5px 10px; border-radius: 7px; cursor: pointer;
+  font-family: inherit; margin-right: 5px; transition: 0.15s;
+}
+.adm-acao:hover { border-color: rgba(255, 31, 46, 0.45); background: rgba(255, 31, 46, 0.08); }
+.adm-acao.perigo:hover { border-color: rgba(255, 60, 60, 0.5); background: rgba(255, 60, 60, 0.1); color: #ff9a9a; }
+
+/* formulário liberar */
+.adm-form {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--line);
+  border-radius: 14px; padding: 24px; max-width: 460px;
+}
+.adm-form label { display: block; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); margin: 0 0 7px; }
+.adm-form input, .adm-form select {
+  width: 100%; box-sizing: border-box; margin-bottom: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line); border-radius: 9px;
+  padding: 11px 13px; color: var(--text); font-size: 13.5px; font-family: inherit; outline: none;
+}
+.adm-form input:focus, .adm-form select:focus { border-color: rgba(255, 31, 46, 0.5); }
+
+.adm-btn {
+  width: 100%; border: 0; border-radius: 10px; padding: 13px;
+  background: linear-gradient(135deg, var(--red), var(--red2, #c00c1a));
+  color: #fff; font-size: 14px; font-weight: 800;
+  cursor: pointer; font-family: inherit; transition: 0.18s;
+}
+.adm-btn:hover:not(:disabled) { transform: translateY(-1px); }
+.adm-btn:disabled { opacity: 0.6; cursor: default; }
+
+.adm-aviso { font-size: 12.5px; line-height: 1.5; margin-top: 14px; min-height: 18px; }
+.adm-aviso.ok { color: #7ee6a8; }
+.adm-aviso.erro { color: #ff9a9a; }
+
+/* bloqueio */
+.adm-bloqueio { position: fixed; inset: 0; background: var(--bg); display: grid; place-items: center; text-align: center; padding: 24px; }
+.adm-bloqueio h2 { font-size: 22px; font-weight: 900; color: var(--text); margin: 0 0 10px; }
+.adm-bloqueio p { font-size: 13.5px; color: var(--muted); margin: 0 0 22px; }
+
+@media (max-width: 900px) {
+  .adm-layout { grid-template-columns: 1fr; }
+  .adm-menu { position: static; height: auto; }
+  .adm-nav { display: flex; overflow-x: auto; gap: 6px; }
+  .adm-cards { grid-template-columns: repeat(2, 1fr); }
+  .adm-conteudo { padding: 24px 18px 60px; }
+}
