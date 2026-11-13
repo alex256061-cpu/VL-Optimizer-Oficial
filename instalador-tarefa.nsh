@@ -47,7 +47,7 @@
   FileWriteUTF16LE $1 '<Principals><Principal id="Author"><UserId>$9'
   FileWriteUTF16LE $1 '</UserId><LogonType>InteractiveToken</LogonType><RunLevel>HighestAvailable</RunLevel></Principal></Principals>$\r$\n'
   FileWriteUTF16LE $1 '<Settings><MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy><DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries><StopIfGoingOnBatteries>false</StopIfGoingOnBatteries><AllowHardTerminate>true</AllowHardTerminate><StartWhenAvailable>false</StartWhenAvailable><RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable><IdleSettings><StopOnIdleEnd>false</StopOnIdleEnd><RestartOnIdle>false</RestartOnIdle></IdleSettings><AllowStartOnDemand>true</AllowStartOnDemand><Enabled>true</Enabled><Hidden>false</Hidden><RunOnlyIfIdle>false</RunOnlyIfIdle><ExecutionTimeLimit>PT0S</ExecutionTimeLimit><Priority>4</Priority><UseUnifiedSchedulingEngine>true</UseUnifiedSchedulingEngine></Settings>$\r$\n'
-  FileWriteUTF16LE $1 '<Triggers><LogonTrigger><Enabled>false</Enabled><UserId>$9'
+  FileWriteUTF16LE $1 '<Triggers><LogonTrigger><UserId>$9'
   FileWriteUTF16LE $1 '</UserId></LogonTrigger></Triggers>$\r$\n'
   FileWriteUTF16LE $1 '<Actions Context="Author"><Exec><Command>"$INSTDIR\${APP_EXECUTABLE_FILENAME}"</Command><Arguments>${VL_ELEV_FLAG}</Arguments><WorkingDirectory>$INSTDIR</WorkingDirectory></Exec></Actions>$\r$\n'
   FileWriteUTF16LE $1 '</Task>$\r$\n'
