@@ -4430,7 +4430,9 @@
 
       if (!alive()) return;
 
-      if (game && Number.isInteger(game.pid)) return bnConfirm(run, game);
+      const escolhido = bnPickGame(game, run.ignore);
+
+      if (escolhido) return bnConfirm(run, escolhido);
 
       if (Date.now() - t0 > BN_WAIT_MAX_MS) {
 
@@ -4453,6 +4455,30 @@
   }
 
   // Passo 2: confirmar que é esse o jogo.
+
+  // Escolhe UM jogo da resposta de bn-find-game.
+  //
+  // bn-find-game devolve { success:true, games:[...] }. A tela testava `game.pid` no
+  // objeto INTEIRO, então Number.isInteger(undefined) dava false sempre: o jogo
+  // aparecia a cada 3 s e era descartado a cada 3 s, até o timeout de 10 minutos —
+  // e a mensagem "Nenhum jogo apareceu" era falsa. O passo de confirmação e a medição
+  // nunca eram alcançados.
+  function bnPickGame(resposta, ignore) {
+    if (!resposta) return null;
+    let lista = resposta.games;
+    // tolera o formato antigo (um objeto só) para não quebrar se a engine mudar
+    if (!Array.isArray(lista)) lista = (resposta && Number.isInteger(Number(resposta.pid))) ? [resposta] : [];
+    const ign = Number(ignore) || 0;
+    for (const g of lista) {
+      if (!g) continue;
+      const pid = Number(g.pid);
+      if (!Number.isInteger(pid) || pid <= 0) continue;
+      if (pid === ign) continue;
+      return { pid, name: String(g.name || ""), title: String(g.title || ""), exe: String(g.name || "") + ".exe" };
+    }
+    return null;
+  }
+
 
   function bnConfirm(run, game) {
 

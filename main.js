@@ -670,7 +670,9 @@ H('fps-overlay-set', (patch) => {
 H('fps-base-mark', () => ex.fpsBaseMark());
 H('fps-base-clear', () => ex.fpsBaseClear());
 H('measure-bottleneck', (a) => ex.measureBottleneck(a));
-H('bn-find-game', () => ex.bnFindGame());
+// O argumento traz o `ignore` do "Não é esse". Antes ele era descartado e o laço
+// voltava sempre ao mesmo processo.
+H('bn-find-game', (a) => ex.bnFindGame(a || {}));
 H('bn-notify', (a) => {
   // Avisa pelo sistema quando o gargalo for detectado. Antes era um stub que dizia
   // "success" e nao mostrava nada.
