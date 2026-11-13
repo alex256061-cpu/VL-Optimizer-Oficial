@@ -533,6 +533,32 @@ H('conta-plano', async () => {
     return { ...PLANO_GRATIS, semLogin: true, erro: e.message };
   }
 });
+H('update-info', () => {
+  // Tudo o que a janela de atualização precisa, num chamado só:
+  //   versão instalada, versão disponível, o que mudou e o estado do download.
+  try {
+    const st = updater.status();
+    let notas = null;
+    try { notas = require('./notas-versao').notasDe(st.version); } catch (e) { notas = null; }
+    // se a versão nova não tem texto escrito à mão, usa o corpo do release
+    const doRelease = st.notes ? String(st.notes) : null;
+    return {
+      success: true,
+      atual: st.currentVersion,
+      disponivel: st.version,
+      temNova: !!st.available,
+      baixando: !!st.downloading,
+      baixado: !!st.downloaded,
+      percentual: st.percent || 0,
+      erro: st.error || null,
+      notas,
+      doRelease,
+      repo: st.repo,
+    };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
 H('update-status', () => {
   // Estado do auto-update (GitHub Releases). Sem rede ou sem release publicado, devolve o estado
   // atual com error preenchido: a tela mostra o aviso em vez de quebrar.
