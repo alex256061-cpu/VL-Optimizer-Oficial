@@ -80,11 +80,34 @@ function createWindow() {
     const pagina = logado ? 'dashboard.html' : 'login.html';
     win.loadFile(path.join(__dirname, 'src', pagina), process.argv.includes('--shots') ? { query: { shot: '1' } } : undefined);
   })();
-  win.once('ready-to-show', () => {
-    if (isSmoke) return;
-    win.show();
-    if (process.argv.includes('--silent')) win.minimize();
-  });
+  // Mostra a janela. O ready-to-show é o caminho normal; o prazo de 3 s é a rede de
+  // segurança para quando ele não chega (renderer pesado ou script travado) — sem ela
+  // o app fica aberto nos processos e o usuario ve so a area de trabalho.
+  let jaMostrou = false;
+  const mostrar = (motivo) => {
+    if (jaMostrou || isSmoke) return;
+    jaMostrou = true;
+    try {
+      if (!win || win.isDestroyed()) return;
+      if (process.argv.includes('--silent')) {
+        // Iniciado pelo Windows (autostart): aparece em segundo plano, sem tomar o foco.
+        // Antes chamava win.minimize(), o que deixava a janela em -32000,-32000: os
+        // processos rodavam, só o overlay aparecia, e quem clicava no atalho depois não
+        // achava a tela. Depois que o app já está aberto, o lock de instância única traz
+        // a janela para frente.
+        win.showInactive();
+        return;
+      }
+      win.show();
+      win.focus();
+    } catch (e) { }
+  };
+
+  win.once('ready-to-show', () => mostrar('ready-to-show'));
+  setTimeout(() => mostrar('prazo de seguranca'), 3000);
+
+  // Depois de aparecer, o aviso serve para liberar o renderer que ficou esperando.
+  win.webContents.on('did-finish-load', () => setTimeout(() => mostrar('did-finish-load'), 400));
 
   if (isSmoke) {
     win.webContents.once('did-finish-load', async () => {
@@ -635,6 +658,27 @@ ipcMain.on('gs-minimize', () => scalingWin && scalingWin.minimize());
 ipcMain.on('gs-maximize', () => { if (scalingWin) scalingWin.isMaximized() ? scalingWin.unmaximize() : scalingWin.maximize(); });
 ipcMain.on('gs-close', () => scalingWin && scalingWin.close());
 
+// ── Instância única ───────────────────────────────────────────────────────
+// Sem isto, abrir o app duas vezes (atalho, atualizador, clique repetido) sobe duas
+// cópias brigando pelo mesmo overlay do FPS, pelo PresentMon e pela pasta de dados.
+// O resultado era um crash em cascata: Utility → renderer → janela principal → GPU.
+const obteveLock = app.requestSingleInstanceLock();
+if (!obteveLock) {
+  // Já existe uma instância: esta apenas sai. O foco vai para a que já está aberta.
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    // Segunda abertura: traz a janela existente para a frente em vez de criar outra.
+    if (win && !win.isDestroyed()) {
+      if (win.isMinimized()) win.restore();
+      win.show();
+      win.focus();
+    }
+  });
+  iniciar();
+}
+
+function iniciar() {
 app.whenReady().then(async () => {
   if (process.argv.includes('--siteshot')) {
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -693,6 +737,8 @@ app.whenReady().then(async () => {
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
 
+}
+
 // Marca que o app está fechando: usado pela recuperação de crash para não
 // recriar a janela no meio da saída.
 app.on('before-quit', () => { app.isQuitting = true; });
@@ -706,6 +752,12 @@ app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(
 // window-all-closed e o app fecha sozinho sem explicar nada.
 // Reproduzido com chamadas IPC concorrentes (é o que o painel faz ao abrir).
 let recriacoes = [];
+// Registra um evento de processo. Aviso: "killed" e "crashed" são coisas diferentes —
+// o Electron reporta 'killed' quando o processo é encerrado de fora (taskkill, encerrar
+// pelo Gerenciador de Tarefas) e 'crashed' quando ele realmente falha. O log antigo
+// escrevia "caiu" nos dois casos e confundiu uma investigação inteira.
+function logSaidaNormal() { return !!(app && app.isQuitting); }
+
 function logCrash(texto) {
   try {
     const dir = path.join(process.env.LOCALAPPDATA || os.homedir(), "VLOptimizer");
@@ -716,6 +768,15 @@ function logCrash(texto) {
 
 app.on("render-process-gone", (event, webContents, details) => {
   const motivo = (details && details.reason) || "desconhecido";
+
+  // Saída normal do app: qualquer filho que caia agora é consequência, não causa.
+  if (logSaidaNormal()) return;
+
+  // 'killed' = encerrado de fora (Gerenciador de Tarefas, taskkill). Não é falha.
+  if (motivo === "killed" || motivo === "launch-failed") {
+    logCrash("renderer encerrado de fora (" + motivo + ")");
+    return;
+  }
 
   // Só a janela PRINCIPAL interessa. Sem este filtro, o crash do overlay do FPS
   // recriava a janela principal e o usuário ficava com duas na tela.
@@ -751,7 +812,10 @@ app.on("render-process-gone", (event, webContents, details) => {
 });
 
 app.on("child-process-gone", (event, details) => {
-  logCrash("processo " + ((details && details.type) || "?") + " caiu: " + ((details && details.reason) || "?"));
+  if (logSaidaNormal()) return;
+  const r = String((details && details.reason) || "?");
+  if (r === "killed") return;
+  logCrash("processo " + ((details && details.type) || "?") + " falhou: " + r);
 });
 
 app.on("web-contents-created", (event, wc) => {

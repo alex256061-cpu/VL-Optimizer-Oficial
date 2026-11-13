@@ -1281,7 +1281,12 @@ onScaleTypeChange();
   window.addEventListener('blur', function () { idle(true); });
   window.addEventListener('focus', function () { idle(false); });
   document.addEventListener('visibilitychange', function () { idle(document.hidden); });
-  if (document.hidden) idle(true);
+  // So pausa depois que a janela ja apareceu uma vez: durante o carregamento nada
+  // pode ficar pausado, senao a animacao de entrada trava a tela invisivel.
+  var jaApareceu = false;
+  window.addEventListener('focus', function () { jaApareceu = true; idle(false); });
+  setTimeout(function () { jaApareceu = true; idle(false); }, 4000);
+  if (jaApareceu && document.hidden) idle(true);
 })();
 </script>
 </body>
