@@ -1290,7 +1290,7 @@
 
         <div class="user-info">
 
-          <div class="user-name" id="uname">gordi</div>
+          <div class="user-name" id="uname"></div>
 
           <div class="user-role"></div>
 
@@ -2777,7 +2777,7 @@
 
       invoke: async (ch, ...a) => {
 
-        if (ch === 'get-user') return { username: 'gordi', email: 'gordi@gdz.com' };
+        if (ch === 'get-user') return (window.__VL_USER || { username: '', email: '' });
 
         if (ch === 'get-stats') return { cpu: Math.floor(Math.random()*30+5), ram: Math.floor(Math.random()*40+20), gpu: Math.floor(Math.random()*50+5) };
 
