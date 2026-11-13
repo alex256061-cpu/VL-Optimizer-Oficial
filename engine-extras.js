@@ -1963,7 +1963,17 @@ ex.restoreAll = async () => {
 ex.updateStatus = () => ({ available: false, version: require('electron').app.getVersion(), current: require('electron').app.getVersion() });
 ex.offers = () => ({ offers: [] });
 ex.telemetryConsent = () => ({ consented: true });
-ex.claimKey = () => ({ success: false, error: 'Sem sistema de chaves nesta versão.' });
+// Resgate de chave: a validação fica no banco (chave inexistente, já usada ou cancelada).
+// O supabase.js é carregado sob demanda para não travar o motor quando não há login.
+ex.resgatarChave = async (codigo) => {
+  try {
+    const conta = require('./supabase');
+    return await conta.resgatarChave(codigo);
+  } catch (e) {
+    return { ok: false, erro: 'Não foi possível resgatar: ' + e.message };
+  }
+};
+ex.claimKey = (codigo) => ex.resgatarChave(codigo);
 ex.autostartGet = async () => {
   const r = await core.ps(`$v = Get-ItemProperty -LiteralPath 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run' -Name 'VLOptimizer'; if ($v) { Write-Output '1' } else { Write-Output '0' }`);
   return { success: true, on: r.out.trim() === '1' };

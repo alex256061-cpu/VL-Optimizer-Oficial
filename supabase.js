@@ -273,6 +273,38 @@ async function enviarHardware() {
   }
 }
 
+
+// ── resgate de chave ──────────────────────────────────────────────────────
+//
+// O cliente digita a chave (VL-XXXX-XXXX-XXXX) e o plano é liberado na hora.
+// A validação é toda no banco: chave inexistente, já usada ou cancelada são recusadas lá.
+async function resgatarChave(codigo) {
+  const limpo = String(codigo || '').trim().toUpperCase();
+  if (!limpo) return { ok: false, erro: 'Digite a chave.' };
+  if (!/^VL-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(limpo)) {
+    return { ok: false, erro: 'Formato inválido. A chave é VL-XXXX-XXXX-XXXX.' };
+  }
+
+  const s = await sessaoValida();
+  if (!s) return { ok: false, erro: 'Faça login antes de resgatar a chave.' };
+
+  const r = await pedir('/rest/v1/rpc/resgatar_chave', {
+    method: 'POST',
+    token: s.access_token,
+    body: JSON.stringify({ p_codigo: limpo }),
+  });
+
+  if (!r.ok) {
+    return { ok: false, erro: (r.dados && r.dados.message) || 'Não foi possível resgatar.' };
+  }
+
+  const d = r.dados || {};
+  if (!d.ok) return { ok: false, erro: d.erro || 'Chave recusada.' };
+
+  // limpa o cache do plano para o app reler
+  return { ok: true, tipo: d.tipo || 'liberado', codigo: limpo };
+}
+
 // ── perfil (nome + plano) ─────────────────────────────────────────────────
 async function perfil(s) {
   const sess = s || (await sessaoValida());
@@ -333,4 +365,4 @@ async function usuario() {
   return p || { username: 'visitante', email: null, plan: 'free', features: ['painel'] };
 }
 
-module.exports = { configurado, entrar, registrar, sessao, sair, recuperar, perfil, usuario, verificarPc, enviarHardware, CONFIG };
+module.exports = { configurado, entrar, registrar, sessao, sair, recuperar, perfil, usuario, verificarPc, enviarHardware, resgatarChave, CONFIG };

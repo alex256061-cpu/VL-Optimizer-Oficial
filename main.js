@@ -450,7 +450,7 @@ H('update-open-page', () => {
   try { updater.openReleasePage(); return { success: true }; }
   catch (e) { return { success: false, error: e.message }; }
 });
-H('claim-key', () => ex.claimKey());
+H('claim-key', (a) => ex.claimKey(a && a.codigo));
 H('telemetry-consent', () => ex.telemetryConsent());
 H('telemetry-consent-set', () => ({ success: true }));
 H('offers', () => ex.offers());

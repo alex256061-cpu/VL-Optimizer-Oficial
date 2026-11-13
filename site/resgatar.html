@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Resgatar chave · VL Optimizer</title>
+<meta name="description" content="Ative o VL Optimizer com a sua chave de licença.">
+<meta name="robots" content="noindex">
+<link rel="icon" href="assets/icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="conta.css">
+<style>
+  .chave-input {
+    width: 100%; box-sizing: border-box;
+    background: rgba(255,255,255,.045);
+    border: 1px solid var(--line);
+    border-radius: 11px; padding: 16px 17px;
+    color: var(--text); font-size: 20px; font-family: 'JetBrains Mono', monospace;
+    font-weight: 700; letter-spacing: .12em; text-align: center;
+    outline: none; transition: .18s; text-transform: uppercase;
+  }
+  .chave-input::placeholder { letter-spacing: .1em; font-weight: 500; color: var(--muted); opacity: .55; }
+  .chave-input:focus {
+    border-color: rgba(255,31,46,.55);
+    background: rgba(255,31,46,.06);
+    box-shadow: 0 0 0 4px rgba(255,31,46,.1);
+  }
+  .chave-ok {
+    width: 58px; height: 58px; margin: 0 auto 18px; border-radius: 17px;
+    background: rgba(61,220,130,.14); display: grid; place-items: center;
+    box-shadow: 0 0 0 1px rgba(61,220,130,.28), 0 0 30px -8px rgba(61,220,130,.6);
+  }
+  .chave-plano {
+    font-size: 22px; font-weight: 900; color: var(--text);
+    letter-spacing: -.02em; margin-bottom: 6px;
+  }
+  .chave-sub { font-size: 13px; color: var(--muted); line-height: 1.6; }
+</style>
+</head>
+<body>
+
+<div class="auth-carregando" id="carregando"><div><span class="auth-spin"></span> Verificando sua conta...</div></div>
+
+<div class="auth-wrap">
+
+  <section class="auth-lado">
+    <a class="auth-marca" href="/">
+      <img src="assets/icon.png" alt="">
+      <b>VL <span>Optimizer</span></b>
+    </a>
+
+    <div class="auth-centro">
+      <h1>Resgatar<br><em>chave</em></h1>
+      <p>Tem uma chave de licença? Digite aqui e o acesso é liberado na hora, sem precisar pagar de novo.</p>
+
+      <ul class="auth-lista">
+        <li><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg> Liberação imediata</li>
+        <li><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg> Cada chave vale uma vez</li>
+        <li><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg> Mesma conta do aplicativo</li>
+      </ul>
+    </div>
+
+    <div class="auth-rodape">VL Optimizer · Windows 10 e 11</div>
+  </section>
+
+  <section class="auth-painel">
+    <div class="auth-aviso" id="aviso"></div>
+
+    <form id="form-chave">
+      <div class="auth-campo">
+        <label for="codigo">Sua chave</label>
+        <input id="codigo" class="chave-input" type="text" placeholder="VL-XXXX-XXXX-XXXX" maxlength="16" autocomplete="off" spellcheck="false" required>
+      </div>
+
+      <button class="auth-btn auth-btn-principal" id="btn-resgatar" type="submit">Resgatar chave</button>
+    </form>
+
+    <div class="auth-sep">ou</div>
+
+    <div class="auth-pe">
+      Não tem conta ainda? <a href="/criar-conta">Criar agora</a><br>
+      <span style="font-size:11.5px;opacity:.7">Compre uma chave pelo <a href="https://discord.gg/vloptimizer">Discord</a>.</span>
+    </div>
+  </section>
+
+</div>
+
+<script src="supabase-client.js?v=4"></script>
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// Resgate de chave no site.
+//
+// A validação é toda no banco (função resgatar_chave): chave inexistente, já usada ou
+// cancelada são recusadas lá. Aqui só mostramos o resultado.
+// ─────────────────────────────────────────────────────────────────────────────
+const $ = (id) => document.getElementById(id);
+const aviso = $('aviso');
+
+function mostrar(msg, tipo) {
+  aviso.textContent = msg || '';
+  aviso.className = 'auth-aviso' + (msg ? ' ' + (tipo || 'erro') : '');
+}
+
+// formata enquanto digita: VL-XXXX-XXXX-XXXX
+$('codigo').addEventListener('input', (e) => {
+  let v = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (!v.startsWith('VL')) v = 'VL' + v.replace(/^VL/, '');
+  const corpo = v.slice(2);
+  const partes = corpo.match(/.{1,4}/g) || [];
+  e.target.value = 'VL' + (partes.length ? '-' + partes.join('-') : '');
+});
+
+function carregando(on) {
+  const b = $('btn-resgatar');
+  b.disabled = on;
+  if (on) { b._t = b.textContent; b.innerHTML = '<span class="auth-spin"></span>'; }
+  else b.textContent = b._t || 'Resgatar chave';
+}
+
+async function resgatar(codigo) {
+  const s = await SUPABASE.sessaoValida();
+  if (!s) return { ok: false, erro: 'Faça login para resgatar.' };
+
+  const r = await fetch(SUPABASE.URL + '/rest/v1/rpc/resgatar_chave', {
+    method: 'POST',
+    headers: {
+      apikey: SUPABASE.KEY,
+      Authorization: 'Bearer ' + s.access_token,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ p_codigo: codigo }),
+  });
+
+  const txt = await r.text();
+  let d = null;
+  try { d = JSON.parse(txt); } catch (e) { d = { erro: 'Resposta inesperada.' }; }
+  if (!r.ok) return { ok: false, erro: (d && d.message) || 'Não foi possível resgatar.' };
+  return d || { ok: false, erro: 'Resposta vazia.' };
+}
+
+$('form-chave').onsubmit = async (e) => {
+  e.preventDefault();
+  const codigo = $('codigo').value.trim().toUpperCase();
+
+  if (!/^VL-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(codigo)) {
+    mostrar('A chave tem o formato VL-XXXX-XXXX-XXXX.');
+    return;
+  }
+
+  carregando(true);
+  try {
+    const r = await resgatar(codigo);
+    carregando(false);
+
+    if (r && r.ok) {
+      // tela de sucesso
+      document.querySelector('.auth-painel').innerHTML = `
+        <div style="text-align:center">
+          <div class="chave-ok">
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#3ddc82" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+          </div>
+          <div class="chave-plano">Acesso liberado!</div>
+          <div class="chave-sub">Sua chave de <b style="color:var(--text)">${r.tipo}</b> foi ativada.<br>Abra o aplicativo com esta mesma conta.</div>
+          <a href="/conta" class="auth-btn auth-btn-principal" style="margin-top:22px;text-decoration:none">Ver a minha conta</a>
+        </div>`;
+    } else {
+      mostrar((r && (r.erro || r.message)) || 'Chave recusada.');
+    }
+  } catch (err) {
+    carregando(false);
+    mostrar('Falha de conexão: ' + err.message);
+  }
+};
+
+// ao abrir: precisa de sessão
+(async () => {
+  try {
+    const s = await SUPABASE.sessaoValida();
+    if (!s) { location.href = '/entrar?voltar=/resgatar'; return; }
+  } catch (e) { location.href = '/entrar?voltar=/resgatar'; return; }
+  $('carregando').remove();
+  $('codigo').focus();
+})();
+</script>
+</body>
+</html>
