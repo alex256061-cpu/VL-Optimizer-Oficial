@@ -100,8 +100,9 @@ export async function onRequestPost({ request, env }) {
     const dados = await r.json();
 
     if (!r.ok) {
+      console.error('MP checkout falhou:', JSON.stringify(dados).slice(0, 500));
       return new Response(
-        JSON.stringify({ erro: 'Não foi possível criar o pagamento.', detalhe: dados }),
+        JSON.stringify({ erro: 'Não foi possível criar o pagamento. Tente de novo ou fale no Discord.' }),
         { status: 502, headers: cors }
       );
     }
