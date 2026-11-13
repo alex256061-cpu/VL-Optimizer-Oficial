@@ -1079,6 +1079,21 @@ async function erroDePermissao(err) {
   return e || "o Windows nao aceitou a mudanca.";
 }
 
+// Confere no NODE o StartType de um serviço depois de tentar mudar.
+//
+// Svc() roda num PowerShell com $ErrorActionPreference = SilentlyContinue, e ali um
+// throw não muda o exit code nem escreve em stderr. O app então recebia ok:true para
+// um serviço que continuava igual. Aqui a leitura é refeita por fora e comparada.
+async function confereServico(nome, esperado) {
+  try {
+    const r = await ps(`$s = Get-Service -Name '${String(nome).replace(/'/g, "''")}' -ErrorAction SilentlyContinue; if (-not $s) { Write-Output 'AUSENTE' } else { Write-Output ([string]$s.StartType) }`, 20000);
+    const atual = String(r.out || '').trim();
+    if (!atual) return { ok: false, atual: 'desconhecido' };
+    if (atual === 'AUSENTE') return { ok: false, atual: 'AUSENTE' };
+    const igual = atual.toLowerCase() === String(esperado).toLowerCase();
+    return { ok: igual, atual };
+  } catch (e) { return { ok: false, atual: 'erro' }; }
+}
 async function applyTweak(id, want) {
   const t = tweakById(id);
   if (!t) return { success: false, error: 'ajuste desconhecido' };
@@ -1096,6 +1111,21 @@ async function applyTweak(id, want) {
       for (const s of svcs) lines.push(`Svc '${s}' 'Disabled'`);
       const r = await ps(lines.join('\n'), 60000);
       if (!r.ok) { t._ultimoErro = r.err; return { success: false, error: await erroDePermissao(r.err) }; }
+      // O PowerShell deste app roda com ErrorActionPreference SilentlyContinue: um throw
+      // não chega aqui como erro. Conferir CADA serviço no Node é a única prova real.
+      for (const s of svcs) {
+        const c = await confereServico(s, 'Disabled');
+        if (!c.ok) {
+          t._ultimoErro = 'service';
+          return {
+            success: false,
+            on: false,
+            error: c.atual === 'AUSENTE'
+              ? ('O serviço ' + s + ' não existe neste Windows.')
+              : ('O serviço ' + s + ' continua em ' + c.atual + '. Para mexer em serviços o VL precisa de administrador.'),
+          };
+        }
+      }
       if (r.err && /acesso negado|access denied|denied/i.test(String(r.err))) { t._ultimoErro = r.err; }
     }
     if (t.on) {
@@ -1139,7 +1169,22 @@ async function runAction(name) {
     lines.push(`Set-Val '${r.path}' '${r.name}' ${v} '${r.type}'`);
   }
   for (const s of svcs) lines.push(`Svc '${s}' 'Disabled'`);
-  if (lines.length) { const r = await ps(lines.join('\n'), 60000); if (!r.ok) return { success: false, error: r.err || 'falha' }; }
+  if (lines.length) {
+    const r = await ps(lines.join('\n'), 60000);
+    if (!r.ok) return { success: false, error: await erroDePermissao(r.err) };
+    // Mesmo motivo do applyTweak: conferir no Node, não confiar no retorno do PowerShell.
+    for (const s of svcs) {
+      const c = await confereServico(s, 'Disabled');
+      if (!c.ok) {
+        return {
+          success: false,
+          error: c.atual === 'AUSENTE'
+            ? ('O serviço ' + s + ' não existe neste Windows.')
+            : ('O serviço ' + s + ' continua em ' + c.atual + '. Para mexer em serviços o VL precisa de administrador.'),
+        };
+      }
+    }
+  }
   if (a.run) {
     const r = await ps(a.run, 120000);
     if (!r.ok) return { success: false, error: r.err || 'falha' };
