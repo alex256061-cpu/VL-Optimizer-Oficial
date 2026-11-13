@@ -69,7 +69,12 @@ export async function onRequestPost({ request, env }) {
 
   // 4. liberar no Supabase pela função liberar_plano
   const base = env.SUPABASE_URL.replace(/\/$/, '');
-  const planoNormalizado = /mensal|monthly|30/.test(plano) ? 30 : /vital|lifetime/.test(plano) ? null : dias;
+  // O pix.js grava o plano com os nomes 'mensal' e 'vitalicio'; o Checkout Pro usa
+// 'monthly' e 'lifetime'. Aqui aceitamos os dois e NÃO adivinhamos pelo número de dias:
+// antes, um plano mensal que não casasse com o regex virava vitalício por engano.
+  const planoNormalizado = /mensal|monthly/i.test(plano) ? 30
+    : /vital|lifetime/i.test(plano) ? null
+    : (dias === null || dias === undefined ? null : Number(dias));
 
   try {
     const r = await fetch(base + '/rest/v1/rpc/liberar_plano', {

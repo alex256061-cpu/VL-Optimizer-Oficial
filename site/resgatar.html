@@ -72,7 +72,7 @@
     <form id="form-chave">
       <div class="auth-campo">
         <label for="codigo">Sua chave</label>
-        <input id="codigo" class="chave-input" type="text" placeholder="VL-XXXX-XXXX-XXXX" maxlength="16" autocomplete="off" spellcheck="false" required>
+        <input id="codigo" class="chave-input" type="text" placeholder="VL-XXXX-XXXX-XXXX" maxlength="17" autocomplete="off" spellcheck="false" required>
       </div>
 
       <button class="auth-btn auth-btn-principal" id="btn-resgatar" type="submit">Resgatar chave</button>
@@ -97,6 +97,10 @@
 // cancelada são recusadas lá. Aqui só mostramos o resultado.
 // ─────────────────────────────────────────────────────────────────────────────
 const $ = (id) => document.getElementById(id);
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
 const aviso = $('aviso');
 
 function mostrar(msg, tipo) {
@@ -106,10 +110,13 @@ function mostrar(msg, tipo) {
 
 // formata enquanto digita: VL-XXXX-XXXX-XXXX
 $('codigo').addEventListener('input', (e) => {
+  // só letras e números, sempre em maiúsculo
   let v = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
-  if (!v.startsWith('VL')) v = 'VL' + v.replace(/^VL/, '');
-  const corpo = v.slice(2);
+  // garante o prefixo VL
+  if (!v.startsWith('VL')) v = 'VL' + v;
+  const corpo = v.slice(2);              // 12 caracteres depois do VL
   const partes = corpo.match(/.{1,4}/g) || [];
+  // VL-XXXX-XXXX-XXXX tem 17 caracteres: 2 + 1 + 4 + 1 + 4 + 1 + 4
   e.target.value = 'VL' + (partes.length ? '-' + partes.join('-') : '');
 });
 
@@ -163,7 +170,7 @@ $('form-chave').onsubmit = async (e) => {
             <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#3ddc82" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
           </div>
           <div class="chave-plano">Acesso liberado!</div>
-          <div class="chave-sub">Sua chave de <b style="color:var(--text)">${r.tipo}</b> foi ativada.<br>Abra o aplicativo com esta mesma conta.</div>
+          <div class="chave-sub">Sua chave de <b style="color:var(--text)">${esc(r.tipo)}</b> foi ativada.<br>Abra o aplicativo com esta mesma conta.</div>
           <a href="/conta" class="auth-btn auth-btn-principal" style="margin-top:22px;text-decoration:none">Ver a minha conta</a>
         </div>`;
     } else {

@@ -44,7 +44,13 @@ export async function onRequestPost({ request, env }) {
     return new Response(JSON.stringify({ erro: 'Plano desconhecido.' }), { status: 400, headers: cors });
   }
 
-  const email = String(corpo.email || '').trim();
+  const email = String(corpo.email || '').trim().slice(0, 120);
+
+  // O e-mail define para quem o plano é liberado. Malformado = cliente paga e não recebe.
+  if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(email)) {
+    return new Response(JSON.stringify({ erro: 'E-mail inválido.' }), { status: 400, headers: cors });
+  }
+
   const site = (env.SITE_URL || 'https://vl-optimizer.pages.dev').replace(/\/$/, '');
 
   if (!env.MP_ACCESS_TOKEN) {
@@ -67,7 +73,7 @@ export async function onRequestPost({ request, env }) {
       },
     ],
     payer: email ? { email } : undefined,
-    back_urls: { success: volta, pending: volta, failure: site + '/planos' },
+    back_urls: { success: volta, pending: volta, failure: site + '/#precos' },
     auto_return: 'approved',
     // o webhook recebe o id do pagamento e libera o plano
     notification_url: site + '/api/webhook',

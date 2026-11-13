@@ -47,7 +47,11 @@ const SUPABASE = (() => {
     const m = String(msg || '').toLowerCase();
     if (m.includes('invalid login credentials')) return 'E-mail ou senha incorretos.';
     if (m.includes('email not confirmed')) return 'Confirme seu e-mail antes de entrar.';
-    if (m.includes('user already registered')) return 'Este e-mail já tem conta. Tente entrar.';
+    if (m.includes('user already registered')) {
+      // Não revelamos se o e-mail existe: a mesma mensagem serve para os dois casos.
+      // Assim ninguém consegue descobrir quem tem conta testando e-mails.
+      return 'Se este e-mail puder ser cadastrado, enviaremos as instruções. Tente entrar ou recuperar a senha.';
+    }
     if (m.includes('password should be at least')) return 'A senha precisa de pelo menos 6 caracteres.';
     if (m.includes('unable to validate email') || m.includes('is invalid')) return 'E-mail inválido.';
     if (m.includes('rate limit') || status === 429) return 'Muitas tentativas. Espere um minuto.';
@@ -56,11 +60,36 @@ const SUPABASE = (() => {
   }
 
   async function entrar(email, senha, lembrar) {
+    const limpo = String(email).trim().toLowerCase();
+
+    // 1. já errou demais? bloqueia antes de tentar (proteção contra força bruta)
+    const bl = await pedir('/rest/v1/rpc/login_bloqueado', {
+      method: 'POST',
+      body: JSON.stringify({ p_email: limpo }),
+    });
+    if (bl.ok && bl.dados && bl.dados.bloqueado) {
+      return { success: false, message: bl.dados.mensagem || 'Muitas tentativas. Espere alguns minutos.' };
+    }
+
     const r = await pedir('/auth/v1/token?grant_type=password', {
       method: 'POST',
       body: JSON.stringify({ email: String(email).trim(), password: senha }),
     });
-    if (!r.ok) return { success: false, message: traduzir(r.dados && (r.dados.error_description || r.dados.msg), r.status) };
+
+    if (!r.ok) {
+      // 2. registra a falha para o bloqueio funcionar
+      pedir('/rest/v1/rpc/registrar_falha_login', {
+        method: 'POST',
+        body: JSON.stringify({ p_email: limpo, p_ip: null }),
+      }).catch(() => { });
+      return { success: false, message: traduzir(r.dados && (r.dados.error_description || r.dados.msg), r.status) };
+    }
+
+    // 3. login certo: limpa as falhas deste e-mail
+    pedir('/rest/v1/rpc/limpar_falhas_login', {
+      method: 'POST',
+      body: JSON.stringify({ p_email: limpo }),
+    }).catch(() => { });
 
     const s = {
       access_token: r.dados.access_token,

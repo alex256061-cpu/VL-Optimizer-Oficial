@@ -85,7 +85,10 @@ function traduzir(msg, status) {
   const m = String(msg || '').toLowerCase();
   if (m.includes('invalid login credentials')) return 'E-mail ou senha incorretos.';
   if (m.includes('email not confirmed')) return 'Confirme seu e-mail antes de entrar. Verifique a caixa de entrada.';
-  if (m.includes('user already registered')) return 'Este e-mail já tem conta. Use Entrar.';
+  if (m.includes('user already registered')) {
+    // Não confirmamos se o e-mail existe: mesma resposta para os dois casos.
+    return 'Se este e-mail puder ser cadastrado, enviaremos as instruções.';
+  }
   if (m.includes('password should be at least')) return 'A senha precisa de pelo menos 6 caracteres.';
   if (m.includes('unable to validate email')) return 'E-mail inválido.';
   if (m.includes('rate limit') || status === 429) return 'Muitas tentativas. Espere um minuto e tente de novo.';
@@ -96,13 +99,37 @@ function traduzir(msg, status) {
 // ── login ─────────────────────────────────────────────────────────────────
 async function entrar(email, senha) {
   if (!configurado()) return { success: false, message: 'Login ainda não configurado neste app.' };
+
+  const limpo = String(email).trim().toLowerCase();
+
+  // 1. bloqueio por excesso de tentativas
+  const bl = await pedir('/rest/v1/rpc/login_bloqueado', {
+    method: 'POST',
+    body: JSON.stringify({ p_email: limpo }),
+  });
+  if (bl.ok && bl.dados && bl.dados.bloqueado) {
+    return { success: false, message: bl.dados.mensagem || 'Muitas tentativas. Espere alguns minutos.' };
+  }
+
   const r = await pedir('/auth/v1/token?grant_type=password', {
     method: 'POST',
     body: JSON.stringify({ email: String(email).trim(), password: senha }),
   });
+
   if (!r.ok) {
+    // 2. registra a falha
+    pedir('/rest/v1/rpc/registrar_falha_login', {
+      method: 'POST',
+      body: JSON.stringify({ p_email: limpo, p_ip: null }),
+    }).catch(() => { });
     return { success: false, message: traduzir(r.dados && (r.dados.error_description || r.dados.msg || r.dados.message), r.status) };
   }
+
+  // 3. sucesso: limpa as falhas
+  pedir('/rest/v1/rpc/limpar_falhas_login', {
+    method: 'POST',
+    body: JSON.stringify({ p_email: limpo }),
+  }).catch(() => { });
   const s = {
     access_token: r.dados.access_token,
     refresh_token: r.dados.refresh_token,

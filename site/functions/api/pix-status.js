@@ -1,3 +1,5 @@
+import { limite, ipDe } from './_limite.js';
+
 /**
  * functions/api/pix-status.js — verifica se o PIX foi pago e libera o plano.
  *
@@ -12,6 +14,13 @@
  */
 
 export async function onRequestGet({ request, env }) {
+  // A tela verifica a cada 3s; 200 por 10 min cobre várias abas sem permitir varredura
+  // de ids de pagamento.
+  const bloqueio = limite('status:' + ipDe(request), 200, 10 * 60 * 1000);
+  if (bloqueio) {
+    return new Response(JSON.stringify({ erro: bloqueio.erro }), { status: 429, headers: { 'Content-Type': 'application/json' } });
+  }
+
   const cors = { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' };
   const responder = (obj, status = 200) => new Response(JSON.stringify(obj), { status, headers: cors });
 
@@ -111,7 +120,7 @@ export async function onRequestGet({ request, env }) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          p_pagamento: String(idPagamento),
+          p_pagamento: String(pag.id || id),
           p_email: emailLimpo,
           p_plano: planoVenda,
           p_valor: valorVenda,
