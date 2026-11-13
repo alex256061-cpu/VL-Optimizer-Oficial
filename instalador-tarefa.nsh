@@ -26,7 +26,7 @@
 !macro customInstall
   DetailPrint "Registrando a tarefa de administrador (abrir sem UAC)..."
 
-  ; Conta atual no formato DOMINIO\USUARIO, via ambiente (nao expandir $VAR no meio).
+  ; Conta atual no formato DOMINIO\USUARIO.
   ReadEnvStr $9 "USERDOMAIN"
   ReadEnvStr $8 "USERNAME"
   StrCmp $9 "" 0 +2
@@ -36,11 +36,10 @@
   StrCpy $8 "User"
   StrCpy $9 "$9\$8"
 
-  ; Pasta de trabalho do instalador (instalacao por usuario: $APPDATA do usuario atual).
   StrCpy $0 "$APPDATA\VLOptimizer-instalar"
   CreateDirectory "$0"
 
-  ; XML da tarefa em UTF-16 (FileWriteUTF16LE /BOM grava o BOM que o schtasks espera).
+  ; XML da tarefa em UTF-16 (o schtasks exige o BOM).
   FileOpen $1 "$0\tarefa.xml" w
   FileWriteUTF16LE /BOM $1 '<?xml version="1.0" encoding="UTF-16"?>$\r$\n'
   FileWriteUTF16LE $1 '<Task version="1.3" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">$\r$\n'
@@ -54,25 +53,49 @@
   FileWriteUTF16LE $1 '</Task>$\r$\n'
   FileClose $1
 
-  ; Script que so chama o schtasks. Gravado em ANSI (FileWrite) e com $$ para que o
-  ; NSIS nao expanda os cifroes do PowerShell.
+  ; Script que cria a tarefa e grava um marcador de conclusao (ExecShell e assincrono).
   FileOpen $1 "$0\aplicar.ps1" w
   FileWrite $1 '$$p = Join-Path $$env:APPDATA "VLOptimizer-instalar\tarefa.xml"$\r$\n'
-  FileWrite $1 '& schtasks.exe /create /tn "VLOptimizer" /xml $$p /f$\r$\n'
-  FileWrite $1 'exit $$LASTEXITCODE$\r$\n'
+  FileWrite $1 '$$marca = Join-Path $$env:APPDATA "VLOptimizer-instalar\concluido.txt"$\r$\n'
+  FileWrite $1 '& schtasks.exe /create /tn "VLOptimizer" /xml $$p /f | Out-Null$\r$\n'
+  FileWrite $1 'if ($$LASTEXITCODE -eq 0) { Set-Content -LiteralPath $$marca -Value "ok" -Encoding ASCII } else { Set-Content -LiteralPath $$marca -Value "falhou" -Encoding ASCII }$\r$\n'
   FileClose $1
 
-  nsExec::ExecToStack '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$0\aplicar.ps1"'
-  Pop $1
-  Pop $2
+  ; A instalacao e por usuario (perMachine:false, asInvoker): este processo NAO e
+  ; administrador e o schtasks /create devolve "Acesso negado". O script roda num
+  ; processo FILHO elevado — o UAC aparece uma vez aqui, igual ao GDZ.
+  FileOpen $1 "$0\concluido.txt" w
+  FileWrite $1 "pendente"
+  FileClose $1
 
-  ${If} $1 == 0
+  DetailPrint "Pedindo permissao de administrador para a abertura automatica..."
+  ExecShell "runas" "$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$0\aplicar.ps1"' SW_HIDE
+  StrCpy $3 0
+
+  vl_esperar:
+    Sleep 700
+    ClearErrors
+    FileOpen $1 "$0\concluido.txt" r
+    FileRead $1 $2
+    FileClose $1
+    StrCmp $2 "ok" vl_ok
+    StrCmp $2 "falhou" vl_falhou
+    IntOp $3 $3 + 1
+    IntCmp $3 85 vl_sem_marcador vl_esperar vl_sem_marcador
+
+  vl_ok:
     DetailPrint "Tarefa criada: o VL abre como administrador sem pedir UAC."
-  ${Else}
-    ; Nao aborta a instalacao: o app abre normal e cria a tarefa na primeira elevacao.
-    DetailPrint "Aviso: a tarefa nao foi criada (codigo $1). O app oferece reativar depois."
-  ${EndIf}
+    Goto vl_fim
 
+  vl_falhou:
+    DetailPrint "Aviso: o Windows recusou criar a tarefa. O app abre normal."
+    Goto vl_fim
+
+  vl_sem_marcador:
+    DetailPrint "Aviso: a tarefa de administrador nao foi confirmada. O app abre normal."
+
+  vl_fim:
+  Delete "$0\concluido.txt"
   RMDir /r "$0"
 !macroend
 

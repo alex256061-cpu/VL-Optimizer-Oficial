@@ -19,7 +19,7 @@ Requisitos
 
 Instalacao
 ----------
-1. Abra Instalar-VL-Optimizer-1.4.11.exe
+1. Abra Instalar-VL-Optimizer-1.4.12.exe
 2. O Windows vai avisar que o aplicativo nao tem assinatura digital. Clique em
    "Mais informacoes" e depois em "Executar assim mesmo". Esse aviso aparece em qualquer
    programa baixado da internet que nao tenha certificado de assinatura.
