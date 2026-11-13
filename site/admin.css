@@ -178,3 +178,108 @@ body.adm {
   .adm-cards { grid-template-columns: repeat(2, 1fr); }
   .adm-conteudo { padding: 24px 18px 60px; }
 }
+
+
+/* ── gráficos e barras do painel ─────────────────────────────────────────── */
+
+.adm-vazio {
+  font-size: 13px;
+  color: var(--muted);
+  opacity: 0.7;
+  padding: 22px 0;
+  text-align: center;
+}
+
+/* gráfico de faturamento por dia */
+.adm-grafico {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 160px;
+  padding-top: 10px;
+}
+
+.adm-barra {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  height: 100%;
+  min-width: 18px;
+  position: relative;
+}
+
+.adm-barra-valor {
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.adm-barra-preenchida {
+  width: 100%;
+  max-width: 34px;
+  background: linear-gradient(180deg, var(--red), rgba(255, 31, 46, 0.35));
+  border-radius: 5px 5px 0 0;
+  transition: 0.3s;
+}
+
+.adm-barra:hover .adm-barra-preenchida {
+  background: linear-gradient(180deg, #ff3b47, rgba(255, 31, 46, 0.5));
+}
+
+.adm-barra-dia {
+  font-size: 9.5px;
+  color: var(--muted);
+  opacity: 0.6;
+  margin-top: 6px;
+  font-family: 'JetBrains Mono', monospace;
+  white-space: nowrap;
+}
+
+/* barras horizontais (hardware) */
+.adm-barras { display: grid; gap: 11px; }
+
+.adm-barra-linha {
+  display: grid;
+  grid-template-columns: 220px 1fr 46px;
+  gap: 12px;
+  align-items: center;
+  font-size: 12.5px;
+}
+
+.adm-barra-nome {
+  color: var(--text);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.adm-barra-trilha {
+  height: 7px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.adm-barra-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--red), #ff6b74);
+  border-radius: 4px;
+  transition: 0.4s;
+}
+
+.adm-barra-qtd {
+  text-align: right;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+@media (max-width: 720px) {
+  .adm-barra-linha { grid-template-columns: 120px 1fr 40px; }
+  .adm-grafico { height: 120px; }
+}

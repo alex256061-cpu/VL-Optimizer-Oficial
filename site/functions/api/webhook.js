@@ -90,6 +90,26 @@ export async function onRequestPost({ request, env }) {
     const texto = await r.text();
     if (!r.ok) return responder({ ok: false, erro: 'Falha ao liberar plano.', detalhe: texto }, 502);
 
+    // grava a venda para o painel
+    try {
+      await fetch(base + '/rest/v1/rpc/registrar_venda', {
+        method: 'POST',
+        headers: {
+          apikey: env.SUPABASE_SERVICE,
+          Authorization: 'Bearer ' + env.SUPABASE_SERVICE,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          p_pagamento: String(idPagamento),
+          p_email: email,
+          p_plano: /mensal|monthly|30/.test(plano) ? 'mensal' : 'vitalicio',
+          p_valor: Number(pagamento.transaction_amount || 0),
+          p_dias: planoNormalizado === null ? null : Number(planoNormalizado),
+          p_metodo: pagamento.payment_method_id || 'pix',
+        }),
+      });
+    } catch (e) { }
+
     return responder({
       ok: true,
       liberado: true,

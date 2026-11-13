@@ -11,6 +11,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const hwid = require('./hwid');
+const extra = require('./engine-extras');
 
 // ── configuração ──────────────────────────────────────────────────────────
 // Preencha depois de criar o projeto no supabase.com. Os dois valores são públicos
@@ -214,6 +215,64 @@ async function verificarPc(s) {
   };
 }
 
+
+// ── envio do hardware para o painel ───────────────────────────────────────
+//
+// Depois do login, manda placa de vídeo, processador, memória e sistema para o Supabase.
+// A função gravar_hardware aceita só para o próprio usuário logado. Falha aqui não atrapalha
+// o uso do app: é informação para o painel administrativo.
+async function enviarHardware() {
+  try {
+    const s = await sessaoValida();
+    if (!s) return { success: false, reason: 'no_session' };
+
+    const hw = extra.getHardware ? await extra.getHardware() : null;
+    if (!hw) return { success: false, reason: 'sem dados' };
+
+    const gpu = hw.gpu || hw.gpuNome || hw.videocard || '';
+    const cpu = hw.cpu || hw.cpuNome || hw.processador || '';
+
+    // o getHardware devolve a memória como texto: "32 GB DDR5-5200".
+    // Aqui tiramos só o número antes do "GB".
+    let ram = null;
+    if (typeof hw.ram === 'number') {
+      ram = hw.ram;
+    } else if (typeof hw.ram === 'string') {
+      const m = hw.ram.match(/(\d+)\s*GB/i);
+      if (m) ram = Number(m[1]);
+    }
+    if (!ram) {
+      const total = os.totalmem ? os.totalmem() : 0;
+      if (total) ram = Math.round(total / (1024 * 1024 * 1024));
+    }
+
+    // sistema: nome + versão do Windows
+    let sis = hw.os || hw.sistema || hw.windows || '';
+    if (!sis) {
+      const rel = os.release ? os.release() : '';
+      const ver = /^10\.0\.(\d+)/.exec(rel);
+      sis = ver ? (Number(ver[1]) >= 22000 ? 'Windows 11' : 'Windows 10') : (rel || '');
+    }
+
+    if (!gpu && !cpu) return { success: false, reason: 'sem hardware' };
+
+    const r = await pedir('/rest/v1/rpc/gravar_hardware', {
+      method: 'POST',
+      token: s.access_token,
+      body: JSON.stringify({
+        p_gpu: String(gpu).slice(0, 120),
+        p_cpu: String(cpu).slice(0, 120),
+        p_ram: ram ? Math.round(ram) : null,
+        p_sistema: String(sis).slice(0, 60),
+      }),
+    });
+
+    return { success: r.ok, status: r.status };
+  } catch (e) {
+    return { success: false, erro: e.message };
+  }
+}
+
 // ── perfil (nome + plano) ─────────────────────────────────────────────────
 async function perfil(s) {
   const sess = s || (await sessaoValida());
@@ -274,4 +333,4 @@ async function usuario() {
   return p || { username: 'visitante', email: null, plan: 'free', features: ['painel'] };
 }
 
-module.exports = { configurado, entrar, registrar, sessao, sair, recuperar, perfil, usuario, verificarPc, CONFIG };
+module.exports = { configurado, entrar, registrar, sessao, sair, recuperar, perfil, usuario, verificarPc, enviarHardware, CONFIG };
