@@ -1071,12 +1071,55 @@ async function ehAdmin() {
 // Mensagem especifica quando o Windows barra por falta de permissao.
 async function erroDePermissao(err) {
   const e = String(err || "");
-  if (/acesso negado|access denied|denied/i.test(e)) {
+
+  // Permissão: os textos do Windows em português NÃO usam "acesso negado".
+  // Medido nesta máquina:
+  //   HKLM           -> "Acesso ao Registro solicitado não é permitido."
+  //   System32       -> "O acesso ao caminho '...' foi negado."
+  //   Política       -> "Acesso negado." / "Access is denied." (inglês)
+  // O regex antigo só cobria a terceira forma, então as duas mais comuns passavam cruas.
+  const SEM_PERMISSAO = new RegExp([
+    'acesso negado',
+    'access denied',
+    'access is denied',
+    'n[ãa]o [ée] permitido',          // "não é permitido" (registro)
+    'ao Registro solicitado',          // "Acesso ao Registro solicitado..."
+    'foi negado',                      // "O acesso ao caminho ... foi negado."
+    'negado',
+    'privil[ée]gio',
+    'privilege',
+    'requer eleva[çc][ãa]o',
+    'elevation required',
+    'solicite permiss[ãa]o',
+  ].join('|'), 'i');
+
+  // O recurso não existe — não é permissão, é o ambiente.
+  const NAO_EXISTE = new RegExp([
+    'n[ãa]o existe',
+    'n[ãa]o foi encontrad',
+    'n[ãa]o [ée] poss[íi]vel localizar',
+    'cannot find',
+    'does not exist',
+    'was not found',
+    'n[ãa]o especificad',
+  ].join('|'), 'i');
+
+  if (SEM_PERMISSAO.test(e)) {
     const adm = await ehAdmin();
     if (!adm) return "Precisa abrir o VL Optimizer como administrador para este ajuste. Feche e abra com o botao direito > Executar como administrador.";
     return "O Windows bloqueou esta mudanca mesmo como administrador. Pode ser politica da empresa ou antivirus.";
   }
-  return e || "o Windows nao aceitou a mudanca.";
+  if (NAO_EXISTE.test(e)) {
+    return "Este recurso nao existe nesta versao do Windows.";
+  }
+
+  // Erro desconhecido: devolver a mensagem limpa, sem o bloco tecnico do PowerShell
+  // (o texto vem com caminho do .ps1 e número de linha, que não ajuda o usuário).
+  const limpo = String(e)
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .find((l) => l && !/^\s*\+/.test(l) && !/\.ps1:\d+/.test(l) && !/^No linha|^At line/.test(l)) || '';
+  return limpo || "o Windows nao aceitou a mudanca.";
 }
 
 // Confere no NODE o StartType de um serviço depois de tentar mudar.
