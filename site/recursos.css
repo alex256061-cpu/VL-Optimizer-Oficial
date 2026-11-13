@@ -1,0 +1,203 @@
+
+/* ── seção de recursos (cards com ícone) ─────────────────────────────────── */
+
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-top: 36px;
+}
+
+.feature {
+  position: relative;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 24px 22px;
+  transition: 0.2s;
+}
+.feature:hover {
+  border-color: rgba(255, 31, 46, 0.3);
+  transform: translateY(-2px);
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.feature-ic {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: rgba(255, 31, 46, 0.1);
+  color: var(--red);
+  display: grid;
+  place-items: center;
+  margin-bottom: 14px;
+}
+
+.feature-tag {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 4px 9px;
+  border-radius: 999px;
+}
+.feature-tag.free {
+  background: rgba(60, 220, 130, 0.12);
+  color: #7ee6a8;
+  border: 1px solid rgba(60, 220, 130, 0.28);
+}
+.feature-tag.pro {
+  background: rgba(255, 31, 46, 0.12);
+  color: #ff8f97;
+  border: 1px solid rgba(255, 31, 46, 0.3);
+}
+
+.feature h3 {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text);
+  margin: 0 0 8px;
+  letter-spacing: -0.01em;
+}
+
+.feature p {
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--muted);
+  margin: 0;
+}
+
+/* ── seção de jogos ── */
+
+.games-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 14px;
+  margin-top: 36px;
+}
+
+.game-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 18px;
+  transition: 0.2s;
+}
+.game-card:hover {
+  border-color: rgba(255, 31, 46, 0.3);
+  transform: translateY(-2px);
+}
+
+.game-nome {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.game-nota {
+  font-size: 11.5px;
+  color: var(--muted);
+  margin-bottom: 14px;
+}
+
+.game-ganho {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.game-ganho b {
+  font-size: 26px;
+  font-weight: 900;
+  color: #3ddc82;
+  letter-spacing: -0.02em;
+}
+
+.game-ganho span {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.game-fps {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--muted);
+  font-family: 'JetBrains Mono', monospace;
+}
+.game-fps i {
+  font-style: normal;
+  color: var(--muted);
+  opacity: 0.5;
+}
+.game-fps b {
+  color: var(--text);
+  font-weight: 700;
+}
+.game-fps .seta {
+  color: #3ddc82;
+}
+
+/* ── seção de afiliados ── */
+
+.afiliados-box {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 30px;
+  align-items: center;
+  background: linear-gradient(135deg, rgba(255, 31, 46, 0.07), rgba(140, 20, 60, 0.05));
+  border: 1px solid rgba(255, 31, 46, 0.2);
+  border-radius: 20px;
+  padding: 34px 36px;
+  margin-top: 34px;
+}
+
+.afiliados-pct {
+  font-size: 64px;
+  font-weight: 900;
+  color: var(--red);
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+.afiliados-pct small {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--muted);
+  display: block;
+  margin-top: 6px;
+  letter-spacing: 0;
+}
+
+.afiliados-acoes {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 900px) {
+  .feature-grid { grid-template-columns: 1fr; }
+  .afiliados-box { grid-template-columns: 1fr; text-align: center; }
+  .afiliados-acoes { justify-content: center; }
+}
+
+
+/* tag do card de jogo (FPS tático, Battle royale...) */
+.game-tag {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px 9px;
+  margin-bottom: 12px;
+}

@@ -13,6 +13,16 @@ const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 
 /* ── preços ── */
+// Os elementos com data-price-count mostram o preço dentro de uma animação de contagem.
+// Sem isto, o número fica congelado no valor do HTML e não acompanha o CONFIG.
+(function pricesCount() {
+  document.querySelectorAll('[data-price-count]').forEach((b) => {
+    const plan = b.dataset.priceCount;
+    const value = plan === 'monthly' ? CONFIG.monthlyPrice : CONFIG.lifetimePrice;
+    b.setAttribute('data-count', String(Math.round(Number(value))));
+  });
+})();
+
 (function prices() {
   document.querySelectorAll('[data-price]').forEach((b) => {
     const plan = b.dataset.price;
