@@ -23,6 +23,7 @@ let state = {
   percent: 0,
   downloaded: false,
   error: null,
+  notes: null,      // texto do release (o que mudou)
 };
 let timer = null;
 let listeners = [];   // funÃ§Ãµes avisadas quando o estado muda
@@ -36,6 +37,29 @@ function emit() {
 function onChange(fn) {
   if (typeof fn === 'function') listeners.push(fn);
   return () => { listeners = listeners.filter((f) => f !== fn); };
+}
+
+// O electron-updater entrega releaseNotes como string ou como lista de {version, note}.
+// Aqui tudo vira uma string só, que é o que a tela mostra.
+function extrairNotas(info) {
+  try {
+    const n = info && info.releaseNotes;
+    if (!n) return null;
+    if (typeof n === 'string') return n;
+    if (Array.isArray(n)) {
+      return n.map((x) => {
+        if (typeof x === 'string') return x;
+        if (x && typeof x === 'object') {
+          const t = String(x.version || '').trim();
+          const corpo = String(x.note || '').trim();
+          return (t ? '## ' + t + '\n' : '') + corpo;
+        }
+        return '';
+      }).filter(Boolean).join('\n\n');
+    }
+    if (typeof n === 'object') return String(n.note || '');
+  } catch (e) { }
+  return null;
 }
 
 function currentVersion() {
@@ -86,6 +110,8 @@ function init() {
   autoUpdater.on('update-available', (info) => {
     state.available = true;
     state.version = info && info.version ? info.version : null;
+    // releaseNotes vem do release do GitHub; pode ser string ou array de {version, note}
+    state.notes = extrairNotas(info);
     state.error = null;
     emit();
   });
@@ -105,6 +131,7 @@ function init() {
     state.downloaded = true;
     state.available = true;
     state.version = info && info.version ? info.version : state.version;
+    if (!state.notes) state.notes = extrairNotas(info);
     emit();
   });
   autoUpdater.on('error', (e) => {
