@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
-<link rel="stylesheet" href="admin.css?v=3">
+<link rel="stylesheet" href="admin.css?v=5">
 </head>
 <body class="adm">
 
@@ -18,7 +18,7 @@
 
 <div class="adm-layout" id="painel" style="display:none">
 
-  <!-- menu lateral -->
+  <!-- ══ menu lateral ══ -->
   <aside class="adm-menu">
     <div class="adm-marca">
       <img src="assets/icon.png" alt="">
@@ -26,14 +26,43 @@
     </div>
 
     <nav class="adm-nav">
-      <a class="adm-item on" data-tab="resumo">Resumo</a>
-      <a class="adm-item" data-tab="vendas">Vendas</a>
-      <a class="adm-item" data-tab="licencas">Licenças</a>
-      <a class="adm-item" data-tab="usuarios">Usuários</a>
-      <a class="adm-item" data-tab="chaves">Chaves</a>
-      <a class="adm-item" data-tab="graficos">Hardware</a>
-      <a class="adm-item" data-tab="pcs">Computadores</a>
-      <a class="adm-item" data-tab="liberar">Liberar acesso</a>
+      <div class="adm-grupo">Visão geral</div>
+      <a class="adm-item" data-tab="resumo">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+        Resumo
+      </a>
+      <a class="adm-item" data-tab="vendas">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        Vendas
+      </a>
+      <a class="adm-item" data-tab="licencas">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 15h4M7 11h6"/></svg>
+        Licenças
+      </a>
+
+      <div class="adm-grupo">Clientes</div>
+      <a class="adm-item" data-tab="usuarios">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M17 8.5a3 3 0 0 1 0 6M19 20a5 5 0 0 0-3-4.6"/></svg>
+        Usuários
+      </a>
+      <a class="adm-item" data-tab="pcs">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="4" width="20" height="14" rx="2"/><path d="M8 21h8M12 18v3"/></svg>
+        Computadores
+      </a>
+      <a class="adm-item" data-tab="graficos">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20V8"/></svg>
+        Hardware
+      </a>
+
+      <div class="adm-grupo">Gestão</div>
+      <a class="adm-item" data-tab="chaves">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 7a4 4 0 1 1-5.6 3.6L4 15v3h3l1.4-1.4"/><circle cx="16" cy="8" r="1.5"/></svg>
+        Chaves
+      </a>
+      <a class="adm-item" data-tab="liberar">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+        Liberar acesso
+      </a>
     </nav>
 
     <div class="adm-pe">
@@ -42,193 +71,277 @@
     </div>
   </aside>
 
-  <!-- conteúdo -->
+  <!-- ══ conteúdo ══ -->
   <main class="adm-conteudo">
 
-    <!-- RESUMO -->
+    <!-- ─────────── RESUMO ─────────── -->
     <section class="adm-tab on" id="tab-resumo">
       <div class="adm-cabeca">
-        <h1>Resumo</h1>
-        <p>Números da conta: quem entrou, quem pagou e quantos PCs estão ligados.</p>
+        <div>
+          <h1>Resumo</h1>
+          <p>Visão geral da conta: quem entrou, quem pagou e quantos computadores estão ligados.</p>
+        </div>
       </div>
 
-      <div class="adm-cards" id="cards">
-        <div class="adm-card"><div class="adm-card-n" id="c-usuarios">—</div><div class="adm-card-r">Usuários</div></div>
-        <div class="adm-card"><div class="adm-card-n" id="c-pagos">—</div><div class="adm-card-r">Contas pagas</div></div>
-        <div class="adm-card"><div class="adm-card-n" id="c-gratis">—</div><div class="adm-card-r">Contas grátis</div></div>
-        <div class="adm-card"><div class="adm-card-n" id="c-pcs">—</div><div class="adm-card-r">Computadores</div></div>
+      <div id="alertas"></div>
+
+      <div class="adm-cards">
+        <div class="adm-card destaque">
+          <div class="adm-card-n" id="c-pagos">—</div>
+          <div class="adm-card-r">Contas pagas</div>
+          <div class="adm-card-d" id="c-pagos-d"></div>
+        </div>
+        <div class="adm-card">
+          <div class="adm-card-n" id="c-usuarios">—</div>
+          <div class="adm-card-r">Usuários</div>
+          <div class="adm-card-d" id="c-usuarios-d"></div>
+        </div>
+        <div class="adm-card">
+          <div class="adm-card-n" id="c-gratis">—</div>
+          <div class="adm-card-r">Contas grátis</div>
+          <div class="adm-card-d">uso das funções básicas</div>
+        </div>
+        <div class="adm-card">
+          <div class="adm-card-n" id="c-pcs">—</div>
+          <div class="adm-card-r">Computadores</div>
+          <div class="adm-card-d">máquinas vinculadas</div>
+        </div>
       </div>
 
-      <div class="adm-bloco">
-        <h2>Licenças</h2>
-        <div class="adm-linhas">
-          <div class="adm-linha"><span>Ativas</span><b id="l-ativas">—</b></div>
-          <div class="adm-linha"><span>Vencidas</span><b id="l-vencidas">—</b></div>
-          <div class="adm-linha"><span>Vitalícias</span><b id="l-vital">—</b></div>
+      <div class="adm-duplo">
+        <div class="adm-bloco">
+          <h2>Licenças <span id="lic-total"></span></h2>
+          <div class="adm-linhas">
+            <div class="adm-linha"><span><i class="ponto" style="background:#3ddc82"></i>Ativas</span><b id="l-ativas">—</b></div>
+            <div class="adm-linha"><span><i class="ponto" style="background:#ffb547"></i>Vencendo em 7 dias</span><b id="l-vencendo">—</b></div>
+            <div class="adm-linha"><span><i class="ponto" style="background:#ff3b47"></i>Vencidas</span><b id="l-vencidas">—</b></div>
+            <div class="adm-linha"><span><i class="ponto" style="background:#5a9dff"></i>Vitalícias</span><b id="l-vital">—</b></div>
+          </div>
+        </div>
+
+        <div class="adm-bloco">
+          <h2>Novas contas</h2>
+          <div class="adm-linhas">
+            <div class="adm-linha"><span>Hoje</span><b id="l-hoje">—</b></div>
+            <div class="adm-linha"><span>Últimos 7 dias</span><b id="l-7d">—</b></div>
+            <div class="adm-linha"><span>Últimos 30 dias</span><b id="l-30d">—</b></div>
+            <div class="adm-linha"><span>Total histórico</span><b id="l-total">—</b></div>
+          </div>
         </div>
       </div>
 
       <div class="adm-bloco">
-        <h2>Novas contas</h2>
-        <div class="adm-linhas">
-          <div class="adm-linha"><span>Últimos 7 dias</span><b id="l-7d">—</b></div>
-          <div class="adm-linha"><span>Últimos 30 dias</span><b id="l-30d">—</b></div>
+        <h2>Atividade recente <span>últimos acessos e contas</span></h2>
+        <div class="adm-atividade" id="atividade">
+          <div class="sk" style="height:56px;margin-bottom:8px"></div>
+          <div class="sk" style="height:56px;margin-bottom:8px"></div>
+          <div class="sk" style="height:56px"></div>
         </div>
       </div>
     </section>
 
-
-    <!-- VENDAS -->
+    <!-- ─────────── VENDAS ─────────── -->
     <section class="adm-tab" id="tab-vendas">
       <div class="adm-cabeca">
-        <h1>Vendas</h1>
-        <p>Pagamentos aprovados, com valor, plano e data.</p>
+        <div>
+          <h1>Vendas</h1>
+          <p>Pagamentos aprovados no período, com o faturamento dia a dia.</p>
+        </div>
       </div>
 
-      <div class="adm-filtros">
-        <select id="vend-periodo">
-          <option value="7">Últimos 7 dias</option>
-          <option value="30" selected>Últimos 30 dias</option>
-          <option value="90">Últimos 90 dias</option>
-          <option value="365">Último ano</option>
-        </select>
+      <div class="adm-pilulas" id="vend-pilulas">
+        <button class="adm-pilula" data-dias="7">7 dias</button>
+        <button class="adm-pilula on" data-dias="30">30 dias</button>
+        <button class="adm-pilula" data-dias="90">90 dias</button>
+        <button class="adm-pilula" data-dias="365">1 ano</button>
       </div>
 
       <div class="adm-cards">
-        <div class="adm-card"><div class="adm-card-n" id="v-total">—</div><div class="adm-card-r">Faturamento</div></div>
-        <div class="adm-card"><div class="adm-card-n" id="v-qtd">—</div><div class="adm-card-r">Vendas</div></div>
-        <div class="adm-card"><div class="adm-card-n" id="v-ticket">—</div><div class="adm-card-r">Ticket médio</div></div>
-        <div class="adm-card"><div class="adm-card-n" id="v-vital">—</div><div class="adm-card-r">Vitalícios</div></div>
+        <div class="adm-card destaque">
+          <div class="adm-card-n" id="v-total">—</div>
+          <div class="adm-card-r">Faturamento</div>
+          <div class="adm-card-d" id="v-total-d"></div>
+        </div>
+        <div class="adm-card">
+          <div class="adm-card-n" id="v-qtd">—</div>
+          <div class="adm-card-r">Vendas</div>
+          <div class="adm-card-d" id="v-qtd-d"></div>
+        </div>
+        <div class="adm-card">
+          <div class="adm-card-n" id="v-ticket">—</div>
+          <div class="adm-card-r">Ticket médio</div>
+          <div class="adm-card-d">por venda</div>
+        </div>
+        <div class="adm-card">
+          <div class="adm-card-n" id="v-vital">—</div>
+          <div class="adm-card-r">Vitalícios</div>
+          <div class="adm-card-d" id="v-vital-d"></div>
+        </div>
       </div>
 
       <div class="adm-bloco">
         <h2>Faturamento por dia</h2>
         <div class="adm-grafico" id="grafico-vendas">
-          <div class="adm-vazio">Sem vendas no período.</div>
+          <div class="adm-vazio">
+            <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 20h18M7 20v-6M12 20V8M17 20v-9"/></svg>
+            <b>Nenhuma venda no período</b>
+            Quando alguém pagar pelo site, o faturamento aparece aqui.
+          </div>
         </div>
       </div>
 
       <div class="adm-tabela-wrap">
         <table class="adm-tabela">
-          <thead><tr><th>Data</th><th>E-mail</th><th>Plano</th><th>Valor</th><th>Método</th></tr></thead>
+          <thead><tr><th>Data</th><th>Cliente</th><th>Plano</th><th>Valor</th><th>Método</th></tr></thead>
           <tbody id="tb-vendas"></tbody>
         </table>
       </div>
     </section>
 
-
-    <!-- LICENÇAS -->
+    <!-- ─────────── LICENÇAS ─────────── -->
     <section class="adm-tab" id="tab-licencas">
       <div class="adm-cabeca">
-        <h1>Licenças</h1>
-        <p>Quem tem acesso pago, quando vence e quanto falta.</p>
+        <div>
+          <h1>Licenças</h1>
+          <p>Quem tem acesso pago, quando vence e quantos dias restam.</p>
+        </div>
       </div>
 
-      <div class="adm-filtros">
-        <select id="lic-filtro">
-          <option value="">Todas</option>
-          <option value="ativas">Ativas</option>
-          <option value="vencendo">Vencendo em 7 dias</option>
-          <option value="vencidas">Vencidas</option>
-          <option value="vitalicias">Vitalícias</option>
-        </select>
+      <div class="adm-pilulas" id="lic-pilulas">
+        <button class="adm-pilula on" data-filtro="">Todas</button>
+        <button class="adm-pilula" data-filtro="ativas">Ativas</button>
+        <button class="adm-pilula" data-filtro="vencendo">Vencendo em 7 dias</button>
+        <button class="adm-pilula" data-filtro="vencidas">Vencidas</button>
+        <button class="adm-pilula" data-filtro="vitalicias">Vitalícias</button>
       </div>
 
       <div class="adm-tabela-wrap">
         <table class="adm-tabela">
-          <thead><tr><th>E-mail</th><th>Nome</th><th>Situação</th><th>Vence em</th><th>Dias</th></tr></thead>
+          <thead><tr><th>Cliente</th><th>Situação</th><th>Vence em</th><th>Restam</th><th>Ação</th></tr></thead>
           <tbody id="tb-licencas"></tbody>
         </table>
       </div>
     </section>
 
-    <!-- USUÁRIOS -->
+    <!-- ─────────── USUÁRIOS ─────────── -->
     <section class="adm-tab" id="tab-usuarios">
       <div class="adm-cabeca">
-        <h1>Usuários</h1>
-        <p>Todos que criaram conta. Você pode liberar, renovar ou tirar o acesso.</p>
+        <div>
+          <h1>Usuários</h1>
+          <p>Todos que criaram conta. Libere, renove ou remova o acesso.</p>
+        </div>
+      </div>
+
+      <div class="adm-pilulas" id="user-pilulas">
+        <button class="adm-pilula on" data-plano="">Todos</button>
+        <button class="adm-pilula" data-plano="ativo">Ativos</button>
+        <button class="adm-pilula" data-plano="vitalicio">Vitalícios</button>
+        <button class="adm-pilula" data-plano="vencido">Vencidos</button>
+        <button class="adm-pilula" data-plano="gratis">Grátis</button>
       </div>
 
       <div class="adm-filtros">
         <input type="search" id="busca" placeholder="Procurar por e-mail ou nome...">
-        <select id="filtro-plano">
-          <option value="">Todos</option>
-          <option value="ativo">Ativos</option>
-          <option value="vitalicio">Vitalícios</option>
-          <option value="vencido">Vencidos</option>
-          <option value="gratis">Grátis</option>
-        </select>
       </div>
 
       <div class="adm-tabela-wrap">
         <table class="adm-tabela">
           <thead>
-            <tr>
-              <th>E-mail</th>
-              <th>Nome</th>
-              <th>Plano</th>
-              <th>Vence</th>
-              <th>PCs</th>
-              <th>Ações</th>
-            </tr>
+            <tr><th>Cliente</th><th>Plano</th><th>Vence</th><th>PCs</th><th>Ações</th></tr>
           </thead>
           <tbody id="tb-usuarios"></tbody>
         </table>
       </div>
     </section>
 
-    <!-- PCs -->
+    <!-- ─────────── COMPUTADORES ─────────── -->
     <section class="adm-tab" id="tab-pcs">
       <div class="adm-cabeca">
-        <h1>Computadores</h1>
-        <p>Máquinas ligadas às contas. Cada conta tem o seu limite.</p>
+        <div>
+          <h1>Computadores</h1>
+          <p>Máquinas vinculadas às contas. Cada conta tem o seu limite de PCs.</p>
+        </div>
       </div>
       <div class="adm-tabela-wrap">
         <table class="adm-tabela">
           <thead>
-            <tr><th>PC</th><th>Conta</th><th>Placa</th><th>ID</th><th>Último acesso</th></tr>
+            <tr><th>Computador</th><th>Conta</th><th>Placa</th><th>ID</th><th>Último acesso</th></tr>
           </thead>
           <tbody id="tb-pcs"></tbody>
         </table>
       </div>
     </section>
 
-    <!-- LIBERAR -->
-    <section class="adm-tab" id="tab-liberar">
+    <!-- ─────────── HARDWARE ─────────── -->
+    <section class="adm-tab" id="tab-graficos">
       <div class="adm-cabeca">
-        <h1>Liberar acesso</h1>
-        <p>Para quem pagou por fora: digite o e-mail da conta e escolha o prazo.</p>
+        <div>
+          <h1>Hardware dos clientes</h1>
+          <p>O que as máquinas têm de placa de vídeo, processador e memória. Enviado pelo aplicativo no login.</p>
+        </div>
       </div>
 
-      <div class="adm-form">
-        <label>E-mail da conta</label>
-        <input type="email" id="lib-email" placeholder="cliente@gmail.com">
+      <div class="adm-cards">
+        <div class="adm-card">
+          <div class="adm-card-n" id="hw-total">—</div>
+          <div class="adm-card-r">Máquinas mapeadas</div>
+        </div>
+      </div>
 
-        <label>Prazo</label>
-        <select id="lib-dias">
-          <option value="30">30 dias</option>
-          <option value="90">90 dias</option>
-          <option value="365">365 dias</option>
-          <option value="">Vitalício</option>
-        </select>
+      <div class="adm-bloco">
+        <h2>Placas de vídeo</h2>
+        <div class="adm-barras" id="graf-gpu"></div>
+      </div>
 
-        <button class="adm-btn" id="lib-ok">Liberar</button>
-        <div class="adm-aviso" id="lib-aviso"></div>
+      <div class="adm-bloco">
+        <h2>Processadores</h2>
+        <div class="adm-barras" id="graf-cpu"></div>
+      </div>
+
+      <div class="adm-duplo">
+        <div class="adm-bloco">
+          <h2>Memória RAM</h2>
+          <div class="adm-barras" id="graf-ram"></div>
+        </div>
+        <div class="adm-bloco">
+          <h2>Sistema</h2>
+          <div class="adm-barras" id="graf-sis"></div>
+        </div>
       </div>
     </section>
 
-
-    <!-- CHAVES -->
+    <!-- ─────────── CHAVES ─────────── -->
     <section class="adm-tab" id="tab-chaves">
       <div class="adm-cabeca">
-        <h1>Chaves</h1>
-        <p>Para vender por fora do site: gere um código e entregue ao cliente. Ele resgata no aplicativo.</p>
+        <div>
+          <h1>Chaves</h1>
+          <p>Para vender fora do site: gere o código, entregue ao cliente, ele resgata no aplicativo.</p>
+        </div>
       </div>
 
-      <div class="adm-form" style="max-width:640px;margin-bottom:22px">
-        <div style="display:grid;grid-template-columns:90px 1fr 1fr auto;gap:12px;align-items:end">
+      <div class="adm-cards">
+        <div class="adm-card">
+          <div class="adm-card-n" id="ck-total">—</div>
+          <div class="adm-card-r">Total</div>
+        </div>
+        <div class="adm-card destaque">
+          <div class="adm-card-n" id="ck-livres">—</div>
+          <div class="adm-card-r">Disponíveis</div>
+        </div>
+        <div class="adm-card">
+          <div class="adm-card-n" id="ck-usadas">—</div>
+          <div class="adm-card-r">Usadas</div>
+        </div>
+        <div class="adm-card">
+          <div class="adm-card-n" id="ck-cancel">—</div>
+          <div class="adm-card-r">Canceladas</div>
+        </div>
+      </div>
+
+      <div class="adm-form" style="max-width:100%;margin-bottom:22px">
+        <div style="display:grid;grid-template-columns:100px 1fr 1fr auto;gap:14px;align-items:end">
           <div>
-            <label for="ch-qtd">Quantas</label>
+            <label for="ch-qtd">Quantidade</label>
             <input type="number" id="ch-qtd" value="1" min="1" max="100">
           </div>
           <div>
@@ -243,18 +356,11 @@
             <input type="number" id="ch-dias" value="30" min="1">
           </div>
           <div>
-            <button class="adm-btn" id="ch-criar" style="padding:11px 18px">Gerar</button>
+            <button class="adm-btn adm-btn pequeno" id="ch-criar">Gerar chaves</button>
           </div>
         </div>
         <div class="adm-aviso" id="ch-aviso"></div>
-        <div id="ch-novas" style="margin-top:12px"></div>
-      </div>
-
-      <div class="adm-cards">
-        <div class="adm-card"><div class="adm-card-n" id="ck-total">—</div><div class="adm-card-r">Total</div></div>
-        <div class="adm-card"><div class="adm-card-n" id="ck-livres">—</div><div class="adm-card-r">Disponíveis</div></div>
-        <div class="adm-card"><div class="adm-card-n" id="ck-usadas">—</div><div class="adm-card-r">Usadas</div></div>
-        <div class="adm-card"><div class="adm-card-n" id="ck-cancel">—</div><div class="adm-card-r">Canceladas</div></div>
+        <div id="ch-novas"></div>
       </div>
 
       <div class="adm-tabela-wrap">
@@ -265,32 +371,29 @@
       </div>
     </section>
 
-
-    <!-- HARDWARE -->
-    <section class="adm-tab" id="tab-graficos">
+    <!-- ─────────── LIBERAR ─────────── -->
+    <section class="adm-tab" id="tab-liberar">
       <div class="adm-cabeca">
-        <h1>Hardware dos clientes</h1>
-        <p>O que as máquinas têm de placa de vídeo, processador e memória. Usa os dados enviados pelo aplicativo.</p>
+        <div>
+          <h1>Liberar acesso</h1>
+          <p>Para quem pagou por fora. Digite o e-mail da conta e escolha o prazo.</p>
+        </div>
       </div>
 
-      <div class="adm-bloco">
-        <h2>Placas de vídeo</h2>
-        <div class="adm-barras" id="graf-gpu"><div class="adm-vazio">Nenhum dado ainda.</div></div>
-      </div>
+      <div class="adm-form">
+        <label>E-mail da conta</label>
+        <input type="email" id="lib-email" placeholder="cliente@gmail.com">
 
-      <div class="adm-bloco">
-        <h2>Processadores</h2>
-        <div class="adm-barras" id="graf-cpu"><div class="adm-vazio">Nenhum dado ainda.</div></div>
-      </div>
+        <label>Prazo</label>
+        <select id="lib-dias">
+          <option value="30">30 dias</option>
+          <option value="90">90 dias</option>
+          <option value="365">365 dias</option>
+          <option value="">Vitalício</option>
+        </select>
 
-      <div class="adm-bloco">
-        <h2>Memória RAM</h2>
-        <div class="adm-barras" id="graf-ram"><div class="adm-vazio">Nenhum dado ainda.</div></div>
-      </div>
-
-      <div class="adm-bloco">
-        <h2>Sistema</h2>
-        <div class="adm-barras" id="graf-sis"><div class="adm-vazio">Nenhum dado ainda.</div></div>
+        <button class="adm-btn" id="lib-ok">Liberar acesso</button>
+        <div class="adm-aviso" id="lib-aviso"></div>
       </div>
     </section>
 
@@ -305,7 +408,7 @@
   </div>
 </div>
 
-<script src="supabase-client.js?v=2"></script>
-<script src="admin.js?v=3"></script>
+<script src="supabase-client.js?v=3"></script>
+<script src="admin.js?v=6"></script>
 </body>
 </html>
