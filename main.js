@@ -704,6 +704,34 @@ H('elevacao-diagnostico', async () => {
     };
   } catch (e) { return { erro: e.message }; }
 });
+// Dispara a tarefa "VLOptimizer" depois de 2 s, SEM janela nenhuma.
+//
+// Por que VBS e não cmd/powershell (tudo medido contando ConsoleWindowClass visível):
+//   - cmd.exe, mesmo com detached+windowsHide, abre um console e ele PISCA na tela;
+//   - powershell com -WindowStyle Hidden não abre console, mas o disparo não chega;
+//   - powershell sem detached morre quando o app sai.
+//   - wscript.exe com um .vbs dorme, dispara e sobrevive — sem console nenhum.
+//
+// O atraso de 2 s é obrigatório: o Agendador tem MultipleInstances=IgnoreNew, e com
+// esta instância viva ele descarta a execução (devolvendo "ÊXITO" mesmo assim).
+function reabrirElevadoPelaTarefa() {
+  try {
+    const { spawn } = require('child_process');
+    const dir = path.join(process.env.APPDATA || os.homedir(), 'VL Optimizer');
+    try { fs.mkdirSync(dir, { recursive: true }); } catch (e) { }
+    const vbs = path.join(dir, 'reabrir.vbs');
+    try {
+      fs.writeFileSync(vbs,
+        'WScript.Sleep 2000' + String.fromCharCode(13, 10) +
+        'CreateObject("WScript.Shell").Run "schtasks /run /tn VLOptimizer", 0, False',
+        'ascii');
+    } catch (e) { }
+    const filho = spawn('wscript.exe', [vbs], { detached: true, stdio: 'ignore', windowsHide: true });
+    filho.on('error', () => { });
+    filho.unref();
+    return true;
+  } catch (e) { return false; }
+}
 H('admin-status', async () => {
   // "podeElevar": existe tarefa agendada com RunLevel Highest apontando para este exe.
   // Com ela, reabrir como admin não pede UAC. Sem ela, o botão pede UAC uma vez
@@ -731,13 +759,14 @@ H('elevate-now', async () => {
 
     // dispara DEPOIS que este processo sair (~1,5 s): o Agendador só executa se não
     // houver outra instância viva.
-    const { spawn } = require('child_process');
-    const filho = spawn('cmd.exe', ['/c', 'ping -n 2 127.0.0.1 >nul & schtasks /run /tn VLOptimizer'], {
-      detached: true,
-      stdio: 'ignore',
-      windowsHide: true,
-    });
-    filho.unref();
+    // Um processo externo espera esta instância sair e só então dispara a tarefa —
+    // porque o Agendador descarta a execução com MultipleInstances=IgnoreNew quando o app
+    // ainda está vivo, e mesmo assim o schtasks devolve "ÊXITO".
+    //
+    // PowerShell com -WindowStyle Hidden em vez de cmd.exe: o cmd, com detached:true, cria
+    // um console novo e PISCA na tela. Medido: cmd.exe = ConsoleWindowClass visível;
+    // powershell -WindowStyle Hidden = nenhuma janela.
+    reabrirElevadoPelaTarefa();
 
     app.isQuitting = true;
     setTimeout(() => { try { app.quit(); } catch (e) { } }, 300);
@@ -919,13 +948,10 @@ app.whenReady().then(async () => {
 
             // Mesmo mecanismo do botão "Reabrir como admin", que foi provado:
             // processo externo espera esta instância sair e só então dispara a tarefa.
-            const { spawn } = require('child_process');
-            const filho = spawn('cmd.exe', ['/c', 'ping -n 3 127.0.0.1 >nul & schtasks /run /tn VLOptimizer'], {
-              detached: true,
-              stdio: 'ignore',
-              windowsHide: true,
-            });
-            filho.unref();
+            // Disparo sem janela: cmd.exe com detached:true cria um console próprio e
+            // pisca na tela a cada abertura. O PowerShell com -WindowStyle Hidden faz o
+            // mesmo trabalho sem console nenhum (medido).
+                        reabrirElevadoPelaTarefa();
 
             app.isQuitting = true;
             setTimeout(() => { try { app.quit(); } catch (e) { } }, 200);
