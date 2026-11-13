@@ -43,7 +43,7 @@
         <span class="conta-tag free" id="plano-tag">Grátis</span>
       </div>
       <div class="conta-acoes" style="margin-top:20px">
-        <a class="btn btn-primary" href="/planos" id="btn-plano">Ver os planos</a>
+        <a class="btn btn-primary" href="/#precos" id="btn-plano">Ver os planos</a>
         <a class="btn btn-ghost" href="/resgatar">Tenho uma chave</a>
       </div>
     </div>
@@ -70,6 +70,12 @@
 // Minha conta: mostra plano, computadores vinculados e permite sair.
 // ─────────────────────────────────────────────────────────────────────────────
 const $ = (id) => document.getElementById(id);
+
+// Escapa dado que vem do banco antes de jogar no HTML. O nome do PC vem do Windows do
+// cliente: sem isso, um nome malicioso viraria script na página da conta.
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
 
 function data(iso) {
   if (!iso) return '—';
@@ -113,7 +119,7 @@ function data(iso) {
       const li = document.createElement('li');
       li.innerHTML =
         '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="4" width="20" height="14" rx="2"/><path d="M8 21h8M12 18v3"/></svg>' +
-        '<div><b>' + (d.device_name || 'PC sem nome') + '</b><br>' +
+        '<div><b>' + esc(d.device_name || 'PC sem nome') + '</b><br>' +
         '<small>vinculado em ' + data(d.first_seen) + ' · último acesso ' + data(d.last_seen) + '</small></div>';
       ul.appendChild(li);
     });
