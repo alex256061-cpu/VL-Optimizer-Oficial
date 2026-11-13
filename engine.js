@@ -65,18 +65,24 @@ function Set-Val($p, $n, $v, $t) {
 }
 function Del-Val($p, $n) { Remove-ItemProperty -LiteralPath $p -Name $n -ErrorAction SilentlyContinue }
 function Svc($n, $mode) {
-  # -ErrorAction Stop e conferir o StartType depois: no HKLM sem administrador o
-  # Set-Service dava "Acesso negado", o SilentlyContinue engolia e a função devolvia
-  # sucesso — o app dizia "concluído" com o serviço ainda ligado.
+  # Confere o StartType DEPOIS de gravar. Antes o Set-Service falhava com "Acesso negado",
+  # a função devolvia sucesso e o app dizia "concluído" com o serviço ainda ligado.
   $s = Get-Service -Name $n -ErrorAction SilentlyContinue
-  if (-not $s) { return }
+  if (-not $s) { throw ("servico " + $n + " nao existe") }
   try {
     Set-Service -Name $n -StartupType $mode -ErrorAction Stop
-    if ($mode -eq 'Disabled') { Stop-Service -Name $n -Force -ErrorAction SilentlyContinue }
-    else { Start-Service -Name $n -ErrorAction SilentlyContinue }
   } catch {
     throw ("nao foi possivel mudar o servico " + $n + ": " + $_.Exception.Message)
   }
+  # reler: o Set-Service pode "passar" sem mudar
+  $s2 = Get-Service -Name $n -ErrorAction SilentlyContinue
+  if (-not $s2) { throw ("servico " + $n + " sumiu") }
+  $atual = [string]$s2.StartType
+  if ($atual -ine $mode -and -not ($mode -eq 'Automatic' -and $atual -eq 'Automatic')) {
+    throw ("o servico " + $n + " continua em " + $atual + " (pedido: " + $mode + ") - precisa de administrador")
+  }
+  if ($mode -eq 'Disabled') { Stop-Service -Name $n -Force -ErrorAction SilentlyContinue }
+  else { Start-Service -Name $n -ErrorAction SilentlyContinue }
 }
 function Json($o) { ConvertTo-Json -InputObject $o -Compress -Depth 8 }
 `;
@@ -145,14 +151,16 @@ async function psBackupState(key, regs, svcs) {
   const st = { at: Date.now(), reg: [], svc: [] };
   const parts = [];
   regs.forEach((r, i) => {
-    parts.push(`$v = $null; $e = $false; try { $v = (Get-ItemProperty -LiteralPath '${esc(r.path)}' -Name '${esc(r.name)}' -ErrorAction Stop).'${esc(r.name)}'; $e = $true } catch {}; $o.reg += @{ path='${esc(r.path)}'; name='${esc(r.name)}'; exists=$e; value=$v }`);
+    // Guardar o TIPO do valor junto. Sem ele, um MultiString (PagingFiles, por exemplo)
+    // voltava como String e o conteúdo virava o texto "a b c".
+    parts.push(`$v = $null; $e = $false; $k = $null; try { $p2 = Get-Item -LiteralPath '${esc(r.path)}' -ErrorAction Stop; $v = $p2.GetValue('${esc(r.name)}', $null, 'DoNotExpandEnvironmentNames'); if ($p2.GetValueNames() -contains '${esc(r.name)}') { $k = [string]$p2.GetValueKind('${esc(r.name)}'); $e = $true } } catch {}; $o.reg += @{ path='${esc(r.path)}'; name='${esc(r.name)}'; exists=$e; kind=$k; value=$v }`);
   });
   for (const s of svcs) parts.push(`$s = Get-Service -Name '${s}' -ErrorAction SilentlyContinue; $o.svc += @{ name='${s}'; mode=$(if ($s) { [string]$s.StartType } else { $null }); running=$(if ($s) { [bool]($s.Status -eq 'Running') } else { $false }) }`);
   const out = await ps(`$o = [ordered]@{ reg=@(); svc=@() }\n${parts.join('\n')}\nWrite-Output (Json $o)`, 60000);
   if (!out.ok) return st;
   try {
     const j = JSON.parse(out.out);
-    st.reg = (j.reg || []).map((r) => ({ path: r.path, name: r.name, exists: !!r.exists, value: r.value }));
+    st.reg = (j.reg || []).map((r) => ({ path: r.path, name: r.name, exists: !!r.exists, kind: r.kind || null, value: r.value }));
     st.svc = (j.svc || []).map((s) => ({ name: s.name, mode: s.mode, running: !!s.running }));
   } catch (e) {}
   backs = loadBackups();
@@ -354,7 +362,7 @@ if ($tem -gt 0 -and $ok -eq $tem) { Write-Output '1' } else { Write-Output '0' }
     desc: 'Sem atraso para o caractere começar a repetir.',
     reg: [
       { path: HKCU + '\\Control Panel\\Keyboard', name: 'KeyboardDelay', type: 'String', on: '0', off: '1' },
-      { path: HKCU + '\\Control Panel\\Keyboard', name: 'KeyboardSpeed', type: 'String', on: '31', off: '31' },
+      { path: HKCU + '\\Control Panel\\Keyboard', name: 'KeyboardSpeed', type: 'String', on: '31', off: null },
     ],
   }),
   T('sticky', { padrao: "506", rec: true,
@@ -753,8 +761,15 @@ public class D2 { [StructLayout(LayoutKind.Sequential)] public struct DM { publi
   'Pagefile Automático': {
     tag: 'memoria', rec: true, restart: 'reboot', title: 'Memória virtual gerenciada pelo Windows',
     desc: 'Volta o arquivo de paginação para o automático. Otimizadores que desligam ou fixam esse arquivo fazem jogos pesados, como o GTA, fecharem do nada.',
-    regs: [{ path: HKLM + '\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Memory Management', name: 'PagingFiles', type: 'String', on: '', off: null }],
-    detect: `$v = Get-Val '${HKLM}\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Memory Management' 'PagingFiles'; $auto = $false; if ($null -eq $v -or [string]$v -eq '') { $auto = $true } elseif (-not ([string]$v -match '^\\s*\\d+\\s+\\d+\\s')) { $auto = $true }; if ($auto) { Write-Output '1' } else { Write-Output '0' }`,
+    // PagingFiles é MultiString: cada item é "C:\pagefile.sys 1024 4096".
+    // Com ele vazio o Windows gerencia sozinho; com qualquer item o arquivo é fixo ou
+    // desligado. Antes o tipo declarado era String e o detect comparava [string] de um
+    // array, que nunca é vazio — dava "ligado" (1) nos 6 cenários, inclusive com pagefile
+    // fixo e desligado.
+    regs: [{ path: HKLM + '\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Memory Management', name: 'PagingFiles', type: 'MultiString', on: '', off: null }],
+    // Só é "automático" quando a lista está VAZIA. Qualquer item preenchido significa
+    // arquivo fixo ou desligado — e nesses casos o usuário precisa desta ação.
+    detect: `$v = Get-Val '${HKLM}\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Memory Management' 'PagingFiles'; $itens = @(); if ($null -ne $v) { $itens = @($v | Where-Object { $_ -ne $null -and ([string]\$_).Trim() -ne '' }) }; if ($itens.Count -eq 0) { Write-Output '1' } else { Write-Output '0' }`,
     revert: `Write-Output 'ok'`,
   },
 };
@@ -916,7 +931,14 @@ async function probeTweak(t) {
     const padraoT = (t.padrao !== undefined) ? String(t.padrao).replace(/'/g, "''") : null;
   const parts = regs.map((r) => {
     const alvo = String(r.on).replace(/'/g, "''");
-    if (padraoT !== null) {
+    // Ausente vale como padrão SÓ quando o padrão é diferente do valor de ligar.
+    //
+    // Em `widgets` o padrão é 0 e o valor de ligar também é 0: são o mesmo estado. Se
+    // um valor ausente fosse contado como "ligado", o desfazer (que apaga o valor) seria
+    // lido como "ainda ligado" — reportava falha com o Windows já restaurado e jogava
+    // fora o backup.
+    const padraoIgualAoOn = padraoT !== null && padraoT === alvo;
+    if (padraoT !== null && !padraoIgualAoOn) {
       return `$v = Get-Val '${r.path}' '${r.name.replace(/'/g, "''")}'; if ($null -eq $v) { $v = '${padraoT}' }; if ([string]$v -eq '${alvo}') { $c++ }`;
     }
     return `$v = Get-Val '${r.path}' '${r.name.replace(/'/g, "''")}'; if ($null -ne $v -and [string]$v -eq '${alvo}') { $c++ }`;
@@ -1073,11 +1095,13 @@ async function applyTweak(id, want) {
       }
       for (const s of svcs) lines.push(`Svc '${s}' 'Disabled'`);
       const r = await ps(lines.join('\n'), 60000);
-      if (!r.ok) return { success: false, error: r.err || 'falha' };
+      if (!r.ok) { t._ultimoErro = r.err; return { success: false, error: await erroDePermissao(r.err) }; }
+      if (r.err && /acesso negado|access denied|denied/i.test(String(r.err))) { t._ultimoErro = r.err; }
     }
     if (t.on) {
       const r = await ps(t.on, 60000);
-      if (!r.ok) return { success: false, error: r.err || 'falha' };
+      if (!r.ok) { t._ultimoErro = r.err; return { success: false, error: await erroDePermissao(r.err) }; }
+      if (r.err && /acesso negado|access denied|denied/i.test(String(r.err))) { t._ultimoErro = r.err; }
     }
     const now = await probeTweak(t);
     if (now) return { success: true, on: true };
@@ -1100,7 +1124,7 @@ async function applyTweak(id, want) {
   }
   const now = await probeTweak(t);
   if (!now) return { success: true, on: false };
-  return { success: false, on: now, error: 'nao foi possivel desfazer. ' + await erroDePermissao() };
+  return { success: false, on: now, error: 'nao foi possivel desfazer. ' + await erroDePermissao(t && t._ultimoErro) };
 }
 
 async function runAction(name) {
