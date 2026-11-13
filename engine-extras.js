@@ -1467,9 +1467,40 @@ ex.fpsRecord = async ({ slot, secs, label }) => {
 };
 
 ex.fpsClear = (slot) => { fps.sessions[slot] = null; writeJson('fps-sessions.json', fps.sessions); return { success: true }; };
+// Chaves que o overlay sabe mostrar. Serve para não aceitar lixo do renderer e para
+// reconstruir um `show` vazio quando o arquivo salvo veio estragado.
+const OVERLAY_CHAVES = ['fps', 'frametime', 'low1', 'cpu', 'gpu', 'ram', 'temp', 'grafico', 'name'];
+
+// Mescla `show` CHAVE POR CHAVE, nunca trocando o objeto.
+//
+// Antes era Object.assign(fps.overlay, patch): raso, então um clique em "CPU" mandava
+// {show:{cpu:true}} e apagava todas as outras escolhas. Cada clique deixava exatamente
+// uma opção marcada — parecia botão de rádio, mas o defeito estava na escrita.
+//
+// O GDZ percorre as chaves recebidas e atribui uma a uma; aqui é igual.
+function mesclarShow(showAtual, novo) {
+  const base = (showAtual && typeof showAtual === 'object') ? showAtual : {};
+  const saida = {};
+  // mantém o que já existia
+  for (const k of Object.keys(base)) saida[k] = base[k];
+  // só aceita chaves conhecidas e valores booleanos
+  if (novo && typeof novo === 'object') {
+    for (const k of Object.keys(novo)) {
+      if (!OVERLAY_CHAVES.includes(k)) continue;
+      if (typeof novo[k] !== 'boolean') continue;
+      saida[k] = novo[k];
+    }
+  }
+  return saida;
+}
+
 ex.fpsOverlaySet = (patch) => {
-  Object.assign(fps.overlay, patch || {});
-  if (patch && patch.show) Object.assign(fps.overlay.show, patch.show);
+  const p = patch || {};
+  // tira `show` do patch para que o Object.assign não possa substituí-lo
+  const semShow = {};
+  for (const k of Object.keys(p)) if (k !== 'show') semShow[k] = p[k];
+  Object.assign(fps.overlay, semShow);
+  fps.overlay.show = mesclarShow(fps.overlay.show, p.show);
   writeJson('fps-overlay.json', fps.overlay);
   return { success: true, overlay: fps.overlay };
 };
@@ -1489,9 +1520,37 @@ ex.fpsTick = async () => { await sysSample(); return overlayPayload(); };
 ex.fpsOverlayPayload = overlayPayload;
 
 // ────────────────────────────── GARGALO ──────────────────────────────
-ex.bnFindGame = async () => {
-  const r = await core.ps(`$o = @(Get-Process | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 6 | ForEach-Object { @{ name=$_.ProcessName; pid=$_.Id } }); Write-Output (Json $o)`);
-  try { return { success: true, games: JSON.parse(r.out) }; } catch (e) { return { success: true, games: [] }; }
+// Lista os processos com janela aberta, para a tela escolher qual é o jogo.
+//
+// Devolve SEMPRE uma lista em `games`. A tela precisa escolher UM item dela — testar
+// `game.pid` na resposta inteira (como era antes) dava sempre falso e o fluxo do
+// gargalo nunca passava daí.
+//
+// `ignore` é o pid que o usuário já recusou em "Não é esse": fica de fora da lista
+// para o laço não voltar ao mesmo processo para sempre.
+ex.bnFindGame = async (opts) => {
+  const ignore = Number(opts && opts.ignore) || 0;
+  // O pipeline TEM de estar dentro de @( ... ): sem os parênteses o resultado ia para
+  // o stdout e $o continuava vazio, então a lista voltava sempre com 0 itens — e o
+  // fluxo do gargalo ficava procurando um jogo que já estava na tela.
+  const r = await core.ps([
+    '$o = @(',
+    '  Get-Process -ErrorAction SilentlyContinue |',
+    '  Where-Object { $_.MainWindowHandle -ne 0 -and $_.Id -ne ' + ignore + ' } |',
+    '  Sort-Object -Property WorkingSet64 -Descending |',
+    '  Select-Object -First 40 |',
+    '  ForEach-Object { @{ name=$_.ProcessName; pid=$_.Id; title=[string]$_.MainWindowTitle; mem=$_.WorkingSet64 } }',
+    ')',
+    'Write-Output (Json $o)',
+  ].join(String.fromCharCode(10)), 30000);
+  let games = [];
+  try {
+    const j = JSON.parse(r.out);
+    games = Array.isArray(j) ? j : (j ? [j] : []);
+  } catch (e) { games = []; }
+  // sem pid válido não serve para medir
+  games = games.filter((g) => g && Number.isInteger(Number(g.pid)) && Number(g.pid) > 0);
+  return { success: true, games };
 };
 
 ex.measureBottleneck = async ({ seconds, pid }) => {

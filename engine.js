@@ -314,18 +314,24 @@ const TWEAKS = [
         if (Test-Path -LiteralPath $k) { Set-Val $k 'MSISupported' 0 'DWord' }
       }
       Write-Output 'ok'`,
-    probe: `$gpus = @(Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue | Where-Object { $_.PNPDeviceID -match '^PCI\\\\' })
-if ($gpus.Count -eq 0) { Write-Output '0'; exit }
-$ok = 0; $tem = 0
-foreach ($g in $gpus) {
-  $k = 'HKLM:\\SYSTEM\\CurrentControlSet\\Enum\\' + $g.PNPDeviceID + '\\Device Parameters\\Interrupt Management\\MessageSignaledInterruptProperties'
-  if (Test-Path -LiteralPath $k) {
-    $tem++
-    $v = (Get-ItemProperty -LiteralPath $k -Name 'MSISupported' -ErrorAction SilentlyContinue).MSISupported
-    if ($v -eq 1) { $ok++ }
+    // O probe é colado numa linha só pelo tweaksStatus (replace de \n por espaço),
+    // então todo comando precisa de ";" explícito. Sem isso o PowerShell aborta o
+    // script inteiro com "Token inesperado" e TODOS os probes voltam desligados —
+    // era a causa do contador parado em "13 de 21".
+    probe: `$gpus = @(Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue | Where-Object { $_.PNPDeviceID -match '^PCI\\\\' });
+if ($gpus.Count -eq 0) { Write-Output '0' } else {
+  $ok = 0;
+  $tem = 0;
+  foreach ($g in $gpus) {
+    $k = 'HKLM:\\SYSTEM\\CurrentControlSet\\Enum\\' + $g.PNPDeviceID + '\\Device Parameters\\Interrupt Management\\MessageSignaledInterruptProperties';
+    if (Test-Path -LiteralPath $k) {
+      $tem = $tem + 1;
+      $v = (Get-ItemProperty -LiteralPath $k -Name 'MSISupported' -ErrorAction SilentlyContinue).MSISupported;
+      if ($v -eq 1) { $ok = $ok + 1 }
+    }
   }
-}
-if ($tem -gt 0 -and $ok -eq $tem) { Write-Output '1' } else { Write-Output '0' }`,
+  if ($tem -gt 0 -and $ok -eq $tem) { Write-Output '1' } else { Write-Output '0' }
+}`,
     restart: 'reboot',
   }),
   T('mpo', {
@@ -952,8 +958,16 @@ async function tweaksStatus() {
     // getDns roda em paralelo com a leitura dos ajustes: nao ha dependencia entre eles.
   const dnsPromessa = getDns().catch(() => 'auto');
 const caps = await getCaps();
-  const regItems = TWEAKS.filter((t) => tweakRegs(t).length);
-  const customItems = TWEAKS.filter((t) => !tweakRegs(t).length);
+  // A classificação é pela PRESENÇA DE PROBE, não pela presença de registro.
+  //
+  // O probeTweak() consulta o probe ANTES dos valores do registro. Aqui era o
+  // contrário: um ajuste que tem probe E registro (hibernate, por exemplo) caía no
+  // ramo do registro e o probe era ignorado. Aplicar funcionava, o Windows mudava, e
+  // o contador não subia — o "13 de 21" que o cliente viu.
+  //
+  // Com esta ordem as duas funções leem a mesma coisa e não podem divergir.
+  const regItems = TWEAKS.filter((t) => !t.probe && tweakRegs(t).length);
+  const customItems = TWEAKS.filter((t) => t.probe || !tweakRegs(t).length);
   const on = {};
   if (regItems.length) {
     const parts = regItems.map((t) => {
@@ -964,7 +978,11 @@ const caps = await getCaps();
       const padraoT = (t.padrao !== undefined) ? String(t.padrao).replace(/'/g, "''") : null;
       const cond = regs.map((r) => {
         const alvo = String(r.on).replace(/'/g, "''");
-        if (padraoT !== null) {
+        // Mesma regra do probeTweak: o valor ausente só vale como padrão quando o
+        // padrão é DIFERENTE do valor de ligar. Em `widgets` o padrão é 0 e o valor de
+        // ligar também é 0 — são o mesmo estado, então ausência não conta como ligado.
+        const padraoIgualAoOn = padraoT !== null && padraoT === alvo;
+        if (padraoT !== null && !padraoIgualAoOn) {
           return `$v = Get-Val '${esc(r.path)}' '${esc(r.name)}'; if ($null -eq $v) { $v = '${padraoT}' }; if ([string]$v -eq '${alvo}') { $ok++ }`;
         }
         return `$v = Get-Val '${esc(r.path)}' '${esc(r.name)}'; if ($null -ne $v -and [string]$v -eq '${alvo}') { $ok++ }`;
@@ -980,9 +998,23 @@ const caps = await getCaps();
   const semProbe = customItems.filter((t) => !t.probe);
   semProbe.forEach((t) => { on[t.id] = false; });
   if (comProbe.length) {
+    // Cada probe roda no seu próprio try/catch.
+    //
+    // Antes eram colados todos num script só: um `exit` ou um erro de sintaxe num
+    // deles abortava o PowerShell inteiro e os 8 voltavam desligados — o contador
+    // parecia travado (13 de 21) mesmo depois de otimizar.
     const blocos = comProbe.map((t, idx) => {
-      const seguro = String(t.probe).replace(/\r?\n/g, ' ');
-      return `$__probes['${idx}'] = @( ${seguro} ) -join ' '`;
+      // NÃO colar as linhas do probe.
+      //
+      // O replace de \n por espaço juntava comandos sem separador
+      // ("$tem = 0 $tudoOff = $true" virava um erro de sintaxe) e, como os probes
+      // rodam todos no mesmo script, um erro derrubava os oito. O contador ficava
+      // parado mesmo com os ajustes aplicados de verdade.
+      //
+      // Aqui as quebras de linha são preservadas e o probe vai dentro de um
+      // scriptblock & { ... }, que é uma expressão válida dentro de @().
+      const seguro = String(t.probe).replace(/\bexit\b/g, 'return');
+      return `$__probes['${idx}'] = @( & { ${seguro} } ) -join ' '`;
     });
     const scriptP = `$__probes = @{}
 ${blocos.join('\n')}
