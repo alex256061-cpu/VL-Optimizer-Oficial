@@ -1,8 +1,63 @@
 /* Economia de CPU com a janela em segundo plano.
-   Pausa as animações em loop quando o documento não está visível ou a janela perde
-   o foco, e retoma ao voltar. Só mexe em animation-play-state: nada some da tela. */
+   
+   ⚠️ HISTÓRICO DE UM ERRO: a primeira versão usava `html.vl-idle *`, que pausava TODAS
+   as animações. As animações de ENTRADA (body, sidebar, nav-item, content > *) começam
+   em `opacity: 0` com `backwards`; pausadas antes de terminar, o elemento FICA no
+   primeiro quadro e a tela inteira desaparece até a janela voltar ao foco.
+   Medido: opacidade travada em 0.006 depois de 900 ms com a página já carregada.
+   
+   Correção: pausar SÓ as animações infinitas. São elas que consomem CPU sem parar.
+   As de entrada duram menos de meio segundo e não custam nada — ficam intocadas. */
 
-html.vl-idle,
-html.vl-idle * {
+/* ── spinners de carregamento ── */
+html.vl-idle .spinner,
+html.vl-idle [class*="spin"],
+html.vl-idle .loading::after,
+html.vl-idle .btn-busy::after {
   animation-play-state: paused !important;
+}
+
+/* ── varreduras decorativas (shimmer, sweep, skeleton) ── */
+html.vl-idle .bn-flow-ic::after,
+html.vl-idle .dk-sweep,
+html.vl-idle .skeleton,
+html.vl-idle .sk::after {
+  animation-play-state: paused !important;
+}
+
+/* ── giroscópio da tela inicial ── */
+html.vl-idle .gy-glow,
+html.vl-idle .gy-ring,
+html.vl-idle .gy-orbit,
+html.vl-idle .gy-core,
+html.vl-idle [class^="gy-"] {
+  animation-play-state: paused !important;
+}
+
+/* ── itens que "pulsam" sozinhos (notificação, ponto de status) ── */
+html.vl-idle .sdot.on,
+html.vl-idle .pulse,
+html.vl-idle .cl-size.busy,
+html.vl-idle .act-item.new {
+  animation-play-state: paused !important;
+}
+
+/* ── qualquer elemento cujo estilo inline declare animação infinita ── */
+html.vl-idle [style*="infinite"] {
+  animation-play-state: paused !important;
+}
+
+/* Garantia: nenhuma animação de entrada (que começa invisível) pode ser pausada.
+   Estas regras vêm depois e vencem por ordem, mesmo que algum seletor acima case. */
+html.vl-idle body,
+html.vl-idle .sidebar,
+html.vl-idle .nav-item,
+html.vl-idle .topbar,
+html.vl-idle .topbar-left,
+html.vl-idle .topbar-right,
+html.vl-idle .content,
+html.vl-idle .content > *,
+html.vl-idle .page,
+html.vl-idle .page > * {
+  animation-play-state: running !important;
 }
