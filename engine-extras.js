@@ -8,7 +8,7 @@ const core = require('./engine');
 
 const ex = {};
 
-const APP_DATA = () => process.env.LOPT_DATA_DIR || path.join(process.env.LOCALAPPDATA || os.homedir(), 'VLOptimizer', 'data');
+const APP_DATA = () => process.env.LOPT_DATA_DIR || path.join(process.env.APPDATA || os.homedir(), 'VL Optimizer', 'data');
 const fileIn = (name) => path.join(APP_DATA(), name);
 function readJson(file, fallback) { try { return JSON.parse(fs.readFileSync(fileIn(file), 'utf8')); } catch (e) { return fallback; } }
 function writeJson(file, v) { try { fs.mkdirSync(APP_DATA(), { recursive: true }); fs.writeFileSync(fileIn(file), JSON.stringify(v, null, 1), 'utf8'); } catch (e) {} }
@@ -843,7 +843,8 @@ async function processRunning(nomes) {
 
 ex.fivemGfxStatus = async () => {
   const file = fivemSettingsFile();
-  const running = processRunning(['FiveM', 'FiveM_b2372_GTAProcess', 'GTA5']);
+  // await: sem isso, 'running' era uma Promise e o JSON saia {}.
+  const running = await processRunning(['FiveM', 'FiveM_b2372_GTAProcess', 'GTA5']);
   if (!file) return { success: false, installed: !!fs.existsSync(path.join(os.homedir(), 'AppData', 'Local', 'FiveM')), file: null, running };
   let xml = '';
   try { xml = fs.readFileSync(file, 'utf8'); } catch (e) {}
@@ -855,7 +856,7 @@ ex.fivemGfxStatus = async () => {
 ex.fivemGfxApply = async ({ preset, scaling, borderless }) => {
   const file = fivemSettingsFile();
   if (!file) return { success: false, error: 'Abra o FiveM uma vez e feche para ele criar o arquivo de configuração.' };
-  if (processRunning(['FiveM', 'GTA5'])) return { success: false, error: 'O FiveM está aberto. Feche o jogo para mudar os gráficos.' };
+  if (await processRunning(['FiveM', 'GTA5'])) return { success: false, error: 'O FiveM está aberto. Feche o jogo para mudar os gráficos.' };
   let xml = fs.readFileSync(file, 'utf8');
   if (!fs.existsSync(FIVEM_BAK())) fs.writeFileSync(FIVEM_BAK(), xml, 'utf8');
   const set = (tag, val) => {
@@ -1166,6 +1167,19 @@ const fps = {
   recording: null, hotkey: 'Ctrl+Alt+B',
 };
 
+// FPS médio do grupo dos piores frametimes.
+//
+// O indicador "1% low" é a média dos 1% piores quadros, e não o pior quadro sozinho.
+// Usar um quadro só produzia números otimistas (168 em vez de 136 num teste real) e
+// escondia exatamente o travamento que o jogador sente.
+function lowFromFrametimes(lista, fracao) {
+  const arr = (Array.isArray(lista) ? lista : []).filter((x) => x > 0 && isFinite(x));
+  if (!arr.length) return 0;
+  const piores = [...arr].sort((a, b) => b - a);
+  const qtd = Math.max(1, Math.round(piores.length * fracao));
+  const media = piores.slice(0, qtd).reduce((s, x) => s + x, 0) / qtd;
+  return media > 0 ? Math.round((1000 / media) * 10) / 10 : 0;
+}
 function stopPM() {
   if (fps.proc) { try { fps.proc.kill(); } catch (e) {} fps.proc = null; }
   fps.frames = []; fps.fps = 0; fps.ft = 0; fps.low1 = 0;
@@ -1199,9 +1213,10 @@ function startPM(pid) {
       const recent = fps.frames.slice(-120);
       fps.ft = recent.reduce((a, b) => a + b.ft, 0) / (recent.length || 1);
       fps.fps = Math.round(1000 / fps.ft);
-      const inWindow = fps.frames.map((f) => f.ft).sort((a, b) => b - a);
-      const k = Math.max(0, Math.ceil(inWindow.length * 0.01) - 1);
-      fps.low1 = inWindow.length ? Math.round(1000 / inWindow[k]) : 0;
+      // 1% low = média dos 1% piores frametimes, não um único quadro.
+      // Pegar um quadro só dava +24% de erro contra a referência (168 em vez de 136).
+      fps.low1 = lowFromFrametimes(fps.frames.map((f) => f.ft), 0.01);
+      fps.low01 = lowFromFrametimes(fps.frames.map((f) => f.ft), 0.001);
     };
     p.stdout.on('data', (d) => {
       buf += d.toString();
@@ -1299,17 +1314,24 @@ function startListCapture() {
     try {
       // Copia as amostras recentes do alvo atual para o registro por aplicativo.
       // fps.frames já é alimentado pelo PresentMon; só replicamos.
-      const alvo = (fps.targetName || "jogo").replace(/\.exe$/i, "").toLowerCase();
+      // Sem jogo alvo, não inventar o nome "jogo": a cobertura por processo nunca casaria
+      // e todos os jogos apareceriam com FPS 0.
+      const nomeAlvo = String(fps.targetName || '').replace(/\.exe$/i, '').toLowerCase();
+      if (!nomeAlvo) return;
+      const alvo = nomeAlvo;
       if (!fps.frames.length) return;
       let rec = listCap.apps.get(alvo);
       if (!rec) { rec = { frames: [] }; listCap.apps.set(alvo, rec); }
       rec.frames = fps.frames.slice(-600);
-      // FPS médio dos últimos segundos
+
+      // FPS = quadros / duração real da amostra.
+      // Antes filtrava por "agora - última amostra" e dividia a contagem pela soma dos
+      // frametimes, o que dava 216 fps onde a média real era 226,7.
       const agora = Date.now();
-      const recentes = rec.frames.filter((f) => agora - f.t <= 3000);
-      if (recentes.length > 2) {
-        const soma = recentes.reduce((s, f) => s + f.ft, 0);
-        rec.fps = soma > 0 ? Math.round(recentes.length / (soma / 1000)) : 0;
+      const janela = rec.frames.filter((fr) => agora - fr.t <= 3000 && fr.ft > 0);
+      if (janela.length > 2) {
+        const duracaoMs = janela[janela.length - 1].t - janela[0].t;
+        rec.fps = duracaoMs > 0 ? Math.round((janela.length - 1) / (duracaoMs / 1000)) : 0;
       } else {
         rec.fps = 0;
       }
@@ -1380,13 +1402,23 @@ ex.fpsRecord = async ({ slot, secs, label }) => {
   while (Date.now() - t0 < secs * 1000) {
     await new Promise((r) => setTimeout(r, 100));
     fps.recording.left = Math.max(0, secs - Math.round((Date.now() - t0) / 1000));
-    if (fps.ft) samples.push(fps.ft);
+    // Guardar os frametimes BRUTOS do último 100 ms. Antes empilhava fps.ft, que já é
+    // a média dos 120 quadros anteriores: o pior quadro desaparecia e o 1% low saía
+    // 24% melhor que a realidade (168 em vez de 136).
+    const desde = (fps.frames.length ? fps.frames[fps.frames.length - 1].t : Date.now()) - 100;
+    for (let i = fps.frames.length - 1; i >= 0; i--) {
+      const fr = fps.frames[i];
+      if (!fr || fr.t < desde) break;
+      if (fr.ft > 0) samples.push(fr.ft);
+    }
+    if (!samples.length && fps.ft) samples.push(fps.ft);
   }
   fps.recording = null;
   if (!samples.length) return { success: false, error: 'sem quadros medidos' };
   const avg = samples.reduce((a, b) => a + b, 0) / samples.length;
   const sorted = [...samples].sort((a, b) => b - a);
-  const pct = (p) => 1000 / sorted[Math.max(0, Math.ceil(sorted.length * p) - 1)];
+  // Percentil = média do pior grupo (1%), não o pior elemento isolado.
+  const pct = (p) => lowFromFrametimes(samples, p);
   const ses = { label: String(label || '').slice(0, 40) || ('Gravação ' + new Date().toLocaleTimeString('pt-BR')), fps: Math.round(1000 / avg * 10) / 10, low1: Math.round(pct(0.01) * 10) / 10, low01: Math.round(pct(0.001) * 10) / 10, frametime: Math.round(avg * 100) / 100, secs, frames: samples.length, name: fps.targetName, at: Date.now() };
   fps.sessions[slot] = ses;
   writeJson('fps-sessions.json', fps.sessions);
@@ -2063,37 +2095,20 @@ ex.restoreAll = async () => {
   return { success: true, count: n, message: `Configurações restauradas (${n} otimiza${n === 1 ? 'ção' : 'ões'}).` };
 };
 ex.updateStatus = () => ({ available: false, version: require('electron').app.getVersion(), current: require('electron').app.getVersion() });
-// Planos vendidos, no formato que o plano.js espera.
+// Planos vendidos, no formato que o src/plano.js espera.
 //
-// Antes devolvia lista vazia fixa: o modal de planos nunca mostrava preço e caía sempre no
-// botão genérico. Agora traz os planos reais e, se a rede falhar, usa o fallback local com
-// os mesmos preços do site — assim o cliente sempre vê uma oferta com valor.
-ex.offers = async () => {
-  const fallback = {
-    offers: [
-      { id: 'mensal', nome: 'Mensal', priceCents: 4000, dias: 30, destaque: false },
-      { id: 'vitalicio', nome: 'Vitalicio', priceCents: 9900, dias: null, destaque: true },
-    ],
-  };
-
-  try {
-    const r = await fetch('https://vl-optimizer.pages.dev/api/planos', { headers: { Accept: 'application/json' } });
-    if (r.ok) {
-      const j = await r.json();
-      if (j && Array.isArray(j.planos) && j.planos.length) {
-        return { offers: j.planos.map((p) => ({
-          id: p.id,
-          nome: p.nome,
-          priceCents: p.valorCents || Math.round(Number(p.valor || 0) * 100),
-          dias: p.dias,
-          destaque: !!p.destaque,
-        })) };
-      }
-    }
-  } catch (e) { }
-
-  return fallback;
-};
+// O consumidor le offers.plans (plano.js:104/120). Antes esta funcao devolvia
+// offers.offers, entao o modal de planos nunca mostrava preco.
+//
+// Tambem chamava /api/planos, que nao existe no site (HTTP 404): eram 200 ms de
+// espera a cada abertura para cair sempre no fallback. Agora o valor vai direto,
+// com os mesmos precos praticados no site.
+ex.offers = async () => ({
+  plans: [
+    { id: 'mensal', nome: 'Mensal', price: 40, priceCents: 4000, periodo: '/mes', dias: 30, destaque: false },
+    { id: 'vitalicio', nome: 'Vitalicio', price: 99, priceCents: 9900, periodo: 'pagamento unico', dias: null, destaque: true },
+  ],
+});
 ex.telemetryConsent = () => ({ consented: true });
 // Resgate de chave: a validação fica no banco (chave inexistente, já usada ou cancelada).
 // O supabase.js é carregado sob demanda para não travar o motor quando não há login.

@@ -5,7 +5,7 @@ const path = require('path');
 const { execFile } = require('child_process');
 const core = require('./engine');
 
-const DATA = () => process.env.LOPT_DATA_DIR || path.join(process.env.LOCALAPPDATA || os.homedir(), 'VLOptimizer', 'data');
+const DATA = () => process.env.LOPT_DATA_DIR || path.join(process.env.APPDATA || os.homedir(), 'VL Optimizer', 'data');
 const file = (n) => path.join(DATA(), n);
 const readJson = (n, d) => { try { return JSON.parse(fs.readFileSync(file(n), 'utf8')); } catch (e) { return d; } };
 const writeJson = (n, v) => { try { fs.mkdirSync(DATA(), { recursive: true }); fs.writeFileSync(file(n), JSON.stringify(v, null, 1)); } catch (e) {} };

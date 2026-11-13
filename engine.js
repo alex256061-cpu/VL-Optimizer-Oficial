@@ -6,7 +6,13 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-let DATA_DIR = process.env.LOPT_DATA_DIR || path.join(os.tmpdir(), 'l-optimizer-data');
+// Pasta de dados (backups, sessoes, configuracoes).
+//
+// Antes caia em %TEMP%, que o Storage Sense do Windows apaga sozinho — o usuario
+// perdia o "desfazer". O main.js chama setDataDir() com app.getPath("userData")/data,
+// que no Windows e %APPDATA%\VL Optimizer\data; aqui o padrao e esse mesmo, para nao
+// existir um segundo diretorio antes da chamada.
+let DATA_DIR = process.env.LOPT_DATA_DIR || path.join(process.env.APPDATA || os.homedir(), 'VL Optimizer', 'data');
 function setDataDir(dir) {
   DATA_DIR = dir;
   try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (e) {}
@@ -151,14 +157,23 @@ async function restoreBackup(key) {
     const rl = await ps(script, 30000);
     if (rl.ok) {
       try {
-        const atual = JSON.parse(rl.out);
+        // O Json do PowerShell devolve um OBJETO quando o array tem um item só.
+        // Sem normalizar para lista, o .find não existia e a conferência virava
+        // código morto: reportava sucesso e apagava o backup mesmo com valor divergente.
+        const bruto = JSON.parse(rl.out);
+        const atual = Array.isArray(bruto) ? bruto : (bruto ? [bruto] : []);
         for (const original of st.reg) {
-          const agora = (atual || []).find((x) => x.name === original.name);
-          if (!agora) continue;
+          const agora = atual.find((x) => x && x.name === original.name);
+          if (!agora) { confere = false; break; }
           if (!!original.exists !== !!agora.exists) { confere = false; break; }
           if (original.exists && String(agora.value) !== String(original.value)) { confere = false; break; }
         }
-      } catch (e) { }
+      } catch (e) {
+        // se não deu para ler o estado, não afirma que voltou
+        confere = false;
+      }
+    } else {
+      confere = false;
     }
   }
 
@@ -183,7 +198,7 @@ const TWEAKS = [
   T('game-mode', { padrao: 1,
     cat: 'desempenho', title: 'Modo de Jogo ligado', rec: true, tags: ['FPS mais estável'],
     desc: 'O Windows prioriza o jogo quando você abre um: menos disputa com processos de fundo.',
-    reg: [{ path: HKCU + '\\Software\\Microsoft\\GameBar', name: 'AutoGameModeEnabled', type: 'DWord', on: 1, off: 1 }],
+    reg: [{ path: HKCU + '\\Software\\Microsoft\\GameBar', name: 'AutoGameModeEnabled', type: 'DWord', on: 1, off: 0 }],
     probe: `if ((Get-Val '${HKCU}\\Software\\Microsoft\\GameBar' 'AutoGameModeEnabled') -eq 1) { Write-Output '1' } else { Write-Output '0' }`,
   }),
   T('steam-overlay', {
@@ -230,13 +245,26 @@ const TWEAKS = [
         if (Test-Path -LiteralPath $k) { Set-Val $k 'MSISupported' 0 'DWord' }
       }
       Write-Output 'ok'`,
-    probe: `Write-Output '1'`,
+    probe: `$gpus = @(Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue | Where-Object { $_.PNPDeviceID -match '^PCI\\\\' })
+if ($gpus.Count -eq 0) { Write-Output '0'; exit }
+$ok = 0; $tem = 0
+foreach ($g in $gpus) {
+  $k = 'HKLM:\\SYSTEM\\CurrentControlSet\\Enum\\' + $g.PNPDeviceID + '\\Device Parameters\\Interrupt Management\\MessageSignaledInterruptProperties'
+  if (Test-Path -LiteralPath $k) {
+    $tem++
+    $v = (Get-ItemProperty -LiteralPath $k -Name 'MSISupported' -ErrorAction SilentlyContinue).MSISupported
+    if ($v -eq 1) { $ok++ }
+  }
+}
+if ($tem -gt 0 -and $ok -eq $tem) { Write-Output '1' } else { Write-Output '0' }`,
     restart: 'reboot',
   }),
   T('mpo', {
     cat: 'desempenho', title: 'MPO desligado (corrige piscadas)', tags: ['Estabilidade'],
     desc: 'Tira a sobreposição de planos da GPU: resolve piscada/tela preta com G-Sync e FreeSync.',
-    reg: [{ path: HKCU + '\\Software\\Microsoft\\Windows\\DWM', name: 'OverlayTestMode', type: 'DWord', on: 5, off: 5 }],
+    // OverlayTestMode = 5 desliga o MPO. O off era 5 também, então aplicar e desaplicar
+    // gravavam o mesmo valor e o ajuste nunca mudava nada. Agora desaplicar volta para 0.
+    reg: [{ path: HKCU + '\\Software\\Microsoft\\Windows\\DWM', name: 'OverlayTestMode', type: 'DWord', on: 5, off: 0 }],
     note: 'Vale depois de reiniciar o PC.',
   }),
   T('transparency', {
@@ -282,7 +310,7 @@ const TWEAKS = [
   T('delivery', { padrao: 0, rec: true,
     cat: 'live', title: 'Delivery Optimization desligado', tags: ['Internet livre'],
     desc: 'O Windows para de usar sua internet para distribuir atualizações (P2P).',
-    reg: [{ path: HKCU + '\\Software\\Microsoft\\Windows\\CurrentVersion\\DeliveryOptimization', name: 'SystemSettingsDownloadMode', type: 'DWord', on: 0, off: 0 }],
+    reg: [{ path: HKCU + '\\Software\\Microsoft\\Windows\\CurrentVersion\\DeliveryOptimization', name: 'SystemSettingsDownloadMode', type: 'DWord', on: 2, off: 0 }],
   }),
   T('lso', {
     cat: 'live', title: 'LSO desligado (upload estável)', tags: ['Live'],
@@ -294,50 +322,50 @@ const TWEAKS = [
   T('eee', {
     cat: 'live', title: 'EEE desligado (sem queda de cabo)', tags: ['Rede'],
     desc: 'Tira a economia de energia da placa de rede: acabam os picos de ping e as desconexoes.',
-    // Usa -RegistryKeyword e nao -DisplayName: o nome muda com o idioma do Windows
+    // Usa -RegistryKeyword e nao -DisplayName: o nome da propriedade muda com o idioma
     // ('Energy-Efficient Ethernet' em ingles, 'Energia Eficiente Ethernet' em portugues).
     on: `$n = 0
-foreach ($x in @('*EEE','AdvancedEEE','EnableGreenEthernet','PowerSavingMode')) {
-  foreach ($prop in @(Get-NetAdapterAdvancedProperty -RegistryKeyword $x -ErrorAction SilentlyContinue)) {
-    $alvo = @($prop.ValidDisplayValues) | Where-Object { $_ -match '^(Disabled|Desactivado|Desativado|Off|No)$' } | Select-Object -First 1
+$kw = @('*EEE','AdvancedEEE','EnableGreenEthernet','PowerSavingMode')
+foreach ($x in $kw) {
+  $props = @(Get-NetAdapterAdvancedProperty -RegistryKeyword $x -ErrorAction SilentlyContinue)
+  foreach ($prop in $props) {
+    $alvo = @($prop.ValidDisplayValues) | Where-Object { $_ -match '^(Disabled|Desactivado|Desativado|Desactivada|Desativadas|Off|No|Aus)$' } | Select-Object -First 1
     try {
       if ($alvo) { Set-NetAdapterAdvancedProperty -Name $prop.Name -RegistryKeyword $x -DisplayValue $alvo -ErrorAction Stop }
       else { Set-NetAdapterAdvancedProperty -Name $prop.Name -RegistryKeyword $x -RegistryValue 0 -ErrorAction Stop }
-      $n++
+      $n = $n + 1
     } catch { }
   }
 }
-Write-Output ("mudou=$n")`,
+Write-Output ("mudou=" + $n)`,
     off: `$n = 0
-foreach ($x in @('*EEE','AdvancedEEE','EnableGreenEthernet','PowerSavingMode')) {
-  foreach ($prop in @(Get-NetAdapterAdvancedProperty -RegistryKeyword $x -ErrorAction SilentlyContinue)) {
-    $alvo = @($prop.ValidDisplayValues) | Where-Object { $_ -match '^(Enabled|Activado|Ativado|On|Yes) } | Select-Object -First 1
+$kw = @('*EEE','AdvancedEEE','EnableGreenEthernet','PowerSavingMode')
+foreach ($x in $kw) {
+  $props = @(Get-NetAdapterAdvancedProperty -RegistryKeyword $x -ErrorAction SilentlyContinue)
+  foreach ($prop in $props) {
+    $alvo = @($prop.ValidDisplayValues) | Where-Object { $_ -match '^(Enabled|Activado|Activada|Activados|Activadas|Ativado|Ativada|On|Yes|Aan)$' } | Select-Object -First 1
     try {
       if ($alvo) { Set-NetAdapterAdvancedProperty -Name $prop.Name -RegistryKeyword $x -DisplayValue $alvo -ErrorAction Stop }
       else { Set-NetAdapterAdvancedProperty -Name $prop.Name -RegistryKeyword $x -RegistryValue 1 -ErrorAction Stop }
-      $n++
+      $n = $n + 1
     } catch { }
   }
 }
-Write-Output ("mudou=$n") } | Select-Object -First 1
-    try {
-      if ($alvo) { Set-NetAdapterAdvancedProperty -Name $prop.Name -RegistryKeyword $x -DisplayValue $alvo -ErrorAction Stop }
-      else { Set-NetAdapterAdvancedProperty -Name $prop.Name -RegistryKeyword $x -RegistryValue 0 -ErrorAction Stop }
-      $n++
-    } catch { }
+Write-Output ("mudou=" + $n)`,
+    // Confere TODAS as propriedades que o comando desliga.
+    probe: `$tem = 0
+$tudoOff = $true
+$kw = @('*EEE','AdvancedEEE','EnableGreenEthernet','PowerSavingMode')
+foreach ($x in $kw) {
+  $props = @(Get-NetAdapterAdvancedProperty -RegistryKeyword $x -ErrorAction SilentlyContinue)
+  foreach ($p in $props) {
+    $tem = $tem + 1
+    if ($p.DisplayValue -notmatch '^(Disabled|Desactivado|Desativado|Desactivada|Desativadas|Off|No|Aus)$') { $tudoOff = $false }
   }
 }
-Write-Output ("mudou=$n")`,
-    // Confere TODAS as propriedades que o comando desliga. Antes olhava so o *EEE e
-    // dizia "aplicado" mesmo com o EnableGreenEthernet ligado.
-    probe: `$tem = 0; $tudoOff = $true
-foreach ($x in @('*EEE','AdvancedEEE','EnableGreenEthernet','PowerSavingMode')) {
-  foreach ($p in @(Get-NetAdapterAdvancedProperty -RegistryKeyword $x -ErrorAction SilentlyContinue)) {
-    $tem++
-    if ($p.DisplayValue -notmatch '^(Disabled|Desactivado|Desativado|Off|No)$') { $tudoOff = $false }
-  }
-}
-if ($tem -eq 0 -or $tudoOff) { Write-Output '1' } else { Write-Output '0' }`,
+if ($tem -eq 0) { Write-Output '1' }
+elseif ($tudoOff) { Write-Output '1' }
+else { Write-Output '0' }`,
   }),
   T('nic-intmod', {
     cat: 'live', title: 'Interrupt Moderation desligado', tags: ['Ping'],
@@ -1000,10 +1028,14 @@ async function applyTweak(id, want) {
     const rb = await restoreBackup(key);
     if (!rb.success) return { success: false, error: rb.error };
   } else if (t.off) {
-    await ps(t.off, 60000);
+    // Antes o resultado era descartado: se o script falhasse, a funcao ainda podia
+    // responder sucesso. Agora um erro do PowerShell volta como erro.
+    const r = await ps(t.off, 60000);
+    if (!r.ok) return { success: false, on: true, error: r.err || 'o comando foi recusado pelo Windows' };
   } else if (regs.length) {
     const lines = regs.map((r) => `Set-Val '${r.path}' '${r.name}' ${typeof r.off === 'string' ? `'${r.off}'` : r.off} '${r.type}'`);
-    await ps(lines.join('\n'), 60000);
+    const r = await ps(lines.join('\n'), 60000);
+    if (!r.ok) return { success: false, on: true, error: r.err || 'o comando foi recusado pelo Windows' };
   }
   const now = await probeTweak(t);
   if (!now) return { success: true, on: false };

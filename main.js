@@ -1,5 +1,5 @@
 // main.js — VL Optimizer (Electron)
-const { app, BrowserWindow, ipcMain, shell, screen, nativeTheme, globalShortcut, Notification } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, screen, nativeTheme, globalShortcut, Notification, dialog } = require('electron');
 
 // Rastreio de janelas (temporario): registra toda janela criada e toda pagina carregada.
 try {
@@ -696,4 +696,48 @@ app.whenReady().then(async () => {
 app.on('will-quit', () => { try { globalShortcut.unregisterAll(); } catch (e) { } try { updater.stop(); } catch (e) { } });
 
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+
+// ── Recuperação de crash do renderer ──────────────────────────────────────
+// Sem estes handlers, um renderer que cai leva a janela junto, cai em
+// window-all-closed e o app fecha sozinho sem explicar nada.
+// Reproduzido com chamadas IPC concorrentes (é o que o painel faz ao abrir).
+let recriacoes = [];
+function logCrash(texto) {
+  try {
+    const dir = path.join(process.env.LOCALAPPDATA || os.homedir(), "VLOptimizer");
+    try { fs.mkdirSync(dir, { recursive: true }); } catch (e) { }
+    fs.appendFileSync(path.join(dir, "crash.log"), "[" + new Date().toISOString() + "] " + texto + String.fromCharCode(10));
+  } catch (e) { }
+}
+
+app.on("render-process-gone", (event, webContents, details) => {
+  const motivo = (details && details.reason) || "desconhecido";
+  logCrash("renderer caiu: " + motivo + " (exitCode " + ((details && details.exitCode) || 0) + ")");
+
+  // anti-laço: no máximo 2 recriações em 60 segundos
+  const agora = Date.now();
+  recriacoes = recriacoes.filter((t) => agora - t < 60000);
+  if (recriacoes.length >= 2) {
+    logCrash("ja recriou 2x em 1 minuto; parando");
+    dialog.showErrorBox(
+      "VL Optimizer parou de responder",
+      "O programa encontrou um problema repetido e precisa ser reaberto." + String.fromCharCode(10) + String.fromCharCode(10) +
+      "Detalhe: " + motivo
+    );
+    return;
+  }
+
+  recriacoes.push(agora);
+  try { if (win && !win.isDestroyed()) { createWindow(); } } catch (e) { logCrash("falha ao recriar: " + e.message); }
+});
+
+app.on("child-process-gone", (event, details) => {
+  logCrash("processo " + ((details && details.type) || "?") + " caiu: " + ((details && details.reason) || "?"));
+});
+
+app.on("web-contents-created", (event, wc) => {
+  wc.on("unresponsive", () => logCrash("janela nao respondeu"));
+  wc.on("responsive", () => logCrash("janela voltou a responder"));
+  wc.on("did-fail-load", (e, code, desc, url) => logCrash("falha ao carregar " + url + ": " + desc + " (" + code + ")"));
+});
 process.on('uncaughtException', (e) => { try { fs.appendFileSync(path.join(os.tmpdir(), 'lopt-error.log'), String(e && e.stack || e) + '\n'); } catch (_) {} });
