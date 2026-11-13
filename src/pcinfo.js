@@ -258,7 +258,7 @@
       { title: 'Pentes', table: { head: ['Slot', 'Tamanho', 'Tipo', 'Velocidade atual', 'De fábrica (JEDEC)', 'Fabricante', 'Modelo'],
         rows: r.mods.map((m) => [[m.bank, m.slot].filter(Boolean).join(' · '), ramSize(m.bytes), [RAM_TYPE[m.type], RAM_FORM[m.form]].filter(Boolean).join(' '),
           m.cfg ? `${nf(m.cfg)} MT/s` : '', m.speed ? `${nf(m.speed)} MT/s` : '', ramMaker(m), m.part]) },
-        note: 'Latências (CL) e tensão não aparecem: só dá para ler com driver de kernel, que o L não instala por causa dos anticheats.' },
+        note: 'Latências (CL) e tensão não aparecem: só dá para ler com driver de kernel, que o VL não instala por causa dos anticheats.' },
     ] });
     tabs.push({ id: 'gpu', name: 'Vídeo', sections: [
       ...i.gpus.map((g, k) => ({ title: g.name, rows: [
@@ -329,7 +329,7 @@
     root.innerHTML = `<div class="pci-tabs" role="tablist">${tabs.map((t) => `<button role="tab" data-tab="${t.id}" aria-selected="${t.id === tab.id}" class="${t.id === tab.id ? 'on' : ''}">${t.name}</button>`).join('')}</div>
       <div class="pci-pane${tab.sensors ? ' sensors' : ''}">${tab.sensors ? `<div class="pci-sens-bar"><span>Mínimo e máximo valem enquanto esta página esteve aberta. Deixe-a aberta, jogue e volte para ver o pico.</span><button class="ghost-btn" data-reset>Zerar mín. e máx.</button></div>` : ''}
         ${tab.sections.filter(hasContent).map(sectionHtml).join('')}
-        ${tab.sensors ? '<div class="pci-hint">O L não instala driver de kernel, porque os anticheats barram. Por isso ficam de fora o que só sai por ele: tensões, RPM das ventoinhas, temperatura do processador em desktop e as latências da memória.</div>' : ''}</div>`;
+        ${tab.sensors ? '<div class="pci-hint">O VL não instala driver de kernel, porque os anticheats barram. Por isso ficam de fora o que só sai por ele: tensões, RPM das ventoinhas, temperatura do processador em desktop e as latências da memória.</div>' : ''}</div>`;
   }
 
   // ── Relatório em texto (para colar no Discord ou mandar ao suporte) ──

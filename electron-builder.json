@@ -4,7 +4,19 @@
     "directories":  {
                         "output":  "release"
                     },
-    "asar":  false,
+    "asar":  true,
+    "asarUnpack":  [
+                       "bin/**",
+                       "native/**",
+                       "assets/**"
+                   ],
+    "electronFuses":  {
+                          "runAsNode":  false,
+                          "enableNodeOptionsEnvironmentVariable":  false,
+                          "enableNodeCliInspectArguments":  false,
+                          "enableEmbeddedAsarIntegrityValidation":  true,
+                          "onlyLoadAppFromAsar":  true
+                      },
     "npmRebuild":  false,
     "files":  [
                   "package.json",
@@ -23,8 +35,7 @@
                   "features.js",
                   "assets/**/*",
                   "src/**/*",
-                  "bin/PresentMon.exe",
-                  "bin/PresentMon.LICENSE.txt",
+                  "bin/**/*",
                   "native/lossless/**/*",
                   "native/scaler/fsr1_engine.cjs",
                   "native/scaler/fsr1_engine.exe",

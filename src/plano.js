@@ -3,9 +3,26 @@
 // só mostramos o cadeado antes do clique. Preço, cupom anunciado, crédito de upgrade e indicação vêm
 // da API (canal 'offers') e são só vitrine: quem cobra é o site. Usa ipcRenderer, toast() e go() do dashboard.
 (function () {
+  // Página -> recurso que ela exige. Página FORA do mapa é livre para todo mundo.
+  //
+  // A referência mapeava as páginas dela (dashboard, fps, gargalo, hardware...), o que
+  // aqui invertia tudo: o Painel aparecia trancado e Desempenho/Limpeza ficavam livres.
+  //
+  // Nossa regra (a mesma do texto do app): medir é grátis, aplicar é pago.
+  //   Grátis: Painel, Gargalo, Informações do PC, Verificar hardware, Sobre, VL Scaling
+  //   Pago:   as páginas de otimização
   const PAGE_FEATURE = {
-    dashboard: 'painel', jogos: 'jogos', fps: 'fps', gargalo: 'gargalo', hardware: 'hardware',
-    pcinfo: 'hardware', inicializacao: 'inicializacao', sobre: 'sobre',
+    desempenho: 'otimizar',
+    inputlag: 'otimizar',
+    memoria: 'otimizar',
+    limpeza: 'otimizar',
+    programas: 'otimizar',
+    live: 'otimizar',
+    tweaks: 'otimizar',
+    inicializacao: 'otimizar',
+    jogos: 'otimizar',
+    opti: 'otimizar',
+    fps: 'otimizar',
   };
   const PAGE_NAME = {
     desempenho: 'Desempenho', inputlag: 'Mouse e teclado', memoria: 'Memória', limpeza: 'Limpeza', programas: 'Programas', live: 'Internet e live',
@@ -538,4 +555,14 @@
     document.getElementById('plan-nudge')?.remove();
     toast(u.pcBound ? 'Compra confirmada: Licença do PC liberada neste PC.' : u.lifetime ? 'Compra confirmada: plano vitalício liberado neste PC.' : 'Compra confirmada: plano liberado neste PC.');
   });
+  // API para outras telas (otimizacoes.js). Antes o plano.js era uma IIFE fechada e o
+  // otimizacoes.js mantinha uma CÓPIA da regra de bloqueio — duas regras brigando.
+  window.plano = {
+    paint,
+    allowed,
+    upsell,
+    reload: () => ipcRenderer.invoke('get-user').then((u) => { user = u; paint(); return u; }).catch(() => null),
+    user: () => user,
+  };
+
 })();

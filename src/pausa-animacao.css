@@ -1,0 +1,8 @@
+/* Economia de CPU com a janela em segundo plano.
+   Pausa as animações em loop quando o documento não está visível ou a janela perde
+   o foco, e retoma ao voltar. Só mexe em animation-play-state: nada some da tela. */
+
+html.vl-idle,
+html.vl-idle * {
+  animation-play-state: paused !important;
+}

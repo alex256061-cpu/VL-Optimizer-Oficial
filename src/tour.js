@@ -294,7 +294,7 @@
 
         { target: () => q('#pg-limpeza .lp-card'), side: 'bottom', title: 'Limpeza de arquivos',
 
-          text: 'O L mostra quanto cada item ocupa antes de apagar. Dos navegadores sai só o cache: logins, senhas e histórico ficam. App aberto não é limpo: feche e analise de novo.' },
+          text: 'O VL mostra quanto cada item ocupa antes de apagar. Dos navegadores sai só o cache: logins, senhas e histórico ficam. App aberto não é limpo: feche e analise de novo.' },
 
         { target: () => qa('#pg-limpeza .lp-card')[1], side: 'top', title: 'O que ocupa o disco',
 
@@ -310,7 +310,7 @@
 
         { target: () => q('#pr-list .pr-row'), side: 'bottom', title: 'Desinstalar sem deixar sobra',
 
-          text: 'O L abre o desinstalador do próprio programa. Quando ele termina, procura pastas e chaves do registro que ficaram e mostra a lista antes de apagar.' },
+          text: 'O VL abre o desinstalador do próprio programa. Quando ele termina, procura pastas e chaves do registro que ficaram e mostra a lista antes de apagar.' },
 
       ] },
 

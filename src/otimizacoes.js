@@ -107,7 +107,7 @@
           O('UWP Removidos', { title: 'Remover apps que vêm com o Windows', btn: 'Remover', tags: ['PC fraco'],
             desc: 'Desinstala Cortana, Clima, Mapas, Filmes e TV, Your Phone, apps do Xbox e outros apps de fábrica.',
             note: 'Não tem desfazer: para ter algum de volta, reinstale pela Microsoft Store.',
-            confirm: 'Remover os apps que vêm com o Windows?\n\nNão dá para desfazer pelo L: para ter algum de volta, reinstale pela Microsoft Store.' }),
+            confirm: 'Remover os apps que vêm com o Windows?\n\nNão dá para desfazer pelo VL: para ter algum de volta, reinstale pela Microsoft Store.' }),
         ] },
         { name: 'Antes de jogar', icon: IC.clock, blurb: 'Ações de uma vez: valem até você reabrir os programas ou reiniciar o PC.', items: [
           O('Chrome/Discord Limitados', { title: 'Chrome e Discord em prioridade baixa', btn: 'Aplicar',
@@ -174,7 +174,7 @@
           TOOL('repair'),
           O('Explorer Mínimo', { title: 'Reiniciar a barra de tarefas', btn: 'Reiniciar',
             desc: 'Reinicia o Explorador do Windows. Resolve barra de tarefas ou Iniciar travados. Não muda o FPS.' }),
-          O('Padrões Restaurados', { title: 'Limpar ajustes antigos do L', btn: 'Limpar',
+          O('Padrões Restaurados', { title: 'Limpar ajustes antigos do VL', btn: 'Limpar',
             desc: 'Versões antigas do VL aplicavam ajustes sem efeito ou prejudiciais (recuperação da placa de vídeo, timer, fila do mouse, rede). Volta tudo ao padrão do Windows.' }),
           FIX('Defender Off', { title: 'Religar o Windows Defender', btn: 'Religar',
             desc: 'Religa a proteção em tempo real, se uma versão antiga do VL a desligou.' }),
@@ -795,46 +795,19 @@
   }
 
   // Aplica o cadeado no menu lateral, como a referência faz com .nav-locked
+  // O cadeado do menu é pintado pelo src/plano.js (paint()). Aqui só repassamos,
+  // para existir UMA fonte de verdade sobre quem vê o quê.
   function paintLocks() {
-    document.querySelectorAll('.sidebar .nav-item').forEach((item) => {
-      const oc = item.getAttribute('onclick') || '';
-      const m = /go\('([^']+)'/.exec(oc);
-      const page = m ? m[1] : null;
-      const locked = !!page && !allowed(page);
-      item.classList.toggle('nav-locked', locked);
-      const tem = item.querySelector('.nav-lock');
-      if (locked && !tem) {
-        const l = el('span', 'nav-lock');
-        l.innerHTML = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
-        item.appendChild(l);
-      } else if (!locked && tem) tem.remove();
-    });
+    try { if (window.plano && typeof window.plano.paint === "function") window.plano.paint(); } catch (e) { }
   }
 
   // Intercepta a navegação: página trancada mostra o aviso em vez de abrir.
-  function ligarGuardaDeNavegacao() {
-    const baseGo = window.go;
-    if (typeof baseGo !== 'function' || baseGo.__vlGuarda) return;
-    window.go = function (pg, e) {
-      if (!allowed(pg)) { mostrarUpgrade(pg); return; }
-      return baseGo(pg, e);
-    };
-    window.go.__vlGuarda = true;
-  }
-
-  function mostrarUpgrade(pg) {
-    const nome = (PAGES.find(x => x.id === pg) || {}).name || 'Esta parte';
-    const d = document.createElement('div');
-    d.id = 'vl-upgrade';
-    d.style.cssText = 'position:fixed;inset:0;z-index:9000;background:rgba(5,3,8,.82);display:grid;place-items:center;backdrop-filter:blur(6px)';
-    d.innerHTML = '<div style="max-width:380px;background:#120b18;border:1px solid rgba(255,31,46,.25);border-radius:16px;padding:28px;text-align:center;font-family:inherit">' +
-      '<div style="font-size:15px;font-weight:800;color:#f5f5f7;margin-bottom:8px">' + nome + ' faz parte do plano completo</div>' +
-      '<div style="font-size:13px;color:#a8a4b8;line-height:1.55;margin-bottom:20px">Assine no site e entre com o mesmo e-mail e senha: o acesso é liberado na hora.</div>' +
-      '<button id="vl-up-fechar" style="width:100%;border:0;border-radius:10px;padding:12px;background:linear-gradient(135deg,#ff1f2e,#c00c1a);color:#fff;font-weight:800;font-size:14px;cursor:pointer;font-family:inherit">Entendi</button></div>';
-    document.body.appendChild(d);
-    d.querySelector('#vl-up-fechar').onclick = () => d.remove();
-  }
-
+  // O bloqueio de páginas é do src/plano.js (paint + window.go). Antes existia aqui um
+  // segundo guarda com um modal de um botão "Entendi", que vencia o do plano.js e
+  // escondia o modal com preço, cupom, "Já comprei" e "Tenho uma chave".
+  // Mantido só como no-op para não quebrar chamadas antigas.
+  function ligarGuardaDeNavegacao() { }
+  // O modal de planos vive no src/plano.js (upsell). Não duplicar aqui.
   // ── API para o resto do app ──
   window.gdzOpt = {
     loaded: () => st.loaded,

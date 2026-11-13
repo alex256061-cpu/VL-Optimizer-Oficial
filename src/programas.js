@@ -130,7 +130,7 @@
     if (!st.flow) return;
     if (r && r.broken) {
       step({ title: `Desinstalar ${a.name}`,
-        text: 'O desinstalador deste programa não existe mais: os arquivos dele já foram apagados. O L pode procurar o que sobrou e tirar o programa da lista.',
+        text: 'O desinstalador deste programa não existe mais: os arquivos dele já foram apagados. O VL pode procurar o que sobrou e tirar o programa da lista.',
         buttons: [{ label: 'Procurar sobras', primary: true, onclick: () => leftovers() }, { label: 'Cancelar', onclick: () => closeFlow() }] });
       return;
     }
@@ -141,7 +141,7 @@
   function waiting() {
     const a = st.flow.app;
     step({ title: `Desinstalar ${a.name}`,
-      text: 'A janela de desinstalação do programa abriu (pode estar atrás do L). Siga os passos dela. Quando terminar, o L procura o que sobrou.',
+      text: 'A janela de desinstalação do programa abriu (pode estar atrás do VL). Siga os passos dela. Quando terminar, o VL procura o que sobrou.',
       wait: 'Esperando o desinstalador terminar…',
       buttons: [{ label: 'Já terminei', primary: true, onclick: () => leftovers() }, { label: 'Cancelar', onclick: () => closeFlow(true) }] });
     const tick = async () => {

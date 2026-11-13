@@ -39,7 +39,7 @@
           <div class="gta-step-t">1. Gráficos do GTA</div>
           ${lock}
           ${d.file ? `
-          <div class="gta-step-d">Os vilões do FPS no GTA V são MSAA, grama Ultra, sombras longas e a distância estendida. O L ajusta direto no arquivo do FiveM, com backup.</div>
+          <div class="gta-step-d">Os vilões do FPS no GTA V são MSAA, grama Ultra, sombras longas e a distância estendida. O VL ajusta direto no arquivo do FiveM, com backup.</div>
           <div class="gta-seg" role="radiogroup" aria-label="Preset">
             <button data-gta="preset" data-v="fps" class="${st.preset === 'fps' ? 'on' : ''}"${d.running ? ' disabled' : ''}>FPS máximo<small>PC fraco</small></button>
             <button data-gta="preset" data-v="balanced" class="${st.preset === 'balanced' ? 'on' : ''}"${d.running ? ' disabled' : ''}>Equilibrado<small>bonito e leve</small></button>
@@ -56,7 +56,7 @@
             <button class="fpm-btn" data-gta="apply"${d.running ? ' disabled' : ''}>Aplicar no FiveM</button>
             ${d.backup ? `<button class="fpm-btn ghost" data-gta="restore"${d.running ? ' disabled' : ''}>Restaurar o original</button>` : ''}
             <button class="fpm-btn ghost" data-gta="measure">Medir antes/depois</button>
-          </div>` : '<div class="gta-step-d">Abra o FiveM uma vez e feche: é aí que ele cria o arquivo de configurações que o L ajusta.</div>'}
+          </div>` : '<div class="gta-step-d">Abra o FiveM uma vez e feche: é aí que ele cria o arquivo de configurações que o VL ajusta.</div>'}
         </div>
 
         <div class="gta-side">
@@ -101,7 +101,7 @@
   }
 
   async function restore() {
-    if (!confirm('Voltar os gráficos do FiveM para como estavam antes do L?')) return;
+    if (!confirm('Voltar os gráficos do FiveM para como estavam antes do VL?')) return;
     const r = await ipcRenderer.invoke('fivem-gfx-restore');
     toast(r && r.success ? 'Gráficos do FiveM restaurados.' : (r && r.error) || 'Não foi possível restaurar.');
     st.dirty = false;
