@@ -76,6 +76,7 @@
   .verificando { position: fixed; inset: 0; background: #050308; display: grid; place-items: center; z-index: 50; color: #8b87a0; font-size: 13px; }
   .verificando div { display: flex; align-items: center; gap: 10px; }
 </style>
+  <link rel="stylesheet" href="pausa-animacao.css">
 </head>
 <body>
 
@@ -288,6 +289,18 @@ document.querySelectorAll('[data-site]').forEach((a) => {
   } catch (e) { }
   $('verificando').remove();
   $('l-user').focus();
+})();
+</script>
+<script>
+// Pausa as animações em loop quando a janela fica atrás de outra.
+// Medido: sem isso o app gasta ~0,7 núcleo parado, quase tudo no desenho.
+(function () {
+  var raiz = document.documentElement;
+  function idle(ligar) { try { raiz.classList.toggle('vl-idle', !!ligar); } catch (e) { } }
+  window.addEventListener('blur', function () { idle(true); });
+  window.addEventListener('focus', function () { idle(false); });
+  document.addEventListener('visibilitychange', function () { idle(document.hidden); });
+  if (document.hidden) idle(true);
 })();
 </script>
 </body>

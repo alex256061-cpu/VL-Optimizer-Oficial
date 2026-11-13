@@ -693,6 +693,10 @@ app.whenReady().then(async () => {
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
 
+// Marca que o app está fechando: usado pela recuperação de crash para não
+// recriar a janela no meio da saída.
+app.on('before-quit', () => { app.isQuitting = true; });
+
 app.on('will-quit', () => { try { globalShortcut.unregisterAll(); } catch (e) { } try { updater.stop(); } catch (e) { } });
 
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
@@ -712,7 +716,15 @@ function logCrash(texto) {
 
 app.on("render-process-gone", (event, webContents, details) => {
   const motivo = (details && details.reason) || "desconhecido";
-  logCrash("renderer caiu: " + motivo + " (exitCode " + ((details && details.exitCode) || 0) + ")");
+
+  // Só a janela PRINCIPAL interessa. Sem este filtro, o crash do overlay do FPS
+  // recriava a janela principal e o usuário ficava com duas na tela.
+  if (!win || win.isDestroyed() || webContents !== win.webContents) {
+    logCrash("renderer secundário caiu (" + motivo + "); janela principal segue");
+    return;
+  }
+
+  logCrash("janela principal caiu: " + motivo + " (exitCode " + ((details && details.exitCode) || 0) + ")");
 
   // anti-laço: no máximo 2 recriações em 60 segundos
   const agora = Date.now();
@@ -728,7 +740,14 @@ app.on("render-process-gone", (event, webContents, details) => {
   }
 
   recriacoes.push(agora);
-  try { if (win && !win.isDestroyed()) { createWindow(); } } catch (e) { logCrash("falha ao recriar: " + e.message); }
+  // Recria sem depender de `win` estar viva: é justamente ela que acabou de cair.
+  try {
+    setTimeout(() => {
+      // Se o app já está fechando, não ressuscitar a janela: travaria o fechamento.
+      if (app.isQuitting) { logCrash("app fechando; nao recriar"); return; }
+      try { if (!win || win.isDestroyed()) createWindow(); } catch (e) { logCrash("falha ao recriar: " + e.message); }
+    }, 250);
+  } catch (e) { logCrash("falha ao agendar recriação: " + e.message); }
 });
 
 app.on("child-process-gone", (event, details) => {

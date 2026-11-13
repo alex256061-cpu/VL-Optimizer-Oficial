@@ -141,8 +141,8 @@
           <div class="opx-pkg">${pkgHtml}</div>
         </div>
         ${dl.error ? `<div class="opx-err">${esc(dl.error)}</div>` : ''}
-        <div class="opx-warn"><b>Nunca use em jogo online</b> (Valorant, CS2, Fortnite, FiveM, Warzone…): é uma DLL dentro do jogo e o anti-cheat pode banir a conta. O L bloqueia os jogos online que conhece.</div>
-        <div class="opx-credit">OptiScaler é um projeto gratuito e open-source (GPL-3) da equipe OptiScaler, sem ligação com o L. O download vem do <a data-act="repo">GitHub oficial</a>.</div>
+        <div class="opx-warn"><b>Nunca use em jogo online</b> (Valorant, CS2, Fortnite, FiveM, Warzone…): é uma DLL dentro do jogo e o anti-cheat pode banir a conta. O VL bloqueia os jogos online que conhece.</div>
+        <div class="opx-credit">OptiScaler é um projeto gratuito e open-source (GPL-3) da equipe OptiScaler, sem ligação com o VL. O download vem do <a data-act="repo">GitHub oficial</a>.</div>
       </div>
 
       <div class="opx-sec"><span class="opx-sec-t">Adicionar jogo</span><div class="opx-actions" style="margin:0">
