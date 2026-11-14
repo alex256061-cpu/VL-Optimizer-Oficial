@@ -10,6 +10,13 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.25': {
+    corrigido: [
+      'Na aba Memória, o intervalo da limpeza automática ficava travado em 10 minutos: escolher 20, 30 ou 1 hora não mudava. Agora muda.',
+      'Quando um ajuste precisa de administrador, a mensagem agora explica em português em vez de mostrar o texto técnico do Windows.',
+    ],
+    novo: [],
+  },
   '1.4.24': {
     corrigido: [
       'O contador de otimizações do Painel não subia depois de otimizar. As ações (Game Bar, DVR, HAGS, SysMain e outras) apareciam sempre como desligadas, porque a leitura do estado de todas elas rodava num script que o Windows recusava. Agora cada uma é lida separada.',

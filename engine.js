@@ -1129,6 +1129,11 @@ async function erroDePermissao(err) {
     'requer eleva[çc][ãa]o',
     'elevation required',
     'solicite permiss[ãa]o',
+    'n[ãa]o autorizad',               // "...operação não autorizada" (visto no cliente)
+    'operac[ãa]o n[ãa]o permitida',
+    'n[ãa]o permitid',
+    'unauthorized',
+    'not permitted',
   ].join('|'), 'i');
 
   // O recurso não existe — não é permissão, é o ambiente.
