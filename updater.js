@@ -1,4 +1,4 @@
-// updater.js â€” atualizaÃ§Ã£o automÃ¡tica pelo GitHub Releases.
+﻿// updater.js â€” atualizaÃ§Ã£o automÃ¡tica pelo GitHub Releases.
 //
 // O app consulta o release mais recente de alex256061-cpu/VL-Optimizer-Oficial e, quando hÃ¡ versÃ£o
 // nova, baixa em segundo plano. O usuÃ¡rio escolhe quando instalar: nada reinicia sozinho no meio de
@@ -10,7 +10,20 @@
 
 const { app, shell } = require('electron');
 
-const REPO = 'alex256061-cpu/VL-Optimizer-Oficial';
+// De onde vem a atualização.
+//
+// Antes o app batia no GitHub (provider "github") e o botão "Ver no site" abria a página
+// de releases. O usuário via o GitHub, não o produto. O GDZ não faz isso: ele usa
+//   provider: generic
+//   url: https://api.gdzfps.com/api/v1/updates
+// ou seja, o servidor dele entrega o arquivo. Aqui é igual — o site publica os arquivos
+// de atualização em /atualizacoes/ e o app busca lá.
+//
+// Os arquivos publicados nessa pasta são os que o electron-builder gera para o provider
+// generic: latest.yml e o instalador (.exe).
+const SITE = 'https://vl-optimizer.pages.dev';
+const UPDATE_URL = SITE + '/atualizacoes';
+const DOWNLOAD_PAGE = SITE + '/#baixar';
 const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;   // 6 horas
 
 let autoUpdater = null;
@@ -71,13 +84,13 @@ function currentVersion() {
 }
 
 function status() {
-  return { ...state, currentVersion: currentVersion(), repo: REPO };
+  return { ...state, currentVersion: currentVersion(), repo: UPDATE_URL, site: SITE };
 }
 
-// Abre a pÃ¡gina do release no navegador. Serve de saÃ­da quando o download automÃ¡tico falha â€” o
-// usuÃ¡rio ainda consegue baixar Ã  mÃ£o.
+// Abre a página de download DO SITE. Serve de saída quando a atualização automática
+// falha — o usuário baixa à mão, sem sair do produto.
 function openReleasePage() {
-  try { shell.openExternal('https://github.com/' + REPO + '/releases/latest'); }
+  try { shell.openExternal(DOWNLOAD_PAGE); }
   catch (e) { /* sem navegador: nada a fazer */ }
 }
 
@@ -179,4 +192,4 @@ function stop() {
   if (timer) { clearInterval(timer); timer = null; }
 }
 
-module.exports = { start, stop, check, install, status, onChange, openReleasePage, REPO };
+module.exports = { start, stop, check, install, status, onChange, openReleasePage, UPDATE_URL, SITE };

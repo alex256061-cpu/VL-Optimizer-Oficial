@@ -34,6 +34,7 @@
                   "gdz-launch.js",
                   "features.js",
                   "elevacao.js",
+                  "notas-versao.js",
                   "assets/**/*",
                   "src/**/*",
                   "bin/**/*",
@@ -47,9 +48,8 @@
               ],
     "publish":  [
                     {
-                        "provider":  "github",
-                        "owner":  "alex256061-cpu",
-                        "repo":  "VL-Optimizer-Oficial"
+                        "provider":  "generic",
+                        "url":  "https://vl-optimizer.pages.dev/atualizacoes"
                     }
                 ],
     "win":  {
