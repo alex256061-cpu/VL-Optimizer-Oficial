@@ -304,8 +304,15 @@
   const allItems = () => PAGES.flatMap(p => p.groups.flatMap(g => g.items.map(it => ({ it, page: p }))));
 
   // ── Carregar ──
+  let recargaPendente = false;
+
   function load(silent) {
-    if (st.loading) return st.loading;
+    // Se já existe uma leitura em andamento, PEDE outra em vez de descartar.
+    //
+    // Antes: `if (st.loading) return st.loading;` — aplicar um ajuste no meio de uma
+    // leitura fazia a recarga ser jogada fora sem aviso. O catálogo ficava com os
+    // dados antigos e o painel mostrava "14 de 21" mesmo depois de otimizar.
+    if (st.loading) { recargaPendente = true; return st.loading; }
     if (!silent || !st.loaded) PAGES.forEach(p => { const r = root(p); if (r && !st.loaded) r.replaceChildren(el('div', 'tw-loading', 'Lendo as configurações do Windows…')); });
     st.loading = (async () => {
       const [tw, ac, caps, plano] = await Promise.all([invoke('tweaks-status'), invoke('actions-status'), invoke('get-caps'), invoke('conta-plano').catch(() => null)]);
@@ -318,7 +325,13 @@
       if (!st.loaded) { st.loaded = true; renderAll(); } else repaint();
       if (!mostrarBloqueioDePc()) { paintLocks(); ligarGuardaDeNavegacao(); }
       changed();
-    })().finally(() => { st.loading = null; });
+    })().finally(() => {
+      st.loading = null;
+      if (recargaPendente) {
+        recargaPendente = false;
+        setTimeout(() => load(true), 120);
+      }
+    });
     return st.loading;
   }
   // Várias mudanças seguidas viram uma leitura só.
@@ -662,6 +675,24 @@
     selfSyncing = true;
     try { if (typeof syncUndoButtons === 'function') syncUndoButtons(); } finally { selfSyncing = false; }
     refreshSoon(1500);
+    avisarPainelDepoisDeLer();
+  }
+
+  // Avisa o painel DEPOIS que a releitura do Windows termina.
+  //
+  // O painel (dash-v3.js) escuta "gdz-opt-change". Antes esse aviso só saía no fim de
+  // load(), e load() era descartado quando já havia leitura em andamento — então
+  // aplicar um ajuste deixava o número parado em "14 de 21". Aqui o aviso é repetido
+  // algumas vezes enquanto a leitura acontece, e para quando o catálogo já reflete a
+  // mudança.
+  let avisoT = null;
+  function avisarPainelDepoisDeLer(tentativa) {
+    const n = tentativa || 0;
+    if (avisoT) clearTimeout(avisoT);
+    avisoT = setTimeout(() => {
+      window.dispatchEvent(new Event('gdz-opt-change'));
+      if (n < 6 && st.loading) avisarPainelDepoisDeLer(n + 1);
+    }, 300 + n * 400);
   }
   const origSync = window.syncUndoButtons;
   if (typeof origSync === 'function') {

@@ -1058,9 +1058,15 @@ async function actionsStatus() {
   });
 
   if (itens.length) {
+    // NAO colar as linhas do detect.
+    //
+    // O replace de \n por espaço juntava comandos sem separador ("$a = 0 $b = 1" vira
+    // um erro de sintaxe) e, como os detects rodam todos no mesmo script, um erro
+    // derrubava todos — TODAS as ações voltavam desligadas e o painel ficava parado
+    // em "14 de 21" mesmo depois de otimizar. Mesmo defeito que o tweaksStatus tinha.
     const blocos = itens.map(({ name, a }, idx) => {
-      const seguro = String(a.detect).replace(/\r?\n/g, ' ');
-      return `$r['${idx}'] = @( ${seguro} ) -join ' '`;
+      const seguro = String(a.detect);
+      return `$r['${idx}'] = @( & { ${seguro} } ) -join ' '`;
     });
     const script = `$r = @{}
 ${blocos.join('\n')}
