@@ -294,6 +294,27 @@
     if (it.kind === 'tweak') {
       const t = tweak(it.id);
       if (!t) return null;
+      // `precisaAdmin` vem do motor (engine.js). Quando o ajuste não pode ser aplicado
+      // (HKLM/serviço sem elevação), o interruptor NÃO pode aparecer ligado só porque o
+      // Windows já vinha assim de fábrica: era isso que dava o falso sucesso depois de
+      // o app dizer "precisa de administrador". Aqui `on` passa a ser o que o APP ligou
+      // (existe backup) e o resto vai em `blocked`, que a tela já sabe desenhar.
+      const pa = t.precisaAdmin;
+      // Precisa de admin = nunca mostrar o interruptor ligado.
+      //
+      // Antes só os casos `pa.padrao` e `pa && !t.on` eram tratados. Faltava o pior:
+      // `pa` verdadeiro com `t.on` verdadeiro e `pa.padrao` falso — que é o que acontece
+      // quando sobra um backup órfão de uma tentativa antiga (`mexido` true sem o valor
+      // ter mudado). Aí o painel contava como aplicado algo que o app nunca aplicou.
+      // Se o ajuste precisa de admin e o app não está elevado, ele não está aplicado:
+      // mostrar como bloqueado, sempre.
+      if (pa) {
+        const jaVinhaDeFabrica = pa.padrao === true;
+        const rotulo = jaVinhaDeFabrica
+          ? 'O Windows já vem assim. ' + pa.motivo
+          : pa.motivo;
+        return { title: it.title || t.title, desc: it.desc || t.desc, note: t.note, tags: t.tags, rec: t.rec, restart: t.restart, blocked: rotulo, on: false };
+      }
       return { title: it.title || t.title, desc: it.desc || t.desc, note: t.note, tags: t.tags, rec: t.rec, restart: t.restart, blocked: t.blocked, on: t.on };
     }
     if (it.kind === 'tool') return { ...TOOLS[it.id], ...it };

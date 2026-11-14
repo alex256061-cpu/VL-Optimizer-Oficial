@@ -802,13 +802,24 @@ function reabrirElevadoPelaTarefa() {
     }
   });
 }
+// Motivo de estar em modo limitado, para a faixa da tela explicar.
+//
+// Vazio quando o app esta elevado ou quando nunca houve falha ao criar a tarefa.
+function motivoSemAdmin() {
+  try {
+    const p = path.join(app.getPath('userData'), 'sem-admin.lock');
+    const s = String(fs.readFileSync(p, 'utf8') || '').trim();
+    return s || null;
+  } catch (e) { return null; }
+}
+
 H('admin-status', async () => {
   // "podeElevar": existe tarefa agendada com RunLevel Highest apontando para este exe.
   // Com ela, reabrir como admin não pede UAC. Sem ela, o botão pede UAC uma vez
   // (e aproveita para criar a tarefa, para nunca mais pedir).
   let podeElevar = false;
   try { podeElevar = await elev.pronta(); } catch (e) {}
-  return { admin: isAdmin, failed: elevateFailed, podeElevar, viaTarefa: elev.veioDaTarefa() };
+  return { admin: isAdmin, failed: elevateFailed, podeElevar, viaTarefa: elev.veioDaTarefa(), motivo: isAdmin ? null : motivoSemAdmin() };
 });
 H('elevate-now', async () => {
   // "Reabrir como admin" pelo caminho que FUNCIONA.
@@ -996,9 +1007,28 @@ app.whenReady().then(async () => {
         let tentouHa = Infinity;
         try { tentouHa = Date.now() - (Number(fs.readFileSync(marca, 'utf8')) || 0); } catch (e) { }
         if (tentouHa > 24 * 60 * 60 * 1000) {
-          try { fs.writeFileSync(marca, String(Date.now())); } catch (e) { }
-          // registra (pede UAC uma vez) e deixa o resto do boot normal
-          await elev.registrarComUAC().catch(() => { });
+          // Só gasta a tentativa do dia se ela der certo.
+          //
+          // Antes o marcador era gravado ANTES de tentar: com o UAC cancelado (ou
+          // bloqueado por antivírus/política), o app não tentava de novo por 24 h e
+          // ficava em modo limitado sem dizer o motivo.
+          let criou = false;
+          let motivo = null;
+          try {
+            const reg = await elev.registrarComUAC();
+            criou = !!(reg && reg.success);
+            if (!criou) motivo = (reg && reg.error) || "o Windows não confirmou a permissão";
+          } catch (e) {
+            motivo = String((e && e.message) || e);
+          }
+          if (criou) {
+            try { fs.writeFileSync(marca, String(Date.now())); } catch (e) { }
+          } else {
+            // Guarda o motivo para a tela mostrar em vez do texto genérico.
+            try {
+              fs.writeFileSync(path.join(app.getPath('userData'), 'sem-admin.lock'), String(motivo || ''));
+            } catch (e2) { }
+          }
         }
       }
     } catch (e) { }

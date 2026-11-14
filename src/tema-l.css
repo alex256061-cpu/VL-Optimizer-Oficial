@@ -75,10 +75,16 @@ body::before {
 
 
 /* ── Aviso de modo limitado (sem administrador) ── */
+/* A faixa já foi position:static dentro de .main (overflow:hidden) e CUBRIA o topo do
+   conteúdo: medido, o conteúdo ficava em top:96 antes e depois de a faixa aparecer em
+   top:46. Agora ela é fixa no topo da área de conteúdo e o .body.adm-bar-ativa reserva
+   a altura dela com padding, para o conteúdo começar ABAIXO da faixa. */
 .adm-bar {
+  position: absolute; top: 0; left: 0; right: 0; z-index: 40;
   display: flex; align-items: center; gap: 12px; margin: 10px 28px 0; padding: 10px 14px;
   border-radius: 10px; background: rgba(255, 31, 46, 0.10); border: 1px solid rgba(255, 85, 96, 0.35);
   color: var(--text2); font-size: 12.5px; font-weight: 500;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
 }
 .adm-bar span { flex: 1; min-width: 0; }
 .adm-btn {
@@ -86,3 +92,6 @@ body::before {
   background: var(--grad-cta); color: #0a0910; font-family: inherit; font-weight: 800; font-size: 12px;
 }
 .adm-btn:hover { filter: brightness(1.06); }
+/* Espaço reservado para a faixa: o conteúdo é empurrado para baixo, nunca coberto. */
+body.adm-bar-ativa .main { position: relative; }
+body.adm-bar-ativa .page.active { padding-top: 62px; }

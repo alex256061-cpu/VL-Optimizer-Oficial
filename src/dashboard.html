@@ -5275,15 +5275,34 @@
 // Modo limitado: avisa quando o app nao conseguiu rodar como administrador.
 (function () {
   if (!window.electron || !window.electron.invoke) return;
-  window.electron.invoke('admin-status').then(function (st) {
-    if (!st || st.admin) return;
+  var jaAvisou = false;
+  function mostra(u) {
+    // .adm-bar-ativa reserva o espaço da faixa (padding no .main). Sem ela, a faixa
+    // é position:absolute e cobria o topo do conteúdo (medido: conteúdo em top:96
+    // antes e depois de a faixa aparecer em top:46).
+    if (jaAvisou) return;
+    jaAvisou = true;
+    try { document.body.classList.add('adm-bar-ativa'); } catch (e) {}
     var bar = document.createElement('div');
     bar.className = 'adm-bar';
+    bar.id = 'adm-bar';
+    bar.setAttribute('role', 'status');
     var t = document.createElement('span');
-    t.textContent = 'Modo limitado: servicos, DISM e plano de energia precisam de administrador.';
+    // Texto medido com o app real sem elevação (v1.4.26):
+    //   plano de energia  -> FUNCIONA sem admin (powercfg /setactive trocou de plano)
+    //   chaves de HKLM    -> FALHAM (8 dos 34 ajustes usam as 7 chaves de HKLM)
+    //   serviços          -> FALHAM (Set-Service negado, o Svc() engolia)
+    //   DISM/SFC          -> FALHAM ("Erro: 740, Permissões elevadas obrigatórias")
+    // Por isso a faixa cita HKLM, serviços e limpeza do Windows — e NÃO o plano de energia.
+    t.textContent = u ? 'Modo limitado: parte dos ajustes (chaves do sistema, serviços e limpeza do Windows) precisa de administrador. Feche e abra o VL Optimizer como administrador para liberar.'
+                      : 'Modo limitado: parte dos ajustes (chaves do sistema, serviços e limpeza do Windows) precisa de administrador.';
     var b = document.createElement('button');
     b.className = 'adm-btn';
+    // Caminho real, medido: a tarefa agendada 'VLOptimizer' (RunLevel Highest) reabre o
+    // app elevado SEM UAC. "botão direito > Executar como administrador" estava
+    // desatualizado e levava o cliente para um caminho pior.
     b.textContent = 'Reabrir como admin';
+    b.title = 'Reabre o VL Optimizer com permissão de administrador';
     b.onclick = function () {
       window.electron.invoke('elevate-now').then(function (r) {
         if (!r || !r.success) { try { toast('Elevacao cancelada.'); } catch (e) {} }
@@ -5292,7 +5311,15 @@
     bar.append(t, b);
     var main = document.querySelector('.main');
     if (main) main.prepend(bar);
-  }).catch(function () {});
+  }
+  window.electron.invoke('admin-status').then(function (st) {
+    if (!st || st.admin) return;
+    mostra(!!st.failed);
+  }).catch(function () {
+    // Se não deu para perguntar, o app PODE estar limitado: mostra a faixa com a
+    // ressalva. Antes o catch(){} escondia a faixa e o usuário não sabia de nada.
+    mostra(true);
+  });
   window.electron.on('fps-hotkey', function (r) {
     try {
       toast(r && r.success ? 'Base marcada: ' + Math.round(r.base.fps) + ' FPS.' : 'Abra um jogo para marcar a base.');
