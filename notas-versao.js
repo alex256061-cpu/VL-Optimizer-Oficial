@@ -10,6 +10,24 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.28': {
+    corrigido: [
+      'Contador do Painel: o programa contava como aplicado o que o Windows já trazia assim de fábrica. Agora só entra na conta o que o próprio programa alterou.',
+      'Ajustes que precisam de administrador aparecem como bloqueados, com o botão Reabrir como admin, em vez de aparecer ligados sem ter mudado nada.',
+      'Limpeza do Windows (DISM) e reparos não mostram mais concluído quando o Windows recusou por falta de administrador.',
+      'Desfazer não fica mais travado depois de uma aplicação que falhou.',
+      'A faixa de modo limitado agora explica o que de fato precisa de administrador e deixa de cobrir o conteúdo da tela.',
+      'Nenhuma mensagem técnica do Windows aparece na tela: o programa explica em português o que aconteceu.',
+    ],
+    novo: [],
+  },
+  '1.4.27': {
+    corrigido: [
+      'Ajustes que precisam de administrador agora avisam e não fingem que foram aplicados.',
+      'O botão de reabrir como administrador aparece sempre na faixa vermelha do topo.',
+    ],
+    novo: [],
+  },
   '1.4.26': {
     corrigido: [
       'Nenhuma mensagem técnica do Windows aparece mais na tela. Quando um ajuste é recusado, o programa explica em português o que aconteceu e o que fazer.',
