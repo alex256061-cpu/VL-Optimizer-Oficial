@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Baixar o VL Optimizer — instalador oficial</title>
+<meta name="description" content="Baixe o instalador oficial do VL Optimizer. Windows 10 e 11, 64 bits. O programa abre sozinho como administrador, sem pedir senha.">
+<link rel="icon" href="assets/icon.png">
+<link rel="canonical" href="https://vl-optimizer.pages.dev/baixar.html">
+<style>
+  :root{--bg:#07030a;--card:#120b16;--line:#2a1f2e;--txt:#f5f2f7;--dim:#a99fb4;--red:#ff1f2e;--red2:#c4000e}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100svh;background:radial-gradient(1200px 600px at 50% -10%,#2a0610,#07030a 60%);color:var(--txt);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;display:grid;place-items:center;padding:28px}
+  .wrap{width:100%;max-width:520px;text-align:center}
+  .logo{width:84px;margin:0 auto 16px;display:block;filter:drop-shadow(0 0 22px rgba(255,31,46,.55))}
+  h1{font-size:clamp(26px,5vw,38px);letter-spacing:-.03em;margin:0 0 8px}
+  h1 em{color:var(--red);font-style:normal}
+  .sub{color:var(--dim);margin:0 auto 26px;max-width:42ch;line-height:1.6}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px;text-align:left}
+  .ver{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:12px;color:var(--dim);margin-bottom:6px}
+  .name{font-weight:800;font-size:16px;margin-bottom:14px}
+  .btn{display:block;width:100%;padding:16px;border:0;border-radius:12px;background:linear-gradient(135deg,var(--red),var(--red2));color:#fff;font-weight:800;font-size:16px;text-decoration:none;text-align:center;cursor:pointer;transition:filter .18s}
+  .btn:hover{filter:brightness(1.1)}
+  .btn[aria-disabled="true"]{opacity:.6;pointer-events:none}
+  .meta{margin-top:14px;font-size:12px;color:var(--dim);line-height:1.7}
+  .steps{margin:22px 0 0;padding:0;list-style:none;text-align:left}
+  .steps li{display:flex;gap:10px;color:var(--dim);font-size:13px;line-height:1.6;margin-bottom:10px}
+  .steps b{color:var(--txt);flex:0 0 22px}
+  .nota{margin-top:20px;font-size:12px;color:var(--dim);line-height:1.7;border-top:1px solid var(--line);padding-top:16px}
+  .nota b{color:var(--txt)}
+  a.back{display:inline-block;margin-top:20px;color:var(--dim);text-decoration:none;font-size:13px}
+  a.back:hover{color:var(--txt)}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <img class="logo" src="assets/logo.png" alt="VL Optimizer">
+  <h1>Baixe o <em>VL Optimizer</em></h1>
+  <p class="sub">O instalador oficial. Baixa direto daqui, sem sair do site.</p>
+
+  <div class="card">
+    <div class="ver" id="ver">Versão mais recente</div>
+    <div class="name" id="nome">Instalador do VL Optimizer</div>
+    <a class="btn" id="baixar" href="/atualizacoes/Instalar-VL-Optimizer.exe" download>Baixar agora</a>
+    <div class="meta" id="meta">Windows 10 e 11 · 64 bits · cerca de 140 MB</div>
+  </div>
+
+  <ol class="steps">
+    <li><b>1</b><span>Abra o arquivo baixado. O Windows vai avisar que o programa não tem assinatura digital — clique em <b>Mais informações</b> e depois em <b>Executar assim mesmo</b>.</span></li>
+    <li><b>2</b><span>Aceite a confirmação de administrador <b>uma única vez</b>. É a instalação registrando a abertura automática.</span></li>
+    <li><b>3</b><span>Pronto. Da próxima vez o programa abre sozinho como administrador, sem pedir nada.</span></li>
+  </ol>
+
+  <p class="nota"><b>Já tem uma versão anterior?</b> Não precisa desinstalar: instale por cima e suas configurações continuam.</p>
+
+  <a class="back" href="/">Voltar para o site</a>
+</main>
+
+<script>
+// Lê a versão publicada em /atualizacoes/latest.yml (o mesmo arquivo que o programa usa
+// para se atualizar). Se não conseguir ler, deixa o texto padrão — a página nunca quebra.
+(async function () {
+  try {
+    const r = await fetch('/atualizacoes/latest.yml', { cache: 'no-store' });
+    if (!r.ok) return;
+    const txt = await r.text();
+    const mv = /^version:\s*(.+)$/m.exec(txt);
+    const mp = /^\s*-\s*url:\s*(.+)$/m.exec(txt);
+    const msz = /^\s*size:\s*(\d+)/m.exec(txt);
+    const versao = mv ? mv[1].trim() : null;
+    const arquivo = mp ? mp[1].trim() : null;
+    if (versao) {
+      document.getElementById('ver').textContent = 'Versão ' + versao;
+      document.getElementById('nome').textContent = 'Instalar-VL-Optimizer-' + versao + '.exe';
+    }
+    if (arquivo) {
+      document.getElementById('baixar').setAttribute('href', '/atualizacoes/' + arquivo);
+    }
+    if (msz) {
+      const mb = Math.round(Number(msz[1]) / 1048576);
+      if (mb > 0) document.getElementById('meta').textContent = 'Windows 10 e 11 · 64 bits · ' + mb + ' MB';
+    }
+  } catch (e) { /* mantém os textos padrão */ }
+})();
+</script>
+</body>
+</html>

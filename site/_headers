@@ -1,4 +1,4 @@
-/*
+﻿/*
   X-Content-Type-Options: nosniff
   X-Frame-Options: SAMEORIGIN
   Referrer-Policy: strict-origin-when-cross-origin
@@ -17,3 +17,8 @@
 
 /*.css
   Cache-Control: public, max-age=0, must-revalidate
+/atualizacoes/latest.yml
+  Cache-Control: no-store
+
+/atualizacoes/*
+  Cache-Control: public, max-age=300

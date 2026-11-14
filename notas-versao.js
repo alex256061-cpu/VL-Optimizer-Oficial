@@ -10,6 +10,16 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.17': {
+    corrigido: [
+      'O botão "Ver no site" mandava o cliente para o GitHub. Agora abre a página de download do próprio VL Optimizer, no site.',
+      'O cartão de atualização não conseguia ler o texto do que mudou: o arquivo das notas não ia dentro do pacote. Corrigido.',
+    ],
+    novo: [
+      'O download do instalador e das atualizações agora sai todo do site do VL Optimizer. O cliente não vê mais o GitHub em lugar nenhum.',
+      'Página de download própria, com a versão mais recente, o tamanho do arquivo e o passo a passo da instalação.',
+    ],
+  },
   '1.4.16': {
     corrigido: [],
     novo: [
