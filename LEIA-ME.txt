@@ -1,4 +1,4 @@
-VL OPTIMIZER - GUIA DE INSTALACAO E USO
+﻿VL OPTIMIZER - GUIA DE INSTALACAO E USO
 ========================================
 
 O que e
