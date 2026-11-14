@@ -758,19 +758,43 @@ H('elevacao-diagnostico', async () => {
 //
 // Devolve true só quando o processo foi realmente criado.
 function reabrirElevadoPelaTarefa() {
-  try {
-    const { spawn } = require('child_process');
-    const filho = spawn('schtasks.exe', ['/run', '/tn', 'VLOptimizer'], {
-      detached: true,
-      stdio: 'ignore',
-      windowsHide: true,
-    });
-    let erro = false;
-    filho.on('error', () => { erro = true; });
-    filho.unref();
-    // pid indefinido = o CreateProcess falhou; nunca mentir dizendo que deu certo.
-    return !erro && !!filho.pid;
-  } catch (e) { return false; }
+  return new Promise((resolve) => {
+    try {
+      const { spawn } = require('child_process');
+
+      // Quem dispara a tarefa é um .vbs rodado por wscript, DESTACADO.
+      //
+      // Medido nesta máquina, com o app saindo logo depois do disparo:
+      //   powershell + detached + Hidden -> a tarefa nunca dispara (morre antes)
+      //   powershell sem detached        -> dispara, mas morre quando o pai sai
+      //   schtasks + detached            -> dispara na hora, e o Agendador descarta
+      //                                     porque o app ainda está vivo (IgnoreNew)
+      //   wscript + .vbs + detached      -> espera 2,5 s, sobrevive ao pai e dispara
+      //
+      // O .vbs não é gambiarra: é o processo externo que continua vivo depois que esta
+      // janela fecha. Sem ele, ou o disparo acontece com o app aberto (e é descartado),
+      // ou o processo morre junto com o app.
+      const dir = path.join(process.env.APPDATA || require('os').homedir(), 'VL Optimizer');
+      try { fs.mkdirSync(dir, { recursive: true }); } catch (e) { }
+      const vbs = path.join(dir, 'reabrir.vbs');
+      try {
+        fs.writeFileSync(vbs,
+          'WScript.Sleep 2500' + String.fromCharCode(13, 10) +
+          'CreateObject("WScript.Shell").Run "schtasks /run /tn VLOptimizer", 0, False',
+          'ascii');
+      } catch (e) { return resolve(false); }
+
+      const filho = spawn('wscript.exe', [vbs], { detached: true, stdio: 'ignore', windowsHide: true });
+      filho.on('error', () => resolve(false));
+      filho.unref();
+
+      // O filho é destacado: não esperamos ele terminar (ele vive 2,5 s depois daqui).
+      // Só confirmamos que o processo foi criado.
+      resolve(!!filho.pid);
+    } catch (e) {
+      resolve(false);
+    }
+  });
 }
 H('admin-status', async () => {
   // "podeElevar": existe tarefa agendada com RunLevel Highest apontando para este exe.
@@ -801,7 +825,7 @@ H('elevate-now', async () => {
     //
     // Antes o retorno era success:true incondicional: se o schtasks não pudesse ser
     // criado, o app fechava e nada abria — o usuário ficava sem janela nenhuma.
-    const disparou = reabrirElevadoPelaTarefa();
+    const disparou = await reabrirElevadoPelaTarefa();
     if (!disparou) {
       return { success: false, error: 'Não consegui abrir a versão de administrador. Abra o VL pelo atalho.' };
     }
@@ -1004,11 +1028,19 @@ app.whenReady().then(async () => {
           if (podeElevar) {
             try { fs.writeFileSync(marcador, String(Date.now()) + '|' + String(process.pid)); } catch (e) { }
 
-            // Mesmo disparo do botão. Se ele falhar, esta instância SEGUE ABERTA em modo
-            // limitado — nunca fecha sem deixar janela.
-            if (reabrirElevadoPelaTarefa()) {
+            // A janela é criada ANTES de esperar o disparo.
+            //
+            // Antes o app disparava e saía em 200 ms, sem nunca mostrar janela: o filho não
+            // tinha tempo de rodar o schtasks e a tarefa era descartada — o usuário ficava
+            // sem nada na tela. Agora a janela aparece primeiro; se o disparo der certo, a
+            // instância elevada assume o lugar e esta sai; se falhar, esta continua aberta
+            // em modo limitado e funcional.
+            createWindow();
+
+            const disparou = await reabrirElevadoPelaTarefa();
+            if (disparou) {
               app.isQuitting = true;
-              setTimeout(() => { try { app.quit(); } catch (e) { } }, 200);
+              setTimeout(() => { try { app.quit(); } catch (e) { } }, 300);
               return;
             }
           }
@@ -1017,7 +1049,8 @@ app.whenReady().then(async () => {
     } catch (e) { }
   }
 
-  createWindow();
+  // Só cria a janela aqui se ainda não foi criada no bloco de auto-elevação acima.
+  if (!win || win.isDestroyed()) createWindow();
   startTicker();
   try {
     const st = await ex.fpsStatus();
