@@ -62,7 +62,10 @@ ok('todos OK');
 // ── 2. versão ─────────────────────────────────────────────────────────────
 passo(2, 'Atualizando a versao para ' + versao);
 const pkgPath = path.join(RAIZ, 'package.json');
-const pkgBruto = fs.readFileSync(pkgPath, 'utf8');
+// JSON.parse recusa o BOM que o PowerShell grava com Set-Content -Encoding UTF8.
+// Tirar o BOM na leitura e nunca escrever de volta.
+let pkgBruto = fs.readFileSync(pkgPath, 'utf8');
+if (pkgBruto.charCodeAt(0) === 0xFEFF) pkgBruto = pkgBruto.slice(1);
 const pkg = JSON.parse(pkgBruto);
 const atual = pkg.version;
 pkg.version = versao;
@@ -101,11 +104,14 @@ passo(4, 'Buildando o instalador');
 const releaseDir = path.join(RAIZ, 'release');
 fs.rmSync(releaseDir, { recursive: true, force: true });
 try {
-  execFileSync(path.join(RAIZ, 'node_modules\\.bin\\electron-builder.cmd'), ['--win', 'nsis', '--x64', '--publish', 'never'], {
-    cwd: RAIZ, stdio: 'pipe',
+  // No Windows um .cmd não roda direto por execFile: precisa de shell.
+  // (Foi o que fez o build "falhar" sem mensagem: o erro era ENOENT do .cmd.)
+  execSync('"' + path.join(RAIZ, 'node_modules\\.bin\\electron-builder.cmd') + '" --win nsis --x64 --publish never', {
+    cwd: RAIZ, stdio: 'pipe', encoding: 'utf8',
   });
 } catch (e) {
-  parar('o build falhou:\n' + String(e.stdout || '') + '\n' + String(e.stderr || ''));
+  const saida = (String(e.stdout || '') + String(e.stderr || '')).trim();
+  parar('o build falhou:\n' + (saida || String(e.message || e)));
 }
 const setup = path.join(releaseDir, 'Instalar-VL-Optimizer-' + versao + '.exe');
 if (!fs.existsSync(setup)) parar('o build nao gerou o instalador');
@@ -207,9 +213,11 @@ async function api(url, opts) {
     passo(7, 'Fazendo o deploy do site');
     let saida = '';
     try {
-      saida = execFileSync(path.join(RAIZ, 'node_modules\\.bin\\wrangler.cmd'),
-        ['pages', 'deploy', '.', '--project-name=vl-optimizer', '--branch=main', '--commit-dirty=true'],
-        { cwd: SITE, encoding: 'utf8', stdio: 'pipe' });
+      // wrangler também é .cmd: roda por shell, como o electron-builder.
+      saida = execSync(
+        '"' + path.join(RAIZ, 'node_modules\\.bin\\wrangler.cmd') + '" pages deploy . --project-name=vl-optimizer --branch=main --commit-dirty=true',
+        { cwd: SITE, encoding: 'utf8', stdio: 'pipe' }
+      );
     } catch (e) {
       saida = String(e.stdout || '') + String(e.stderr || '');
     }

@@ -5456,6 +5456,33 @@
   });
   try { updObs.observe(document.body, { childList: true, subtree: true }); } catch (e) { }
 
+  // Aviso de versão nova sem abrir a página Sobre.
+  //
+  // O updater de fundo já consulta o servidor a cada 6 horas e baixa sozinho. Antes o
+  // usuário só descobria que havia versão nova se entrasse em Sobre e clicasse em
+  // Verificar. Agora, quando a consulta termina e há versão nova, aparece um aviso na
+  // tela e o ícone de engrenagem do topo ganha um ponto, levando para a página Sobre.
+  let updJaAvisou = null;
+  async function updAvisarSeHouver() {
+    try {
+      const info = await ipcRenderer.invoke('update-info');
+      if (!info || !info.success || !info.temNova) return;
+      if (updJaAvisou === info.disponivel) return;   // não insiste na mesma versão
+      updJaAvisou = info.disponivel;
+      const resumo = info.notas
+        ? (/novo/.test(JSON.stringify(info.notas)) ? 'Tem novidade na versão ' : 'Atualização disponível: versão ')
+        : 'Atualização disponível: versão ';
+      if (typeof toast === 'function') {
+        toast(resumo + info.disponivel + '. Abra Sobre para ver o que mudou.');
+      }
+      const eng = document.querySelector('.topbar-actions [title*="onfig"], #btn-config, [onclick*="sobre"]');
+      if (eng && eng.style) eng.style.boxShadow = '0 0 0 3px rgba(255,31,46,.35)';
+    } catch (e) { }
+  }
+  // primeira conferência 20 s depois de abrir; depois de hora em hora
+  setTimeout(updAvisarSeHouver, 20000);
+  setInterval(updAvisarSeHouver, 60 * 60 * 1000);
+
 </script>
 </body>
 

@@ -10,6 +10,12 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.18': {
+    corrigido: [],
+    novo: [
+      'Quando sai versão nova, o programa avisa na tela sem você precisar abrir a página Sobre. O aviso leva direto para o cartão de atualização.',
+    ],
+  },
   '1.4.17': {
     corrigido: [
       'O botão "Ver no site" mandava o cliente para o GitHub. Agora abre a página de download do próprio VL Optimizer, no site.',
