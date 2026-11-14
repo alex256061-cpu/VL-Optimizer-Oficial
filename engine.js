@@ -1134,6 +1134,16 @@ async function erroDePermissao(err) {
     'n[ãa]o permitid',
     'unauthorized',
     'not permitted',
+    'permiss[õo]es elevadas',        // DISM: "Permissões elevadas obrigatórias"
+    'exige eleva[çc][ãa]o',         // netsh: "exige elevação"
+    'privil[ée]gios de administrador',
+    'membro do grupo administradores',
+    // a própria classe da exceção: vale mesmo se o Windows estiver em outro idioma
+    'UnauthorizedAccessException',
+    'AccessDeniedException',
+    // espanhol (o notebook do cliente pode estar em ES)
+    'operaci[óo]n no autorizada',
+    'no autorizado',
   ].join('|'), 'i');
 
   // O recurso não existe — não é permissão, é o ambiente.
@@ -1156,13 +1166,27 @@ async function erroDePermissao(err) {
     return "Este recurso nao existe nesta versao do Windows.";
   }
 
-  // Erro desconhecido: devolver a mensagem limpa, sem o bloco tecnico do PowerShell
-  // (o texto vem com caminho do .ps1 e número de linha, que não ajuda o usuário).
+  // Erro desconhecido: NUNCA devolver o texto do PowerShell.
+  //
+  // Antes o fallback pegava a primeira linha "limpa" do stderr e devolvia ao usuário.
+  // Isso vazava texto de cmdlet e de exceção .NET na tela (o cliente viu
+  // "New-ItemProperty: Tentativa de execução de uma operação não autorizada").
+  //
+  // O GDZ não tem esse problema porque o texto de erro dele é escrito pelo próprio app
+  // (marcador GDZ_ERRO na stdout); aqui a regra passa a ser a mesma ideia: o texto é
+  // nosso, só o detalhe curto vai entre parênteses.
   const limpo = String(e)
     .split(/\r?\n/)
     .map((l) => l.trim())
     .find((l) => l && !/^\s*\+/.test(l) && !/\.ps1:\d+/.test(l) && !/^No linha|^At line/.test(l)) || '';
-  return limpo || "o Windows nao aceitou a mudanca.";
+  // Tira o prefixo de cmdlet ("New-ItemProperty : ") e corta o tamanho.
+  const curto = String(limpo).replace(/^[\w.-]{2,40}\s*:\s*/, '').slice(0, 90).trim();
+  // Se o que sobrou ainda parece texto técnico, descarta.
+  const tecnico = /Exception|\.NET|System\.|CategoryInfo|FullyQualifiedErrorId|\\|Cmdlet|cmdlet|ParameterBinding/i.test(curto);
+  // Já é uma frase nossa ou repete a nossa mensagem: não duplicar.
+  const jaEMensagem = /^o Windows n[ãa]o aceitou a mudan/i.test(curto) || /^tente abrir o VL/i.test(curto);
+  const detalhe = curto && !tecnico && !jaEMensagem ? ' (' + curto + ')' : '';
+  return 'o Windows nao aceitou a mudanca' + detalhe + '. Tente abrir o VL como administrador.';
 }
 
 // Confere no NODE o StartType de um serviço depois de tentar mudar.
@@ -1232,11 +1256,11 @@ async function applyTweak(id, want) {
     // Antes o resultado era descartado: se o script falhasse, a funcao ainda podia
     // responder sucesso. Agora um erro do PowerShell volta como erro.
     const r = await ps(t.off, 60000);
-    if (!r.ok) return { success: false, on: true, error: r.err || 'o comando foi recusado pelo Windows' };
+    if (!r.ok) return { success: false, on: true, error: await erroDePermissao(r.err || 'falha') };
   } else if (regs.length) {
     const lines = regs.map((r) => `Set-Val '${r.path}' '${r.name}' ${typeof r.off === 'string' ? `'${r.off}'` : r.off} '${r.type}'`);
     const r = await ps(lines.join('\n'), 60000);
-    if (!r.ok) return { success: false, on: true, error: r.err || 'o comando foi recusado pelo Windows' };
+    if (!r.ok) return { success: false, on: true, error: await erroDePermissao(r.err || 'falha') };
   }
   const now = await probeTweak(t);
   if (!now) return { success: true, on: false };
@@ -1273,7 +1297,7 @@ async function runAction(name) {
   }
   if (a.run) {
     const r = await ps(a.run, 120000);
-    if (!r.ok) return { success: false, error: r.err || 'falha' };
+    if (!r.ok) return { success: false, error: await erroDePermissao(r.err || 'falha') };
     if (r.out.includes('noobs')) return { success: false, error: 'OBS não encontrado neste PC.' };
   }
   const msg = a.restart === 'reboot' ? 'Vale depois de reiniciar o PC.' : undefined;
@@ -1289,7 +1313,7 @@ async function revertAction(name) {
     if (!rb.success) return { success: false, error: rb.error };
     return { success: true };
   }
-  if (a.revert) { const r = await ps(a.revert, 60000); return { success: r.ok, error: r.ok ? undefined : r.err }; }
+  if (a.revert) { const r = await ps(a.revert, 60000); return { success: r.ok, error: await erroDePermissao(r.err || 'falha') }; }
   return { success: false, error: 'sem backup' };
 }
 
@@ -1297,14 +1321,14 @@ async function runOnce(name) {
   const o = ONCES[name];
   if (!o) return { success: false, error: 'ação desconhecida' };
   const r = await ps(o.run, 180000);
-  return { success: r.ok, message: (r.out || '').slice(0, 200) || 'concluído', error: r.ok ? undefined : r.err };
+  return { success: r.ok, message: (r.out || '').slice(0, 200) || 'concluído', error: await erroDePermissao(r.err || 'falha') };
 }
 
 async function runTool(id) {
   const t = TOOLS[id];
   if (!t) return { success: false, error: 'ferramenta desconhecida' };
   const r = await ps(t.run, t.long ? 60 * 60 * 1000 : 120000);
-  return { success: r.ok, message: (r.out || '').slice(-400) || 'concluído', error: r.ok ? undefined : r.err };
+  return { success: r.ok, message: (r.out || '').slice(-400) || 'concluído', error: await erroDePermissao(r.err || 'falha') };
 }
 
 // ── Verificações ──
@@ -1368,7 +1392,7 @@ async function runCheck(name) {
   const c = CHECKS[name];
   if (!c) return { success: false, error: 'verificação desconhecida' };
   const r = await ps(c.run, 60000);
-  if (!r.ok) return { success: false, error: r.err || 'falha' };
+  if (!r.ok) return { success: false, error: await erroDePermissao(r.err || 'falha') };
   try { return { success: true, ...JSON.parse(r.out) }; } catch (e) { return { success: false, error: 'resposta inválida' }; }
 }
 

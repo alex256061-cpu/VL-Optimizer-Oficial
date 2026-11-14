@@ -10,6 +10,13 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.26': {
+    corrigido: [
+      'Nenhuma mensagem técnica do Windows aparece mais na tela. Quando um ajuste é recusado, o programa explica em português o que aconteceu e o que fazer.',
+      'Ajustes que falham por falta de administrador, por política do Windows ou por recurso ausente agora mostram sempre uma explicação, nunca o texto do sistema.',
+    ],
+    novo: [],
+  },
   '1.4.25': {
     corrigido: [
       'Na aba Memória, o intervalo da limpeza automática ficava travado em 10 minutos: escolher 20, 30 ou 1 hora não mudava. Agora muda.',
