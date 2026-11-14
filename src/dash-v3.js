@@ -202,7 +202,19 @@
   window.loadRecs = async function () { const r = await origRecs.apply(this, arguments); refreshRecs(); return r; };
 
   // O catálogo avisa sempre que lê o Windows ou um ajuste muda.
-  window.addEventListener('gdz-opt-change', refreshHero);
+  // Redesenha o painel. Se o catálogo ainda está lendo o Windows, espera um pouco e
+  // tenta de novo — assim o número não fica congelado depois de uma otimização.
+  let heroT = null;
+  function refreshHeroQuandoPronto(tentativa) {
+    const n = tentativa || 0;
+    if (heroT) clearTimeout(heroT);
+    heroT = setTimeout(() => {
+      refreshHero();
+      // se ainda houver leitura pendente, tenta mais algumas vezes
+      if (n < 5 && window.gdzOpt && gdzOpt.loaded && !gdzOpt.loaded()) refreshHeroQuandoPronto(n + 1);
+    }, n === 0 ? 0 : 400);
+  }
+  window.addEventListener('gdz-opt-change', () => refreshHeroQuandoPronto(0));
 
   // Data da última Otimização Rápida (quickOpt escreve "agora mesmo" em #last-opt)
   const LAST_KEY = 'gdz-last-quickopt';

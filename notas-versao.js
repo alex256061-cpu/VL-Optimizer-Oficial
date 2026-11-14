@@ -10,6 +10,17 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.24': {
+    corrigido: [
+      'O contador de otimizações do Painel não subia depois de otimizar. As ações (Game Bar, DVR, HAGS, SysMain e outras) apareciam sempre como desligadas, porque a leitura do estado de todas elas rodava num script que o Windows recusava. Agora cada uma é lida separada.',
+      'O contador do Painel agora atualiza sozinho quando você aplica ou desfaz um ajuste, sem precisar entrar e sair da tela.',
+    ],
+    novo: [],
+  },
+  '1.4.23': {
+    corrigido: [],
+    novo: ['Aviso na tela quando sai versão nova, sem precisar abrir a página Sobre.'],
+  },
   '1.4.18': {
     corrigido: [],
     novo: [
