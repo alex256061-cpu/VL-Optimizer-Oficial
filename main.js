@@ -717,7 +717,13 @@ H('bn-notify', (a) => {
 
 H('ram-clean', () => feat.ramClean());
 H('ram-status', () => ({ success: true, ...feat.ramState() }));
-H('ram-auto-set', ({ on }) => feat.ramAutoSet(on));
+// Repassa o objeto INTEIRO ({ on, minutes }).
+//
+// Antes: ({ on }) => feat.ramAutoSet(on) — o `minutes` era descartado aqui, e em
+// features.js um argumento que não é objeto cai no ramo "ram.on = !!arg", que ignora
+// o intervalo. Resultado: escolher 20, 30 ou 60 minutos não mudava nada — o valor
+// voltava para o que estava salvo (10).
+H('ram-auto-set', (arg) => feat.ramAutoSet(arg));
 H('elevacao-diagnostico', async () => {
   // Diagnóstico da elevação: o que o app vê e o que a tarefa diz.
   try {
