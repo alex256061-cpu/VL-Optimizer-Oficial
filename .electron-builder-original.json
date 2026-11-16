@@ -1,0 +1,85 @@
+{
+    "appId":  "com.l.optimizer",
+    "productName":  "VL Optimizer",
+    "directories":  {
+                        "output":  "release"
+                    },
+    "asar":  true,
+    "asarUnpack":  [
+                       "bin/**",
+                       "native/**",
+                       "assets/**"
+                   ],
+    "electronFuses":  {
+                          "runAsNode":  false,
+                          "enableNodeOptionsEnvironmentVariable":  false,
+                          "enableNodeCliInspectArguments":  false,
+                          "enableEmbeddedAsarIntegrityValidation":  true,
+                          "onlyLoadAppFromAsar":  true
+                      },
+    "npmRebuild":  false,
+    "files":  [
+                  "package.json",
+                  "main.js",
+                  "preload.js",
+                  "engine.js",
+                  "engine-extras.js",
+                  "engine-scaler.js",
+                  "engine-bridge.js",
+                  "updater.js",
+                  "supabase.js",
+                  "hwid.js",
+                  "lossless-official.js",
+                  "escrever-settings.js",
+                  "gdz-launch.js",
+                  "features.js",
+                  "elevacao.js",
+                  "notas-versao.js",
+                  "assets/**/*",
+                  "src/**/*",
+                  "bin/**/*",
+                  "native/lossless/**/*",
+                  "native/scaler/fsr1_engine.cjs",
+                  "native/scaler/fsr1_engine.exe",
+                  "native/scaler/src/fsr1_con.js",
+                  "native/scaler/shaders/*.cso",
+                  "LEIA-ME.txt",
+                  "FSR.LICENSE.txt"
+              ],
+    "publish":  [
+                    {
+                        "provider":  "generic",
+                        "url":  "https://vl-optimizer.pages.dev/atualizacoes"
+                    }
+                ],
+    "win":  {
+                "target":  [
+                               {
+                                   "target":  "nsis",
+                                   "arch":  [
+                                                "x64"
+                                            ]
+                               }
+                           ],
+                "icon":  "assets/icon.ico",
+                "artifactName":  "Instalar-VL-Optimizer-${version}.${ext}",
+                "requestedExecutionLevel":  "asInvoker"
+            },
+    "nsis":  {
+                 "include":  "instalador-tarefa.nsh",
+                 "oneClick":  false,
+                 "perMachine":  false,
+                 "allowElevation":  true,
+                 "allowToChangeInstallationDirectory":  true,
+                 "createDesktopShortcut":  true,
+                 "createStartMenuShortcut":  true,
+                 "shortcutName":  "VL Optimizer",
+                 "uninstallDisplayName":  "VL Optimizer",
+                 "installerLanguages":  [
+                                            "pt_BR"
+                                        ],
+                 "language":  "1046",
+                 "runAfterFinish":  false,
+                 "deleteAppDataOnUninstall":  false
+             }
+}

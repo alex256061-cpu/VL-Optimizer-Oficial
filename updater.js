@@ -9,6 +9,7 @@
 'use strict';
 
 const { app, shell } = require('electron');
+const MARCA = require('./marca');
 
 // De onde vem a atualização.
 //
@@ -21,9 +22,9 @@ const { app, shell } = require('electron');
 //
 // Os arquivos publicados nessa pasta são os que o electron-builder gera para o provider
 // generic: latest.yml e o instalador (.exe).
-const SITE = 'https://vl-optimizer.pages.dev';
-const UPDATE_URL = SITE + '/atualizacoes';
-const DOWNLOAD_PAGE = SITE + '/#baixar';
+const SITE = MARCA.site;
+const UPDATE_URL = MARCA.urlAtualizacoes;
+const DOWNLOAD_PAGE = MARCA.urlDownload;
 const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;   // 6 horas
 
 let autoUpdater = null;

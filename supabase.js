@@ -12,17 +12,20 @@ const os = require('os');
 const path = require('path');
 const hwid = require('./hwid');
 const extra = require('./engine-extras');
+const MARCA = require('./marca');
 
 // ── configuração ──────────────────────────────────────────────────────────
 // Preencha depois de criar o projeto no supabase.com. Os dois valores são públicos
 // (a chave anon vai no app de qualquer forma); o que protege os dados é a regra de
 // segurança no banco, não o sigilo dessas duas strings.
 const CONFIG = {
-  url: process.env.VL_SUPABASE_URL || 'https://wsmropvlmnyegpvmyndn.supabase.co',
-  anonKey: process.env.VL_SUPABASE_ANON_KEY || 'sb_publishable_7yffHvepz_e7LCm3BvL55w_euYmiX6o',
+  // Projeto Supabase DESTA marca (marca/marca-<cliente>.json).
+  // O env continua podendo sobrescrever, para testes.
+  url: process.env.VL_SUPABASE_URL || MARCA.supabase.url,
+  anonKey: process.env.VL_SUPABASE_ANON_KEY || MARCA.supabase.anon,
 };
 
-const DIR = path.join(process.env.APPDATA || os.homedir(), 'VL Optimizer');
+const DIR = MARCA.dirDados;
 const SESSAO = path.join(DIR, 'sessao.json');
 
 function configurado() {

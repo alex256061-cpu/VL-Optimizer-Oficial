@@ -32,8 +32,9 @@ const path = require('path');
 const { execFile } = require('child_process');
 
 const core = require('./engine');
+const MARCA = require('./marca');
 
-const TASK_NAME = 'VLOptimizer';
+const TASK_NAME = MARCA.tarefa;
 
 // Marca que veio de execução elevada: impede o ciclo app -> tarefa -> app.
 const ELEVATED_FLAG = '--elevated-from-task';
@@ -176,7 +177,7 @@ function xmlTarefa(opts) {
 E.registrar = async (opts) => {
   if (!E.suportado()) return { success: false, error: 'Recurso disponível apenas na versão instalada.' };
   const dir = process.env.LOCALAPPDATA || os.tmpdir();
-  const arquivo = path.join(dir, 'VLOptimizer-task-' + process.pid + '.xml');
+  const arquivo = path.join(dir, MARCA.nomeCurto + '-task-' + process.pid + '.xml');
   try {
     // schtasks lê o XML em UTF-16 quando declarado assim; gravamos UTF-16LE com BOM.
     fs.writeFileSync(arquivo, '\ufeff' + xmlTarefa(opts), 'utf16le');
@@ -205,7 +206,7 @@ E.registrarComUAC = async (opts) => {
   // O XML vai num arquivo (nada de $ no meio de template literal) e um único
   // Start-Process -Verb RunAs pede o consentimento uma vez.
   const dir = process.env.LOCALAPPDATA || os.tmpdir();
-  const xmlFile = path.join(dir, 'VLOptimizer-task-' + Date.now() + '.xml');
+  const xmlFile = path.join(dir, MARCA.nomeCurto + '-task-' + Date.now() + '.xml');
   try {
     fs.writeFileSync(xmlFile, '\ufeff' + xmlTarefa(opts), 'utf16le');
   } catch (e) {
@@ -214,13 +215,13 @@ E.registrarComUAC = async (opts) => {
 
   // Script em arquivo .ps1 separado: sem interpolação de JS, validável com ParseFile.
   // Ele só chama o schtasks com o XML; $LASTEXITCODE decide o sucesso.
-  const ps1 = path.join(dir, 'VLOptimizer-registrar-' + Date.now() + '.ps1');
+  const ps1 = path.join(dir, MARCA.nomeCurto + '-registrar-' + Date.now() + '.ps1');
   const linha = (s) => s + '\r\n';
   const cmd = [
     'param([Parameter(Mandatory=$true)][string]$Xml)',
     '$ErrorActionPreference = \'Continue\'',
     'try {',
-    '  $saida = & schtasks.exe /create /tn \'VLOptimizer\' /xml $Xml /f 2>&1',
+    '  $saida = & schtasks.exe /create /tn \'' + MARCA.tarefa + '\' /xml $Xml /f 2>&1',
     '  if ($LASTEXITCODE -eq 0) { exit 0 }',
     '  Write-Output ("FALHOU: " + ($saida -join " "))',
     '  exit 3',
