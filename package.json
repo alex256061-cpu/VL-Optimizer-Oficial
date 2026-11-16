@@ -1,22 +1,22 @@
 {
-  "name": "vloptimizer",
-  "productName": "VL Optimizer",
-  "version": "1.4.30",
-  "description": "VL Optimizer — suíte de otimização de PC para jogos",
-  "author": "Lucas Larado",
-  "main": "main.js",
-  "scripts": {
-    "start": "electron .",
-    "smoke": "electron . --smoke",
-    "dist": "electron-builder --win nsis --x64 --publish never",
-    "build:native": "node native/scaler/build.js && node native/scaler/build-exe.js"
-  },
-  "devDependencies": {
-    "electron": "^33.0.0",
-    "electron-builder": "26.18.0",
-    "wrangler": "^4.161.0"
-  },
-  "dependencies": {
-    "electron-updater": "^6.8.11"
-  }
+    "name": "vloptimizer",
+    "productName": "VL Optimizer",
+    "version": "1.4.31",
+    "description": "VL Optimizer — suíte de otimização de PC para jogos",
+    "author": "Lucas Larado",
+    "main": "main.js",
+    "scripts": {
+        "start": "electron .",
+        "smoke": "electron . --smoke",
+        "dist": "electron-builder --win nsis --x64 --publish never",
+        "build:native": "node native/scaler/build.js && node native/scaler/build-exe.js"
+    },
+    "devDependencies": {
+        "electron": "^33.0.0",
+        "electron-builder": "26.18.0",
+        "wrangler": "^4.161.0"
+    },
+    "dependencies": {
+        "electron-updater": "^6.8.11"
+    }
 }
