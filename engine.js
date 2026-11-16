@@ -349,7 +349,13 @@ const TWEAKS = [
     cat: 'desempenho', title: 'Modo de Jogo ligado', rec: true, tags: ['FPS mais estável'],
     desc: 'O Windows prioriza o jogo quando você abre um: menos disputa com processos de fundo.',
     reg: [{ path: HKCU + '\\Software\\Microsoft\\GameBar', name: 'AutoGameModeEnabled', type: 'DWord', on: 1, off: 0 }],
-    probe: `if ((Get-Val '${HKCU}\\Software\\Microsoft\\GameBar' 'AutoGameModeEnabled') -eq 1) { Write-Output '1' } else { Write-Output '0' }`,
+    // O Windows assume Modo de Jogo LIGADO quando o valor NÃO existe (padrao: 1).
+    //
+    // O probe testava só `-eq 1`: com o valor ausente respondia 0 = desligado, a tela
+    // mostrava DESLIGADO com o Windows LIGADO, e o cliente clicava em "ligar" num
+    // ajuste que já estava ligado. O GDZ testa `-eq 0` (ausente não é 0, logo não está
+    // desligado) — mesma semântica aplicada aqui.
+    probe: `$v = Get-Val '${HKCU}\\Software\\Microsoft\\GameBar' 'AutoGameModeEnabled'; if ($null -eq $v) { $v = 1 }; if ($v -eq 1) { Write-Output '1' } else { Write-Output '0' }`,
   }),
   T('steam-overlay', {
     cat: 'desempenho', title: 'Sobreposição da Steam desligada', tags: ['Mais FPS'],
@@ -1079,7 +1085,7 @@ async function lerRegsAtuais(regs) {
 
 // Quais valores do ajuste NÃO estão no estado pedido? Lista curta para a mensagem e
 // para a decisão de gravar ou não o backup.
-function regsNoEstado(regs, atuais, want) {
+function regsNoEstado(regs, atuais, want, tw) {
   const alvo = (r) => String(want ? r.on : r.off);
   const faltando = [];
   regs.forEach((r, i) => {
@@ -1100,15 +1106,27 @@ const valorAusenteConta = (t, want) => (t.padrao !== undefined && !want);
 // (edge-bg, gpu-msi, telemetry, bing, activity, bsod-detail) "ligado" pode ser o valor
 // que o Windows JÁ tinha (medido: bing e bsod-detail já vêm ligados de fábrica). A
 // resposta certa é comparar O VALOR com o que foi pedido, um a um.
-function regsNoEstado(regs, atuais, want) {
+function regsNoEstado(regs, atuais, want, tw) {
   const faltando = [];
   regs.forEach((r, i) => {
     const a = atuais && atuais[i];
     const alvo = String(want ? r.on : r.off);
     if (!a) { faltando.push(r.name); return; }
     if (!a.existe) {
-      // Valor ausente: só é resultado válido quando o CATÁLOGO manda apagar o valor
-      // (o `off` é explícito) ou quando o ajuste já declara que a ausência é o padrão.
+      // Valor ausente: o Windows usa o PADRÃO do tweak.
+      //
+      // Antes: ausente só valia quando `want === false` (desligar). Isso está certo
+      // para `widgets` (padrao 0 -> ausente é DESLIGADO), mas inverte o `game-mode`
+      // (padrao 1 -> ausente é LIGADO). Com a regra antiga, o game-mode nunca ficava
+      // "no alvo" ao ligar, e desligar apagava o valor deixando o Windows ligado.
+      //
+      // Critério correto: a ausência, traduzida pelo padrão, dá o alvo pedido?
+      if (tw && tw.padrao !== undefined) {
+        if (String(tw.padrao) !== alvo) faltando.push(r.name);
+        return;
+      }
+      // Sem padrão declarado, ausente só é resultado válido quando o catálogo manda
+      // apagar o valor (o `off` é explícito) e estamos desligando.
       if (!(want === false && r.off !== undefined)) faltando.push(r.name);
       return;
     }
@@ -1118,14 +1136,16 @@ function regsNoEstado(regs, atuais, want) {
 }
 
 async function tweakNoAlvo(t, atuais, want) {
-  if (t.probe) return (await probeTweak(t)) === want;
   const regs = tweakRegs(t);
-  if (!regs.length) {
-    // Ajuste sem registro (powercfg, netsh): não há como regravar por leitura barata.
-    // O probe é a única medida — e o applyTweak já confere o `on`/`off` antes de chegar aqui.
-    return (await probeTweak(t)) === want;
-  }
-  return regsNoEstado(regs, atuais, want).length === 0;
+  // Com registro, a prova é a LEITURA DO REGISTRO — não o probe.
+  //
+  // Antes havia saída antecipada `if (t.probe) return probeTweak(...) === want`: a
+  // conferência de registro nunca valia para tweaks com probe, e o `padrao` (que diz o
+  // que significa valor ausente) era ignorado. `game-mode` tem probe E reg E padrao — é
+  // o único ajuste nesse caso, e era o que exibia o "liga e desliga".
+  if (regs.length) return regsNoEstado(regs, atuais, want, t).length === 0;
+  // Ajuste sem registro (powercfg, netsh): o probe é a única medida barata.
+  return (await probeTweak(t)) === want;
 }
 
 // O desfazer não compara com o catálogo: compara com o BACKUP, que é o estado exato que
@@ -1712,11 +1732,38 @@ async function applyTweak(id, want) {
   // desligar = restaurar o backup exato
   const st = loadBackups()[key];
   let restaurado = false;
-  if (st) {
+
+  // Apagar o valor pode significar LIGADO.
+  //
+  // O backup de um ajuste que o usuário nunca tinha mexido registra "não existia", e
+  // restaurar isso APAGA o valor. No `game-mode` (padrao: 1) valor ausente = Modo de
+  // Jogo LIGADO — então o "desfazer" deixava o Windows ligado e a tela dizendo
+  // desligado: era o "liga e volta a desligar" que o cliente viu.
+  //
+  // Medido antes desta correção: desligar -> AutoGameModeEnabled AUSENTE -> on=true.
+  //
+  // Aqui: quando o padrão do tweak é igual ao valor de LIGAR e diferente do valor de
+  // desligar, apagar viraria "ligado" — nesse caso gravar o `off` explícito, que é
+  // inequívoco.
+  const apagarViraLigado = !!st && (st.reg || []).some((orig, i) => {
+    const r = regs[i];
+    if (!r || !orig) return false;
+    return !orig.exists && t.padrao !== undefined
+      && String(t.padrao) === String(r.on)
+      && String(r.off) !== String(t.padrao);
+  });
+
+  if (st && !apagarViraLigado) {
     const rb = await restoreBackup(key);
     if (!rb.success) return { success: false, error: rb.error };
     // O restoreBackup já conferiu o registro. Aqui só falta o caso de item sem registro.
     restaurado = true;
+  } else if (st && apagarViraLigado && regs.length) {
+    // Mesma gravação do caso sem backup, mas o backup precisa ser descartado depois
+    // (o estado anterior não pode ser restaurado sem virar "ligado").
+    const lines = regs.map((r) => `Set-Val '${r.path}' '${r.name}' ${typeof r.off === 'string' ? `'${r.off}'` : r.off} '${r.type}'`);
+    const r = await ps(lines.join('\n'), 60000);
+    if (!r.ok) return { success: false, on: true, error: await erroDePermissao(r.err || 'falha') };
   } else if (t.off) {
     // Antes o resultado era descartado: se o script falhasse, a funcao ainda podia
     // responder sucesso. Agora um erro do PowerShell volta como erro.
@@ -1734,8 +1781,9 @@ async function applyTweak(id, want) {
   const depoisRev = regs.length ? await lerRegsAtuais(regs) : null;
   const noLugar = restaurado || (await tweakNoAlvo(t, depoisRev || [], false));
   if (noLugar) {
-    // O restoreBackup apaga o seu próprio backup. O que sobrou é do caso t.off/regs.
-    if (!st) descartaBackupOrfao(key);
+    // O restoreBackup apaga o seu próprio backup. O que sobrou é do caso t.off/regs
+    // e do caso "apagar viraria ligado", onde o backup não é mais utilizável.
+    if (!restaurado) descartaBackupOrfao(key);
     return { success: true, on: false };
   }
   return { success: false, on: true, error: 'nao foi possivel desfazer. ' + await erroDePermissao(t && t._ultimoErro) };

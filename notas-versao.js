@@ -10,6 +10,13 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.30': {
+    corrigido: [
+      'Modo de Jogo: o Windows já vem com ele ligado, mas o programa mostrava desligado. Clicar em ligar parecia não fazer efeito, e desligar deixava o Windows ligado mesmo. Agora mostra o estado certo e desliga de verdade.',
+      'Aceleração do mouse: o ajuste era aplicado e o ponteiro realmente mudava, mas o programa dizia desligado segundos depois. Agora mantém ligado.',
+    ],
+    novo: [],
+  },
   '1.4.29': {
     corrigido: [
       'Aceleração do mouse e Modo de Jogo ligavam e voltavam sozinhos em poucos segundos. O problema era no programa que lê o estado dos ajustes: a leitura de um ajuste de rede dava erro e derrubava a leitura dos outros.',
