@@ -5,10 +5,12 @@ const path = require('path');
 const crypto = require('crypto');
 const { spawn, execFile } = require('child_process');
 const core = require('./engine');
+const MARCA = require('./marca');
 
 const ex = {};
 
-const APP_DATA = () => process.env.LOPT_DATA_DIR || path.join(process.env.APPDATA || os.homedir(), 'VL Optimizer', 'data');
+// Pasta de dados DESTA marca (ver o mesmo ajuste em features.js).
+const APP_DATA = () => process.env.LOPT_DATA_DIR || path.join(MARCA.dirDados, 'data');
 const fileIn = (name) => path.join(APP_DATA(), name);
 function readJson(file, fallback) { try { return JSON.parse(fs.readFileSync(fileIn(file), 'utf8')); } catch (e) { return fallback; } }
 function writeJson(file, v) { try { fs.mkdirSync(APP_DATA(), { recursive: true }); fs.writeFileSync(fileIn(file), JSON.stringify(v, null, 1), 'utf8'); } catch (e) {} }
@@ -2326,7 +2328,7 @@ function agendarTemp() {
 // do próprio processo — que nunca vira administrador.
 ex.listarPidsApp = async () => {
   try {
-    const r = await core.ps('$p = @(Get-Process -Name "VL Optimizer" -ErrorAction SilentlyContinue | ForEach-Object { $_.Id }); Write-Output (Json $p)', 15000);
+    const r = await core.ps('$p = @(Get-Process -Name "' + MARCA.nome + '" -ErrorAction SilentlyContinue | ForEach-Object { $_.Id }); Write-Output (Json $p)', 15000);
     const j = JSON.parse(r.out);
     return Array.isArray(j) ? j : (j ? [j] : []);
   } catch (e) {

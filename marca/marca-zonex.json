@@ -13,6 +13,8 @@
   "assets": "assets/clientes/zonex",
   "cores": {
     "principal": "#ff7a00",
-    "secundaria": "#050506"
+    "secundaria": "#0a0f1a",
+    "matiz": 28,
+    "apoio": "#00a8ff"
   }
 }

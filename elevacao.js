@@ -136,7 +136,7 @@ function xmlTarefa(opts) {
     : '';
   return '<?xml version="1.0" encoding="UTF-16"?>\n' +
     '<Task version="1.3" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">\n' +
-    '  <RegistrationInfo>\n    <URI>\\' + TASK_NAME + '</URI>\n    <Description>Abre o VL Optimizer com direitos de administrador, sem pedir UAC.</Description>\n  </RegistrationInfo>\n' +
+    '  <RegistrationInfo>\n    <URI>\\' + TASK_NAME + '</URI>\n    <Description>Abre o ' + MARCA.nome + ' com direitos de administrador, sem pedir UAC.</Description>\n  </RegistrationInfo>\n' +
     '  <Principals>\n' +
     '    <Principal id="Author">\n' +
     '      <UserId>' + esc(os.userInfo().username) + '</UserId>\n' +
