@@ -12,9 +12,11 @@
   "github": { "owner": "COLE-O-USUARIO", "repo": "ZONEX" },
   "assets": "assets/clientes/zonex",
   "cores": {
-    "principal": "#ff7a00",
+    "principal": "#fc8202",
     "secundaria": "#0a0f1a",
-    "matiz": 28,
-    "apoio": "#00a8ff"
+    "matiz": 31,
+    "luminosidade": 0.55,
+    "apoio": "#00a8ff",
+    "matizApoio": 200
   }
 }

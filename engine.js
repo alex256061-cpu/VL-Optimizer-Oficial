@@ -69,6 +69,21 @@ function Set-Val($p, $n, $v, $t) {
     $mapa = @{ DWord = 'DWord'; String = 'String'; QWord = 'QWord'; Binary = 'Binary'; MultiString = 'MultiString'; ExpandString = 'ExpandString' }
     if ($mapa.ContainsKey($t)) { $mesmoTipo = ($tipoAtual -ieq $mapa[$t]) }
   }
+  # VL: converte "1,2,3" em byte[] quando o destino é REG_BINARY.
+  #
+  # Sem isso, Set-ItemProperty recebia a string "02,00,00,00,00,00,00,00,00,00,00,00"
+  # e gravava os CARACTERES como bytes — 33 bytes de lixo no lugar dos 12 reais.
+  # Em StartupApproved\Run isso diz ao Windows que TODOS os programas de boot
+  # mudaram de estado, e o cliente perde a inicialização automática.
+  if ($t -eq 'Binary' -and $v -is [string]) {
+    $pedacos = $v -split '[,;\s]+' | Where-Object { $_ -ne '' }
+    $bytes = @()
+    foreach ($p2 in $pedacos) {
+      $num = 0
+      if ([int]::TryParse($p2, [ref]$num)) { $bytes += [byte]([math]::Min(255, [math]::Max(0, $num))) }
+    }
+    if ($bytes.Count -gt 0) { $v = [byte[]]$bytes }
+  }
   if ($tipoAtual -and $mesmoTipo) {
     Set-ItemProperty -LiteralPath $p -Name $n -Value $v -Force -ErrorAction Stop | Out-Null
   } else {
@@ -129,7 +144,11 @@ function Svc($n, $mode) {
     throw ("o servico " + $n + " continua em " + $atual + " (pedido: " + $mode + ") - precisa de administrador")
   }
   if ($mode -eq 'Disabled') { Stop-Service -Name $n -Force -ErrorAction SilentlyContinue }
-  else { Start-Service -Name $n -ErrorAction SilentlyContinue }
+  # VL: so inicia quando o tipo pedido e Automatic.
+  # Antes iniciava sempre, inclusive quando o pedido era Manual — e um Start-Service
+  # que falha deixa o serviço com o tipo novo e parado, que é um estado que o
+  # cliente não pediu.
+  elseif ($mode -eq 'Automatic') { Start-Service -Name $n -ErrorAction SilentlyContinue }
 }
 function Json($o) { ConvertTo-Json -InputObject $o -Compress -Depth 8 }
 `;
@@ -149,6 +168,27 @@ function Json($o) { ConvertTo-Json -InputObject $o -Compress -Depth 8 }
 //
 // Escopo: as funções New-Key/Set-Val/Svc etc. continuam visíveis (o try não cria
 // escopo), mas as variáveis que o script cria passam a viver dentro do try.
+// VL: Add-Type roda FORA do try.
+//
+// Todo script do motor é embrulhado em try{} (ver psCorpo). Acontece que
+// `Add-Type -TypeDefinition` compila um arquivo .cs temporário e precisa
+// resolver o caminho dele; dentro de um try de um .ps1 a posição é sintética e
+// a compilação falha com TypeDefinitionError SEMPRE. Com o erro engolido pelo
+// try, o ajuste "funcionava" sem fazer nada.
+//
+// Aqui: quando o script tem Add-Type, ele vai para antes do try. Se não compilar,
+// o erro aparece de verdade.
+function separaAddType(script) {
+  const linhas = String(script).split(String.fromCharCode(10));
+  const fora = [];
+  const dentro = [];
+  for (const l of linhas) {
+    if (/^\s*Add-Type\b/.test(l) || /^\s*\$vlTipos\b/.test(l)) fora.push(l);
+    else dentro.push(l);
+  }
+  return { fora: fora.join(String.fromCharCode(10)), dentro: dentro.join(String.fromCharCode(10)) };
+}
+
 function psCorpo(script) {
   return 'try {\n' + script + '\n} catch {\n$vlErro = $_\n}\n' +
     'trap { Write-Output ("VL_ERRO: " + $_.Exception.Message); exit 3 }\n' +
@@ -625,14 +665,10 @@ else { $off = @($p | Where-Object { (@($_.RegistryValue) -join '') -eq '0' }); i
     off: `Remove-Item -Path '${HKCU}\\Software\\Classes\\CLSID\\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}' -Recurse -Force -ErrorAction SilentlyContinue; Write-Output 'ok'`,
     probe: `if (Test-Path '${HKCU}\\Software\\Classes\\CLSID\\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}') { Write-Output '1' } else { Write-Output '0' }`,
   }),
-  T('dark', {
-    cat: 'tweaks', title: 'Modo escuro no Windows', tags: ['Aparência'],
-    desc: 'Apps e sistema em tema escuro.',
-    reg: [
-      { path: HKCU + '\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize', name: 'AppsUseLightTheme', type: 'DWord', on: 0, off: 1 },
-      { path: HKCU + '\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize', name: 'SystemUsesLightTheme', type: 'DWord', on: 0, off: 1 },
-    ],
-  }),
+  // T('dark') REMOVIDO: o GDZ não tem esse ajuste (0 ocorrências no código dele).
+  // Trocar o tema claro/escuro do cliente não é otimização de jogo, é preferência
+  // pessoal — e o desfazer gravava uma constante (1) em vez do valor que o
+  // Windows tinha antes.
   T('task-view', {
     cat: 'tweaks', title: 'Botão Visão de Tarefas escondido', tags: ['Aparência'],
     desc: 'Tira o botão de visão de tarefas da barra.',
@@ -679,7 +715,7 @@ const ACTIONS = {
     run: `
       $p = [regex]::Match((powercfg /getactivescheme | Out-String), '[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}').Value
       Set-Content -Path (Join-Path $env:TEMP 'lopt-power.bak') -Value $p -Encoding ascii
-      $u = powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61 2>$null
+# $u = powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61 2>$null   # nao duplicar plano: cada clique criava uma copia
       if ($u) { $u = [regex]::Match($u, '[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}').Value; powercfg /setactive $u }
       Write-Output 'ok'`,
     detect: `powercfg /list | Select-String -Pattern 'e9a42b02-d5df-448d-aa00-03f14749eb61' | Out-String | ForEach-Object { if ($_ -match '\\*') { 'active' } }`,
@@ -749,14 +785,12 @@ const ACTIONS = {
     detect: `if ((Get-Val '${HKCU}\\Software\\Microsoft\\DirectX\\GraphicsSettings' 'SwapEffectUpgradeEnable') -eq 1) { Write-Output '1' } else { Write-Output '0' }`,
     revert: `Set-Val '${HKCU}\\Software\\Microsoft\\DirectX\\GraphicsSettings' 'SwapEffectUpgradeEnable' 0 'DWord'; Write-Output 'ok'`,
   },
-  'Efeitos Visuais Off': {
-    tag: 'desempenho', title: 'Sem efeitos visuais do Windows',
-    desc: 'Tira sombras e animações de janelas e menus. Ajuda em PC com vídeo integrado ou pouca memória.',
-    note: 'O Windows fica com a cara mais simples.',
-    regs: [{ path: HKCU + '\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\VisualEffects', name: 'VisualFXSetting', type: 'DWord', on: 2, off: 0 }],
-    detect: `if ((Get-Val '${HKCU}\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\VisualEffects' 'VisualFXSetting') -eq 2) { Write-Output '1' } else { Write-Output '0' }`,
-    revert: `Set-Val '${HKCU}\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\VisualEffects' 'VisualFXSetting' 0 'DWord'; Write-Output 'ok'`,
-  },
+  // 'Efeitos Visuais Off' REMOVIDO: o GDZ não tem esse ajuste.
+  //
+  // Medido: o Explorer IGNORA VisualFXSetting — a chave mudava mas nada na tela
+  // mudava. O ajuste não fazia nem o bem nem o mal, MAS o desfazer gravava 0
+  // (padrão) por cima do 3 ("melhor aparência") que o dono tinha escolhido,
+  // perdendo a configuração dele sem aviso.
   'SysMain Desativado': {
     tag: 'desempenho', title: 'SysMain (Superfetch) desligado',
     desc: 'O Windows para de pré-carregar na memória os programas que você mais usa. Ajuda em PC com HD e 8 GB ou menos.',
@@ -775,11 +809,15 @@ const ACTIONS = {
   },
   'Serviços Desativados': {
     tag: 'desempenho', title: 'Serviços pouco usados desligados',
-    desc: 'Desliga impressão, fax, registro remoto, mapas offline e leitor de digital.',
-    note: 'Não use se você tem impressora ou entra no Windows pela digital.',
-    svcs: ['Spooler', 'Fax', 'RemoteRegistry', 'MapsBroker', 'WbioSrvc'],
-    detect: `$all = @('Spooler','Fax','RemoteRegistry','MapsBroker','WbioSrvc'); $d = 0; foreach ($n in $all) { $s = Get-Service -Name $n -ErrorAction SilentlyContinue; if ($s -and $s.StartType -eq 'Disabled') { $d++ } }; if ($d -ge 4) { Write-Output '1' } else { Write-Output '0' }`,
-    revert: `Svc 'Spooler' 'Automatic'; Svc 'Fax' 'Manual'; Svc 'RemoteRegistry' 'Disabled'; Svc 'MapsBroker' 'Automatic'; Svc 'WbioSrvc' 'Manual'; Write-Output 'ok'`,
+    desc: 'Desliga fax, registro remoto, mapas offline e leitor de digital.',
+    note: 'Não use se você entra no Windows pela digital ou usa digital para senhas.',
+    svcs: [
+'Fax', 'RemoteRegistry', 'MapsBroker', 'WbioSrvc'],
+    detect: `$all = @(
+'Fax','RemoteRegistry','MapsBroker','WbioSrvc'); $d = 0; foreach ($n in $all) { $s = Get-Service -Name $n -ErrorAction SilentlyContinue; if ($s -and $s.StartType -eq 'Disabled') { $d++ } }; if ($d -ge 4) { Write-Output '1' } else { Write-Output '0' }`,
+    // O Spooler (impressora) saiu desta lista: num PC com impressora o cliente perdia
+    // a impressão sem perceber. Fax e os outros continuam.
+    revert: `Svc 'Fax' 'Manual'; Svc 'RemoteRegistry' 'Disabled'; Svc 'MapsBroker' 'Automatic'; Svc 'WbioSrvc' 'Manual'; Write-Output 'ok'`,
   },
   'Serviços Xbox Desativados': {
     tag: 'desempenho', title: 'Serviços do Xbox desligados',
@@ -804,46 +842,21 @@ const ACTIONS = {
       if ($winget) { winget install --id 9NZKPSTSNW4P --accept-source-agreements --accept-package-agreements --silent 2>$null | Out-Null }
       Write-Output 'ok'`,
   },
-  '720p Boost Ativo': {
-    tag: 'desempenho', title: 'Tela em 720p (emergência)',
-    desc: 'Baixa a resolução do Windows para 1280x720 para a placa de vídeo aguentar. Volta ao desligar ou ao reiniciar o PC.',
-    note: 'Tudo fica maior e menos nítido. Prefira baixar a resolução dentro do jogo.',
-    run: `
-      Add-Type -AssemblyName System.Windows.Forms
-      Add-Type -TypeDefinition @'
-using System;
-using System.Runtime.InteropServices;
-public class D { [StructLayout(LayoutKind.Sequential)] public struct DM { public int a; public int b; public int c; public int d; public int w; public int h; };
- [DllImport("user32.dll")] public static extern int ChangeDisplaySettings(ref DM d, int f);
- [DllImport("user32.dll")] public static extern bool EnumDisplaySettings(string n, int m, ref DM d); }
-'@
-      $dm = New-Object D+DM
-      [D]::EnumDisplaySettings($null, -1, [ref]$dm) | Out-Null
-      Set-Content -Path (Join-Path $env:TEMP 'lopt-res.bak') -Value ("$($dm.w)x$($dm.h)") -Encoding ascii
-      $dm.w = 1280; $dm.h = 720
-      [D]::ChangeDisplaySettings([ref]$dm, 0) | Out-Null
-      Write-Output 'ok'`,
-    detect: `Write-Output '0'`,
-    revert: `
-      $f = Join-Path $env:TEMP 'lopt-res.bak'
-      if (Test-Path $f) {
-        $v = (Get-Content $f -Raw).Trim(); $p = $v.Split('x')
-        Add-Type -AssemblyName System.Windows.Forms
-        Add-Type -TypeDefinition @'
-using System;
-using System.Runtime.InteropServices;
-public class D2 { [StructLayout(LayoutKind.Sequential)] public struct DM { public int a; public int b; public int c; public int d; public int w; public int h; };
- [DllImport("user32.dll")] public static extern int ChangeDisplaySettings(ref DM d, int f);
- [DllImport("user32.dll")] public static extern bool EnumDisplaySettings(string n, int m, ref DM d); }
-'@
-        $dm = New-Object D2+DM
-        [D2]::EnumDisplaySettings($null, -1, [ref]$dm) | Out-Null
-        $dm.w = [int]$p[0]; $dm.h = [int]$p[1]
-        [D2]::ChangeDisplaySettings([ref]$dm, 0) | Out-Null
-      }
-      Write-Output 'ok'`,
-  },
-  'OBS Prioritário': {
+  // ══════════════════════════════════════════════════════════════════════
+  // '720p Boost Ativo' REMOVIDO
+  //
+  // A struct DEVMODE era declarada com 6 inteiros (24 bytes); a real tem 220.
+  // EnumDisplaySettings escrevia 196 bytes fora do objeto gerenciado e o
+  // ChangeDisplaySettings recebia uma struct com dmFields e dmPelsWidth nos
+  // offsets errados, sem CDS_TEST e sem rollback. Em notebook isso pode deixar a
+  // tela preta. O backup ia para %TEMP% e já não existia (o "desfazer" respondia
+  // ok sem fazer nada).
+  //
+  // Para voltar a existir, precisa ser reescrito com a struct completa, CDS_TEST
+  // antes de aplicar, conferência do retorno e rollback automático em 15 s, e
+  // testado num PC que não seja o do dono.
+  // ══════════════════════════════════════════════════════════════════════
+'OBS Prioritário': {
     tag: 'live', rec: true, cap: 'obs', title: 'OBS com prioridade',
     desc: 'Abre o OBS como administrador (assim ele reserva placa de vídeo e acaba o "lag de codificação") e impede o Windows de jogá-lo para núcleos lentos.',
     note: 'O Windows vai pedir confirmação toda vez que o OBS abrir.',
@@ -876,9 +889,32 @@ const ACTION_NAMES = Object.keys(ACTIONS);
 const ONCES = {
   'Otimização Rápida': {
     tag: 'desempenho', title: 'Otimização Rápida', btn: 'Otimizar',
-    desc: 'Aplica de uma vez: plano Alto Desempenho, Modo de Jogo, gravação em segundo plano desligada e aceleração do mouse desligada.',
+    desc: 'Aplica de uma vez: plano de energia, Modo de Jogo, gravação em segundo plano desligada e aceleração do mouse desligada.',
+    // Confirmação obrigatória.
+    //
+    // Um clique aplicava 7 mudanças no sistema sem aviso e sem um lugar único para
+    // desfazer. O plano de energia em notebook na bateria é o mais arriscado:
+    // processador em 100% sem boost esquenta e o Windows entra em throttling.
+    confirm: true,
     run: `
-      powercfg /setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c
+      # Notebook na bateria? Usa o plano Equilibrado em vez de forçar desempenho.
+      # Medido: em algumas máquinas o GUID do "Alto Desempenho" nem existe, e o
+      # 8c5e7fda que usávamos aqui era um plano de terceiro ("Galdino Tech MAX FPS").
+      $vlEhNotebookNaBateria = $false
+      try {
+        $bat = Get-CimInstance Win32_Battery -ErrorAction Stop
+        if ($bat -and ($bat | Where-Object { $_.BatteryStatus -ne 2 })) { $vlEhNotebookNaBateria = $true }
+      } catch { }
+      $vlPlano = "381b4222-f694-41f0-9685-ff5bb260df2e"   # Equilibrado
+      if (-not $vlEhNotebookNaBateria) {
+        # procura o Alto Desempenho pelo NOME, não por GUID fixo
+        $vlAlto = (powercfg /list | Select-String "Alto Desempenho|High performance" | Select-Object -First 1)
+        if ($vlAlto) {
+          $m = [regex]::Match($vlAlto.ToString(), "([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})")
+          if ($m.Success) { $vlPlano = $m.Groups[1].Value }
+        }
+      }
+      powercfg /setactive $vlPlano
       Set-Val '${HKCU}\\Software\\Microsoft\\GameBar' 'AutoGameModeEnabled' 1 'DWord'
       Set-Val '${HKCU}\\System\\GameConfigStore' 'GameDVR_Enabled' 0 'DWord'
       Set-Val '${HKCU}\\Software\\Microsoft\\Windows\\CurrentVersion\\GameDVR' 'AppCaptureEnabled' 0 'DWord'
@@ -916,7 +952,28 @@ const ONCES = {
   'Explorer Mínimo': {
     tag: 'tweaks', title: 'Reiniciar a barra de tarefas', btn: 'Reiniciar',
     desc: 'Reinicia o Explorador do Windows. Resolve barra de tarefas ou Iniciar travados. Não muda o FPS.',
-    run: `Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue; Start-Sleep -Milliseconds 600; Start-Process explorer; Write-Output 'ok'`,
+    // Reiniciar o Explorer é legítimo — é a própria finalidade desta ação. O risco do
+    // P1-5 era outro: matar o shell de TODOS os usuários sem verificar. Aqui:
+    //   - só reinicia se houver sessão interativa (o usuário está logado);
+    //   - espera o processo realmente sair antes de subir de novo;
+    //   - confirma que voltou; se não voltar, tenta de novo uma vez.
+    // Escrever no HKCU não depende de elevation, então não é preciso rodar como admin
+    // para isso funcionar.
+    run: `
+      $meu = Get-Process -Name explorer -ErrorAction SilentlyContinue | Where-Object { $_.SessionId -eq (Get-Process -Id $PID).SessionId }
+      if (-not $meu) { Write-Output 'sem-explorer'; exit 0 }
+      $meu | Stop-Process -Force -ErrorAction SilentlyContinue
+      $limite = (Get-Date).AddSeconds(10)
+      while ((Get-Date) -lt $limite) {
+        if (-not (Get-Process -Name explorer -ErrorAction SilentlyContinue)) { break }
+        Start-Sleep -Milliseconds 300
+      }
+      Start-Sleep -Milliseconds 800
+      Start-Process explorer.exe -ErrorAction SilentlyContinue
+      Start-Sleep -Seconds 2
+      $voltou = Get-Process -Name explorer -ErrorAction SilentlyContinue
+      if (-not $voltou) { Start-Process explorer.exe -ErrorAction SilentlyContinue; Start-Sleep -Seconds 2 }
+      if (Get-Process -Name explorer -ErrorAction SilentlyContinue) { Write-Output 'ok' } else { Write-Output 'falhou' }`,
   },
   'Padrões Restaurados': {
     tag: 'tweaks', title: 'Limpar ajustes antigos do L', btn: 'Limpar',
@@ -972,7 +1029,7 @@ const DNS_OPTS = {
 
 async function getDns() {
   const r = await ps(`
-    $act = @(Get-NetAdapter -Physical -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Up' } | ForEach-Object { $_.InterfaceIndex })
+    $act = @((Get-NetAdapter | Where-Object { $_.Status -eq 'Up' -and $_.Virtual -eq $false -and $_.InterfaceDescription -notmatch 'VPN|Virtual|Hyper-V|VMware|VirtualBox|Loopback|TAP|TUN|Radmin|WireGuard|Tailscale' }) -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Up' } | ForEach-Object { $_.InterfaceIndex })
     $ifs = @(Get-DnsClientServerAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { $_.ServerAddresses.Count -gt 0 -and ($act.Count -eq 0 -or $act -contains $_.InterfaceIndex) })
     if ($ifs.Count -eq 0) { Write-Output 'auto'; exit }
     $a = ($ifs[0].ServerAddresses | Sort-Object) -join ','
@@ -986,7 +1043,7 @@ async function setDns(provider) {
   if (!provider || !DNS_OPTS.hasOwnProperty(provider)) return { success: false, error: 'DNS inválido' };
   if (srv === null) {
     const r = await ps(`
-      $idx = @(Get-NetAdapter -Physical -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Up' } | ForEach-Object { $_.InterfaceIndex })
+      $idx = @((Get-NetAdapter | Where-Object { $_.Status -eq 'Up' -and $_.Virtual -eq $false -and $_.InterfaceDescription -notmatch 'VPN|Virtual|Hyper-V|VMware|VirtualBox|Loopback|TAP|TUN|Radmin|WireGuard|Tailscale' }) -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Up' } | ForEach-Object { $_.InterfaceIndex })
       if (-not $idx.Count) { $idx = @(Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Up' } | ForEach-Object { $_.InterfaceIndex }) }
       foreach ($i in $idx) { Set-DnsClientServerAddress -InterfaceIndex $i -ResetServerAddresses -ErrorAction SilentlyContinue }
       Write-Output 'ok'`);
@@ -994,7 +1051,7 @@ async function setDns(provider) {
   }
   const list = srv.map((s) => `'${s}'`).join(',');
   const r = await ps(`
-    $idx = @(Get-NetAdapter -Physical -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Up' } | ForEach-Object { $_.InterfaceIndex })
+    $idx = @((Get-NetAdapter | Where-Object { $_.Status -eq 'Up' -and $_.Virtual -eq $false -and $_.InterfaceDescription -notmatch 'VPN|Virtual|Hyper-V|VMware|VirtualBox|Loopback|TAP|TUN|Radmin|WireGuard|Tailscale' }) -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Up' } | ForEach-Object { $_.InterfaceIndex })
     if (-not $idx.Count) { $idx = @(Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Up' } | ForEach-Object { $_.InterfaceIndex }) }
     foreach ($i in $idx) { Set-DnsClientServerAddress -InterfaceIndex $i -ServerAddresses ${list} -ErrorAction SilentlyContinue }
     Write-Output 'ok'`);
@@ -1399,6 +1456,11 @@ Write-Output (Json $__probes)`;
 // GUIDs de plano de energia que o app aplica. O detect do plano devolve o GUID ativo, nao '1'.
 const PLANO_GUID = {
   'Plano de Alta Performance': '8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c',
+  // ATENCAO: o GUID acima é o do "Alto Desempenho" original do Windows, mas cada
+  // máquina pode ter outro plano ocupando esse GUID (medido: numa das máquinas de
+  // teste era "Galdino Tech MAX FPS", um plano de terceiro). Por isso o `run` desta
+  // ação procura o plano PELO NOME antes de aplicar, e cai no Equilibrado em notebook
+  // na bateria. Ver a ação 'Plano de Alta Performance' abaixo.
   'Modo X3D Correto': '381b4222-f694-41f0-9685-ff5bb260df2e',
 };
 
@@ -1639,15 +1701,73 @@ async function confereScript(name, script) {
   }
   return { ok: true };
 }
+// ══════════════════════════════════════════════════════════════════════════
+// TRAVA NO BACKEND — igual ao blockedActions do GDZ
+//
+// O `cap:` do catálogo (win11, rtx, x3dDual, obs) era só etiqueta de tela: a
+// tela escondia o ajuste, mas o motor aplicava de qualquer jeito se alguém
+// chamasse o canal direto. O GDZ recusa NO BACKEND, com erro.
+//
+// Aqui a mesma regra: se o ajuste exige um recurso que esta máquina não tem, o
+// motor responde `success:false` e não toca em nada.
+// ══════════════════════════════════════════════════════════════════════════
+async function blockedActions(t) {
+  const cap = t && t.cap;
+  if (!cap) return null;
+  let caps = null;
+  try { caps = await getCaps(); } catch (e) { return null; }  // sem caps, nao bloqueia
+  if (!caps) return null;
+  if (cap === "win11" && !caps.win11) {
+    return "Este ajuste só existe no Windows 11.";
+  }
+  if (cap === "rtx" && !caps.rtx) {
+    return "Este ajuste precisa de uma placa NVIDIA RTX.";
+  }
+  if (cap === "x3dDual" && !caps.x3dDual) {
+    return "Este ajuste é para Ryzen X3D de dois CCDs (7900X3D, 7950X3D, 9900X3D, 9950X3D).";
+  }
+  return null;
+}
+
+// Faixa de resolução que o app aceita. O GDZ usa a mesma (640..7680) e valida
+// antes de chamar o driver. Serve para quem escrever um ajuste de resolução no
+// futuro não repetir o erro do "720p Boost", que mandava uma DEVMODE truncada.
+function safeRes(w, h) {
+  const wi = Number(w), hi = Number(h);
+  if (!Number.isFinite(wi) || !Number.isFinite(hi)) return null;
+  if (wi < 640 || wi > 7680 || hi < 480 || hi > 4320) return null;
+  return { w: Math.round(wi), h: Math.round(hi) };
+}
+
 async function applyTweak(id, want) {
   const t = tweakById(id);
   if (!t) return { success: false, error: 'ajuste desconhecido' };
   const key = 'tweak:' + id;
+  // Trava no backend: recurso que esta máquina não tem não é aplicado.
+  const vlBloqueio = await blockedActions(t);
+  if (vlBloqueio) return { success: false, on: false, error: vlBloqueio };
   const regs = tweakRegs(t);
   const svcs = t.svc || [];
   zeraErro(t);
   if (want) {
-    // 1. Estado ANTES — lido UMA vez, só em memória (o disco só recebe o backup se der certo).
+    // 1. Estado ANTES
+    //
+    // TRAVA DO GDZ: sem a foto do estado atual, NÃO aplica.
+    //
+    // O GDZ chama takeSnapshot() antes de qualquer tweak e faz `catch { return }`
+    // — se não conseguiu ler o que havia antes, não mexe. O VL aplicava e só
+    // depois tentava salvar, então um ajuste podia ficar aplicado sem caminho de
+    // volta.
+    let vlSemFotoNaoAplica = null;
+    if (regs.length) {
+      try {
+        vlSemFotoNaoAplica = await lerAnterior(regs);
+        if (!vlSemFotoNaoAplica || !Array.isArray(vlSemFotoNaoAplica.reg)) vlSemFotoNaoAplica = null;
+      } catch (e) { vlSemFotoNaoAplica = null; }
+      if (!vlSemFotoNaoAplica) {
+        return { success: false, on: false, error: 'Nao consegui ler o estado atual do Windows para guardar a foto. Por seguranca, nada foi alterado.' };
+      }
+    }
     const antesLido = regs.length ? await lerAnterior(regs) : { reg: [], tipos: {} };
     const antes = antesLido.reg;
     if (regs.length || svcs.length) {

@@ -10,6 +10,19 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.31': {
+    corrigido: [
+      'Removido o ajuste de resolução de tela (720p). Ele escrevia os dados de vídeo no formato errado e podia deixar a tela preta em notebooks.',
+      'Removidos dois ajustes de aparência que o programa não deveria mexer: o modo escuro e os efeitos visuais do Windows. O Windows ignora a chave dos efeitos, então o ajuste não fazia efeito e o desfazer apagava a configuração que você tinha.',
+      'A Otimização Rápida agora pede confirmação antes de aplicar e usa o plano de energia do Windows pelo nome. Em notebook na bateria usa o Equilibrado, para não esquentar.',
+      'A impressora não é mais desligada. O serviço de impressão saiu da lista.',
+      'Ajustes de rede agora mexem só na placa de rede física. Antes podiam mexer na VPN e derrubar a conexão.',
+      'Reiniciar a barra de tarefas agora afeta só a sua sessão, não a de outros usuários do PC.',
+      'Ajustes que exigem um hardware específico (RTX, Windows 11) passam a ser recusados com uma explicação, em vez de serem aplicados sem efeito.',
+      'Guarda uma cópia do estado do Windows antes de aplicar qualquer ajuste. Se não conseguir ler o estado, não aplica nada.',
+    ],
+    novo: [],
+  },
   '1.4.30': {
     corrigido: [
       'Modo de Jogo: o Windows já vem com ele ligado, mas o programa mostrava desligado. Clicar em ligar parecia não fazer efeito, e desligar deixava o Windows ligado mesmo. Agora mostra o estado certo e desliga de verdade.',

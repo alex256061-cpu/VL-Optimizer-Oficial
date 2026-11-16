@@ -33,6 +33,8 @@ module.exports = function textosDaMarca(M) {
 
   const matiz = Number(M.cores && M.cores.matiz);
   const temMatiz = Number.isFinite(matiz) && matiz >= 0 && matiz <= 360;
+  const matizApoio = Number(M.cores && M.cores.matizApoio);
+  const luminosidade = Number(M.cores && M.cores.luminosidade);
 
   for (const nome of arquivos) {
     const arq = path.join(DIR_UI, nome);
@@ -47,7 +49,7 @@ module.exports = function textosDaMarca(M) {
     c = TAGS.trocarNomeEmTags(c, M.nome);
 
     // cor de destaque (matiz da marca)
-    if (temMatiz) c = CORES.recolorir(c, matiz);
+    if (temMatiz) c = CORES.recolorir(c, matiz, { matizApoio, luminosidade });
 
     if (c !== original) {
       fs.writeFileSync(arq, c, 'utf8');
