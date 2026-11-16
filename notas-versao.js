@@ -10,6 +10,13 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.29': {
+    corrigido: [
+      'Aceleração do mouse e Modo de Jogo ligavam e voltavam sozinhos em poucos segundos. O problema era no programa que lê o estado dos ajustes: a leitura de um ajuste de rede dava erro e derrubava a leitura dos outros.',
+      'A leitura dos ajustes agora é feita uma por uma: se uma falhar, as outras continuam certas.',
+    ],
+    novo: [],
+  },
   '1.4.28': {
     corrigido: [
       'Contador do Painel: o programa contava como aplicado o que o Windows já trazia assim de fábrica. Agora só entra na conta o que o próprio programa alterou.',
