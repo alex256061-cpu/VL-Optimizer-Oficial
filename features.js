@@ -4,8 +4,11 @@ const os = require('os');
 const path = require('path');
 const { execFile } = require('child_process');
 const core = require('./engine');
+const MARCA = require('./marca');
 
-const DATA = () => process.env.LOPT_DATA_DIR || path.join(process.env.APPDATA || os.homedir(), 'VL Optimizer', 'data');
+// Pasta de dados DESTA marca. Antes era 'VL Optimizer' fixo, e o build de um
+// revendedor gravava backup/DNS/limpeza na pasta do VL.
+const DATA = () => process.env.LOPT_DATA_DIR || path.join(MARCA.dirDados, 'data');
 const file = (n) => path.join(DATA(), n);
 const readJson = (n, d) => { try { return JSON.parse(fs.readFileSync(file(n), 'utf8')); } catch (e) { return d; } };
 const writeJson = (n, v) => { try { fs.mkdirSync(DATA(), { recursive: true }); fs.writeFileSync(file(n), JSON.stringify(v, null, 1)); } catch (e) {} };

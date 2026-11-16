@@ -15,25 +15,24 @@
 // ══════════════════════════════════════════════════════════════════════════
 const fs = require('fs');
 const path = require('path');
+const CORES = require('./cores-marca');
+const TAGS = require('./nome-em-tags');
 
 const RAIZ = 'C:\\Users\\lucas larado\\Desktop\\vlotimizeroficial';
 const DIR_UI = path.join(RAIZ, 'src');
 
-// Cores do tema que acompanham a cor principal. Ficam aqui para o dia em que outro
-// revendedor quiser roxo ou azul sem mexer no CSS.
-const CORES_VL = {
-  principal: '#c8101f',
-  claro: '#e01b2e',
-  vivo: '#ff2440',
-  escuro: '#8f0a16',
-};
-
+// O nome do produto e a cor são as duas coisas que mais aparecem nas telas.
+//
+// A cor não é trocada valor por valor: o tema tem ~20 tons de vermelho e trocar quatro
+// deles deixava a tela quase toda vermelha. Aqui toda cor de destaque passa pela matiz
+// da marca (ver cores-marca.js), o que preserva a hierarquia clara/escura do tema.
 module.exports = function textosDaMarca(M) {
   const arquivos = fs.readdirSync(DIR_UI).filter((f) => /\.(html|css|js)$/.test(f));
   let mexidos = 0;
   const trocas = [];
-  const cor = String(M.cores && M.cores.principal || CORES_VL.principal).toLowerCase();
-  const trocaCor = cor !== CORES_VL.principal;
+
+  const matiz = Number(M.cores && M.cores.matiz);
+  const temMatiz = Number.isFinite(matiz) && matiz >= 0 && matiz <= 360;
 
   for (const nome of arquivos) {
     const arq = path.join(DIR_UI, nome);
@@ -44,14 +43,11 @@ module.exports = function textosDaMarca(M) {
     c = c.replace(/VL Optimizer/g, M.nome);
     c = c.replace(/VL OPTIMIZER/g, String(M.nome).toUpperCase());
     c = c.replace(/VL Scaling/g, M.nome + ' Scaling');
+    // nome quebrado dentro de tags (<b>VL</b><i>Optimizer</i> etc.)
+    c = TAGS.trocarNomeEmTags(c, M.nome);
 
-    // cor principal
-    if (trocaCor) {
-      c = c.replace(new RegExp(CORES_VL.principal, 'gi'), cor);
-      c = c.replace(new RegExp(CORES_VL.claro, 'gi'), cor);
-      c = c.replace(new RegExp(CORES_VL.vivo, 'gi'), cor);
-      c = c.replace(new RegExp(CORES_VL.escuro, 'gi'), cor);
-    }
+    // cor de destaque (matiz da marca)
+    if (temMatiz) c = CORES.recolorir(c, matiz);
 
     if (c !== original) {
       fs.writeFileSync(arq, c, 'utf8');
@@ -61,5 +57,22 @@ module.exports = function textosDaMarca(M) {
     }
   }
   console.log('  telas: ' + mexidos + ' arquivo(s)' + (trocas.length ? ' — ' + trocas.join(', ') : ''));
+  if (temMatiz) console.log('  cor: matiz ' + matiz + '° aplicada ao tema');
+
+  // As notas da versão também vão para a tela (cartão de atualização). Elas citam o nome
+  // do produto, e no build de um revendedor o cliente veria o nome do outro.
+  {
+    const arqNotas = path.join(RAIZ, 'notas-versao.js');
+    if (fs.existsSync(arqNotas)) {
+      let n = fs.readFileSync(arqNotas, 'utf8');
+      const antes = n;
+      n = n.replace(/VL Optimizer/g, M.nome);
+      if (n !== antes) {
+        fs.writeFileSync(arqNotas, n, 'utf8');
+        const q = (antes.match(/VL Optimizer/g) || []).length;
+        console.log('  notas da versão: ' + q + ' menção(ões) trocada(s)');
+      }
+    }
+  }
   return mexidos;
 };

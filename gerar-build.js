@@ -75,7 +75,7 @@ for (const f of ['icon.png', 'icon.ico', 'logo.png', 'logo-branco.png']) {
   const de = path.join(BK, f);
   if (fs.existsSync(de)) fs.copyFileSync(de, path.join(RAIZ, 'assets', f));
 }
-for (const f of ['package.json', 'electron-builder.json']) {
+for (const f of ['package.json', 'electron-builder.json', 'notas-versao.js']) {
   fs.copyFileSync(path.join(BK, f), path.join(RAIZ, f));
 }
 console.log('  originais restaurados (.originais-vl)');
