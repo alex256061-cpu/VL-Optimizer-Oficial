@@ -31,6 +31,7 @@ const feat = require('./features');
 const elev = require('./elevacao');
 const updater = require('./updater');
 const conta = require('./supabase');
+const MARCA = require('./marca');
 require('./engine-scaler').mountScaler(ex);
 
 // Em modos de teste, usa um perfil isolado: evita conflito com a instância elevada
@@ -786,7 +787,7 @@ function reabrirElevadoPelaTarefa() {
       try {
         fs.writeFileSync(vbs,
           'WScript.Sleep 2500' + String.fromCharCode(13, 10) +
-          'CreateObject("WScript.Shell").Run "schtasks /run /tn VLOptimizer", 0, False',
+          'CreateObject("WScript.Shell").Run "schtasks /run /tn ' + MARCA.tarefa + '", 0, False',
           'ascii');
       } catch (e) { return resolve(false); }
 
@@ -885,7 +886,7 @@ ipcMain.on('maximize-window', () => { if (!win) return; if (win.isMaximized()) w
 ipcMain.on('close-window', () => {
   // log para diagnóstico: prova que o clique chegou e o que aconteceu
   try {
-    const dir = path.join(process.env.LOCALAPPDATA || os.homedir(), 'VLOptimizer');
+    const dir = path.join(process.env.LOCALAPPDATA || os.homedir(), MARCA.nomeCurto);
     try { fs.mkdirSync(dir, { recursive: true }); } catch (e) { }
     fs.appendFileSync(path.join(dir, 'crash.log'), '[' + new Date().toISOString() + '] close-window: pedido de fechar (elevado=' + isAdmin + ')' + String.fromCharCode(10));
   } catch (e) { }
@@ -1110,7 +1111,7 @@ app.whenReady().then(async () => {
   // app.exit(0) sai na hora, sem depender de fechar janela.
   try {
     globalShortcut.register('Control+Shift+Q', () => {
-      try { fs.appendFileSync(path.join(process.env.LOCALAPPDATA || os.homedir(), 'VLOptimizer', 'crash.log'), '[' + new Date().toISOString() + '] atalho Ctrl+Shift+Q: saindo' + String.fromCharCode(10)); } catch (e) { }
+      try { fs.appendFileSync(path.join(process.env.LOCALAPPDATA || os.homedir(), MARCA.nomeCurto, 'crash.log'), '[' + new Date().toISOString() + '] atalho Ctrl+Shift+Q: saindo' + String.fromCharCode(10)); } catch (e) { }
       app.isQuitting = true;
       app.exit(0);
     });
@@ -1167,7 +1168,7 @@ function logSaidaNormal() { return !!(app && app.isQuitting); }
 
 function logCrash(texto) {
   try {
-    const dir = path.join(process.env.LOCALAPPDATA || os.homedir(), "VLOptimizer");
+    const dir = path.join(process.env.LOCALAPPDATA || os.homedir(), MARCA.nomeCurto);
     try { fs.mkdirSync(dir, { recursive: true }); } catch (e) { }
     fs.appendFileSync(path.join(dir, "crash.log"), "[" + new Date().toISOString() + "] " + texto + String.fromCharCode(10));
   } catch (e) { }
@@ -1212,7 +1213,7 @@ app.on("render-process-gone", (event, webContents, details) => {
   if (recriacoes.length >= 2) {
     logCrash("ja recriou 2x em 1 minuto; parando");
     dialog.showErrorBox(
-      "VL Optimizer parou de responder",
+      MARCA.nome + " parou de responder",
       "O programa encontrou um problema repetido e precisa ser reaberto." + String.fromCharCode(10) + String.fromCharCode(10) +
       "Detalhe: " + motivo
     );
@@ -1251,7 +1252,7 @@ app.on("web-contents-created", (event, wc) => {
 // a pasta de dados do app, que e a mesma que o crash.log usa.
 process.on('uncaughtException', (e) => {
   try {
-    const dir = path.join(process.env.LOCALAPPDATA || os.homedir(), 'VLOptimizer');
+    const dir = path.join(process.env.LOCALAPPDATA || os.homedir(), MARCA.nomeCurto);
     try { fs.mkdirSync(dir, { recursive: true }); } catch (_) { }
     fs.appendFileSync(path.join(dir, 'crash.log'), '[' + new Date().toISOString() + '] erro nao tratado: ' + String((e && e.stack) || e) + String.fromCharCode(10));
   } catch (_) { }

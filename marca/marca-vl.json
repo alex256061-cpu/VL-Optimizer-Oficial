@@ -1,0 +1,15 @@
+{
+  "nome": "VL Optimizer",
+  "nomeCurto": "VLOptimizer",
+  "appId": "com.vl.optimizer",
+  "pasta": "VL Optimizer",
+  "modelo": "Instalar-VL-Optimizer",
+  "supabase": {
+    "url": "https://wsmropvlmnyegpvmyndn.supabase.co",
+    "anon": "sb_publishable_7yffHvepz_e7LCm3BvL55w_euYmiX6o"
+  },
+  "site": "https://vl-optimizer.pages.dev",
+  "github": { "owner": "alex256061-cpu", "repo": "VL-Optimizer-Oficial" },
+  "assets": "assets",
+  "cores": { "principal": "#c8101f", "secundaria": "#050506" }
+}

@@ -1,0 +1,18 @@
+{
+  "nome": "ZONEX",
+  "nomeCurto": "ZoneX",
+  "appId": "com.zonex.app",
+  "pasta": "ZONEX",
+  "modelo": "Instalar-ZONEX",
+  "supabase": {
+    "url": "https://COLE-AQUI.supabase.co",
+    "anon": "COLE-AQUI-A-CHAVE"
+  },
+  "site": "https://zonex.pages.dev",
+  "github": { "owner": "COLE-O-USUARIO", "repo": "ZONEX" },
+  "assets": "assets/clientes/zonex",
+  "cores": {
+    "principal": "#ff7a00",
+    "secundaria": "#050506"
+  }
+}

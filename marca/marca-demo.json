@@ -1,0 +1,15 @@
+{
+  "nome": "Optimizer Pro",
+  "nomeCurto": "OptimizerPro",
+  "appId": "com.optimizerpro.app",
+  "pasta": "Optimizer Pro",
+  "modelo": "Instalar-Optimizer-Pro",
+  "supabase": {
+    "url": "https://demo-cliente.supabase.co",
+    "anon": "sb_publishable_DEMO123"
+  },
+  "site": "https://optimizer-pro.pages.dev",
+  "github": { "owner": "amigo-dev", "repo": "Optimizer-Pro" },
+  "assets": "assets/clientes/optimizer-pro",
+  "cores": { "principal": "#1e88e5", "secundaria": "#0a0f1a" }
+}
