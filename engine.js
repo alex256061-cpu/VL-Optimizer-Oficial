@@ -538,7 +538,10 @@ foreach ($prop in @(Get-NetAdapterAdvancedProperty -RegistryKeyword '*InterruptM
 Write-Output ("mudou=$n")`,
     probe: `$p = @(Get-NetAdapterAdvancedProperty -RegistryKeyword '*InterruptModeration' -ErrorAction SilentlyContinue)
 if ($p.Count -eq 0) { Write-Output '1' }
-else { $off = @($p | Where-Object { [int]$_.RegistryValue -eq 0 }); if ($off.Count -eq $p.Count) { Write-Output '1' } else { Write-Output '0' } }`,
+# RegistryValue vem como String[] em algumas placas (medido: Ethernet -> String[]).
+# [int] num String[] lança exceção e derrubava TODOS os probes do app.
+# Comparar como texto funciona para os dois formatos.
+else { $off = @($p | Where-Object { (@($_.RegistryValue) -join '') -eq '0' }); if ($off.Count -eq $p.Count) { Write-Output '1' } else { Write-Output '0' } }`,
   }),  T('hibernate', { padrao: 1, rec: true,
     cat: 'limpeza', title: 'Hibernação desligada', tags: ['Espaço em disco'],
     desc: 'Apaga o hiberfil.sys (tamanho de boa parte da sua RAM) e a inicialização rápida.',
@@ -1302,7 +1305,13 @@ const caps = await getCaps();
       // Aqui as quebras de linha são preservadas e o probe vai dentro de um
       // scriptblock & { ... }, que é uma expressão válida dentro de @().
       const seguro = String(t.probe).replace(/\bexit\b/g, 'return');
-      return `$__probes['${idx}'] = @( & { ${seguro} } ) -join ' '`;
+      // Try/Catch PRÓPRIO por probe.
+      //
+      // Sem isto, um probe que lança exceção (o do nic-intmod lançava ao converter
+      // String[] em int) abortava o script todo via trap e TODOS os 8 voltavam
+      // "desligado" — o cliente via a aceleração do mouse e o modo de jogo se
+      // desligarem sozinhos poucos segundos depois de ligar.
+      return `$__probes['${idx}'] = try { @( & { ${seguro} } ) -join ' ' } catch { '0' }`;
     });
     const scriptP = `$__probes = @{}
 ${blocos.join('\n')}
