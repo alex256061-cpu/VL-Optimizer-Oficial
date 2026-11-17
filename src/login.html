@@ -177,6 +177,27 @@ function mostrar(msg, tipo) {
   aviso.className = 'aviso' + (msg ? ' ' + (tipo || 'erro') : '');
 }
 
+// O main manda o motivo quando recusa a sessão. Sem isto a tela de entrada
+// aparecia em branco, sem explicar nada — foi o que aconteceu quando o app passou
+// a falhar fechado. Motivos que chegam: sem-config, sem-sessao, rede, e os do
+// servidor (other_device, expired, offline).
+(function motivoDaRecusa() {
+  try {
+    const q = new URLSearchParams(location.search);
+    const m = q.get('motivo');
+    if (!m) return;
+    const txt = {
+      'sem-config': 'A conexão com o servidor não está configurada. Fale com o suporte.',
+      'sem-sessao': 'Sua sessão expirou. Entre de novo.',
+      'rede': 'Não foi possível falar com o servidor. Verifique sua internet e tente de novo.',
+      'other_device': 'Esta licença está ativa em outro PC. Entre com a mesma conta no PC certo ou fale com o suporte.',
+      'expired': 'Sua licença venceu. Renove para voltar a usar.',
+      'offline': 'O servidor não respondeu e o prazo de uso sem internet venceu. Conecte-se e entre de novo.',
+    }[m] || 'Não foi possível validar sua sessão. Entre de novo.';
+    setTimeout(() => mostrar(txt, 'erro'), 80);
+  } catch (e) { }
+})();
+
 function carregando(btn, on, texto) {
   const b = $(btn);
   b.disabled = on;

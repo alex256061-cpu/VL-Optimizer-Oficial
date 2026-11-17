@@ -10,6 +10,19 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.36': {
+    corrigido: [
+      'O ponto de restauração falhava sem avisar: o Windows aceita só um ponto a cada 24 horas, então o segundo pedido do dia não criava nada e o app respondia que tinha dado certo. Agora ele libera esse limite durante a criação, volta como estava e mostra o erro quando não consegue.',
+      'A verificação do processador Intel dizia sempre que estava tudo certo, sem comparar nada. Agora confere a versão do microcode (as correções de degradação dos Core de 13ª e 14ª geração), os requisitos do Core Ultra 200S e o Modo de Jogo.',
+      'A verificação da placa de vídeo olhava a primeira placa do computador — num notebook ou num PC com gráfico integrado essa é a integrada. Agora olha só as placas de verdade e confere o Resizable BAR.',
+      'A verificação da memória não detectava canal único nem a geração DDR. Agora mostra os pentes, a velocidade do kit e avisa quando um pente só está custando FPS.',
+      'A verificação do Ryzen avisava "driver de chipset ausente" em qualquer Ryzen que não fosse X3D. Agora procura o driver pelos dispositivos e só cobra a configuração especial nos X3D de dois chips.',
+      'A pergunta sobre enviar os dados de FPS nunca aparecia: o app respondia que você já tinha aceitado. Agora pergunta uma vez, guarda a resposta e mostra o aviso de privacidade.',
+      'Quem entrava com internet instável caía na tela de login sem explicação. Agora a tela diz o motivo.',
+      'O medidor de gargalo media mesmo com o jogo minimizado, o que estragava a média. Agora pausa quando você sai da janela do jogo e usa a mesma faixa de tempo do programa de referência.',
+    ],
+    novo: [],
+  },
   '1.4.35': {
     corrigido: [
       'O plano vitalicio funcionava em qualquer PC: bastava copiar o arquivo de sessao. Agora o app recusa a sessao quando o servidor diz que o plano esta em outro PC ou vencido.',
