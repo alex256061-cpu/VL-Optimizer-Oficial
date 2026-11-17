@@ -10,6 +10,16 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.39': {
+    corrigido: [
+      'Sair da conta agora encerra a sessao no servidor. Antes o app so apagava o arquivo do PC, e o acesso copiado do disco continuava valendo para sempre.',
+      'O login nao fica mais preso para sempre quando o servidor aceita a conexao e nao responde: depois de 12 segundos aparece a mensagem "O servidor demorou demais para responder".',
+      'A criacao de conta agora exige a marcacao dos termos de uso tambem no programa, nao so na tela.',
+      'O aviso de saida dizia "o servidor nao confirmou" mesmo com internet boa, porque o app mandava o tipo errado de token. Corrigido.',
+      'A tela do usuario recebia dois campos que nao existem no servidor (identificador do aparelho e PC preso) e mostrava valores inventados. Removidos.',
+    ],
+    novo: [],
+  },
   '1.4.38': {
     corrigido: [
       'As 5 ferramentas de reparo agora fazem o que precisam fazer: "Limpar cache de DNS" limpa de fato (antes so limpava o cache do servidor de DNS e nao o do Windows), "Resetar a rede" tambem limpa o DNS, e as duas de DISM mostram quantos GB foram liberados e avisam quando o comando falha.',
