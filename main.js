@@ -557,6 +557,11 @@ H('update-info', () => {
       baixando: !!st.downloading,
       baixado: !!st.downloaded,
       percentual: st.percent || 0,
+      // A conferência da assinatura lê o instalador inteiro (~1 s num PC normal).
+      // Sem este campo a tela ficaria parada em "Baixando… 100%".
+      conferindo: !!st.conferindo,
+      assinatura: st.assinatura || null,
+      assinaturaAtiva: !!st.assinaturaAtiva,
       erro: st.error || null,
       notas,
       doRelease,
@@ -1176,7 +1181,10 @@ setInterval(() => {
 // recriar a janela no meio da saída.
 app.on('before-quit', () => { app.isQuitting = true; });
 
-app.on('will-quit', () => { try { globalShortcut.unregisterAll(); } catch (e) { } try { updater.stop(); } catch (e) { } try { ex.fpsStop(); } catch (e) { } });
+// O `ex.pcLiveStop()` é o `app.on("will-quit", pcLiveStop)` do GDZ: derruba o
+// nvidia-smi e o laço do painel-live.ps1 na saída. Sem ele o laço ainda morreria
+// sozinho (checa VL_PARENT a cada volta), mas só no fim do ciclo de 1500 ms.
+app.on('will-quit', () => { try { globalShortcut.unregisterAll(); } catch (e) { } try { updater.stop(); } catch (e) { } try { ex.fpsStop(); } catch (e) { } try { ex.pcLiveStop(); } catch (e) { } });
 
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 

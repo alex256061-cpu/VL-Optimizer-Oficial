@@ -10,6 +10,21 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.35': {
+    corrigido: [
+      'O plano vitalicio funcionava em qualquer PC: bastava copiar o arquivo de sessao. Agora o app recusa a sessao quando o servidor diz que o plano esta em outro PC ou vencido.',
+      'Cliente que voltava o relogio do Windows usava licenca vencida. Agora o app guarda o maior horario ja visto e recusa se o relogio voltar mais de 10 minutos.',
+      'Sem internet o app caia na tela de login. Agora a licenca vale offline por ate 7 dias depois da ultima verificacao.',
+      'A sessao era guardada em texto puro. Agora vai cifrada com a protecao do Windows.',
+      'A tela continuava liberando o plano mesmo quando o servidor negava.',
+      'O painel de temperatura e clock relancava um PowerShell a cada 2 segundos. Agora e um coletor so, com leitura instantanea e parada automatica quando ninguem esta olhando.',
+      'Valorant e League of Legends nao apareciam na lista de jogos. Agora aparecem, lidos da instalacao do Riot Client.',
+      'Capa dos jogos: usa a imagem do Steam na ordem do programa de referencia.',
+      'A lista de jogos nao dizia quais estavam rodando.',
+      'A atualizacao agora pode ser conferida com uma assinatura separada do arquivo. Sem isso, quem trocasse o instalador e o manifesto juntos passaria na conferencia.',
+    ],
+    novo: [],
+  },
   '1.4.34': {
     corrigido: [
       'A versao 1.4.33 podia nao abrir no PC do cliente: dois arquivos novos do motor de limpeza e do desfazer nao entraram no pacote, e o programa procurava por eles ao iniciar. Agora entram.',

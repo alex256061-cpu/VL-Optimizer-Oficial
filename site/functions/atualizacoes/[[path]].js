@@ -71,6 +71,13 @@ export async function onRequest(context) {
   const url = new URL(request.url);
   const nome = decodeURIComponent(url.pathname.replace(/^\/atualizacoes\//, ''));
 
+  // A assinatura do instalador tem a própria Function (atualizacoes/assinatura/[[versao]].js).
+  // Passar por aqui só faria o estático responder o .sig cru; o app espera JSON.
+  if (/^assinatura(\/|$)/i.test(nome)) {
+    if (next) return next();
+    return new Response('Assinatura não disponível.', { status: 404 });
+  }
+
   // Não é um instalador: deixa o arquivo estático do site responder
   // (latest.yml, ou qualquer outro arquivo que esteja na pasta).
   if (!PERMITIDO.test(nome)) {

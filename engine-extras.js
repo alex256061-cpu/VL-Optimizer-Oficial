@@ -922,6 +922,144 @@ const findGameExe = (dir) => {
 // apps do Steam que não são jogos (não entram em Meus jogos)
 const NON_GAME = /^(steamworks common redistributables|steamvr|steam linux runtime|proton|steam client|wallpaper engine|lossless scaling)$/i;
 
+// ───────────────────────── CATÁLOGO RIOT (GDZ) ─────────────────────────
+// O GDZ não descobre a Riot varrendo pasta: ele tem um catálogo fixo com o
+// `riot` = nome do PRODUTO, e lê o caminho de instalação do arquivo que o
+// Riot Client grava em C:\ProgramData\Riot Games\Metadata\<riot>\<riot>.product_settings.yaml
+// O GDZ original lê esse yaml dentro do PowerShell (script GAMES_SCAN_PS, linha 2467):
+//   $y = "C:\ProgramData\Riot Games\Metadata\$($g.riot)\$($g.riot).product_settings.yaml"
+//   if (Test-Path -LiteralPath $y) { $m = [regex]::Match((Get-Content -LiteralPath $y -Raw),
+//     'product_install_full_path:\s*"([^"]+)"'); if ($m.Success) { $dirs += ($m.Groups[1].Value -replace '/', '\') } }
+// Aqui o mesmo regex é aplicado em Node (fs), com a mesma regra: só "..." com
+// aspas, e as barras "/" viram "\".
+const RIOT_DEFAULT_DIR = 'C:\\ProgramData\\Riot Games\\Metadata';
+let riotDir = RIOT_DEFAULT_DIR;
+// só para o teste com dados falsos apontar para uma árvore temporária
+ex.__setRiotDir = (d) => { riotDir = d || RIOT_DEFAULT_DIR; };
+ex.__setSteamRoot = (d) => { steamRoot = d; };
+
+// Jogos Riot do catálogo do GDZ (só os dois com `riot`, copiados de GAMES).
+// `exe` = mesmo glob relativo do GDZ; o `riot` é o nome do produto do Riot Client.
+const RIOT_GAMES = [
+  { id: 'valorant', name: 'Valorant', opt: 'Valorant', riot: 'valorant.live',
+    exe: 'ShooterGame\\Binaries\\Win64\\VALORANT-Win64-Shipping.exe', proc: 'VALORANT-Win64-Shipping.exe' },
+  { id: 'lol', name: 'League of Legends', opt: 'LoL', riot: 'league_of_legends.live',
+    exe: 'Game\\League of Legends.exe', proc: 'League of Legends.exe' },
+];
+
+// Equivale ao trecho do PowerShell do GDZ: devolve a pasta de instalação do
+// produto Riot, ou null. Regex literal do GDZ: product_install_full_path:\s*"([^"]+)"
+async function riotInstallPath(produto) {
+  if (!produto || !/^[a-z0-9_.]+$/i.test(String(produto))) return null;
+  const yaml = path.join(riotDir, String(produto), String(produto) + '.product_settings.yaml');
+  let txt = '';
+  try { txt = await fs.promises.readFile(yaml, 'utf8'); } catch (e) { return null; }
+  const m = /product_install_full_path:\s*"([^"]+)"/.exec(txt);
+  if (!m) return null;
+  // o GDZ faz: ($m.Groups[1].Value -replace '/', '\')
+  return m[1].replace(/\//g, '\\');
+}
+ex.riotInstallPath = riotInstallPath;
+
+// Mesma ideia do laço `foreach ($g in @($games))` do GDZ, restrito às entradas
+// com `riot`: resolve a pasta, junta com o glob do `exe` e marca `installed`
+// só se o exe existir de fato (o GDZ usa $exes.Count -gt 0).
+ex.riotScan = async () => {
+  const out = [];
+  for (const g of RIOT_GAMES) {
+    const dir = await riotInstallPath(g.riot);
+    if (!dir) continue;
+    const exeFull = path.join(dir, g.exe);
+    let installed = false;
+    try { installed = fs.statSync(exeFull).isFile(); } catch (e) { installed = false; }
+    out.push({
+      id: g.id, name: g.name, opt: g.opt, dir,
+      exe: installed ? exeFull : '',
+      proc: g.proc,
+      store: 'riot',
+      // a Riot não tem cache de shaders na Steam: o GDZ só mostra "Limpar cache"
+      // em jogo com `cache: 'fivem'` ou `steam` definido.
+      gpu: true, canClean: false,
+      installed, bytes: 0,
+    });
+  }
+  return out;
+};
+
+// ───────────────────── CAPA DE JOGO (GDZ) ─────────────────────
+// Cópia fiel do GDZ (`steamCoverFile` + `gameCover`). A Steam guarda as capas
+// em <SteamRoot>\appcache\librarycache\<appid>\ ; a ordem de preferência é
+// exatamente a do GDZ, e o layout antigo (<appid>_<arquivo> solto na raiz)
+// é o fallback quando a pasta do appid não abre.
+const COVER_NAMES = [['library_600x900.jpg', 'poster'], ['library_capsule.jpg', 'poster'], ['header.jpg', 'wide'], ['library_header.jpg', 'wide']];
+const _coverCache = new Map();
+
+async function steamCoverFile(appid) {
+  if (!steamRoot || !/^\d{1,10}$/.test(String(appid))) return null;
+  const pasta = path.join(steamRoot, 'appcache', 'librarycache', String(appid));
+  let idx = {};
+  try {
+    for (const e of await fs.promises.readdir(pasta, { withFileTypes: true })) {
+      if (e.isFile()) {
+        idx[e.name.toLowerCase()] = idx[e.name.toLowerCase()] || path.join(pasta, e.name);
+      } else if (e.isDirectory()) {
+        for (const f of await fs.promises.readdir(path.join(pasta, e.name)).catch(() => [])) {
+          idx[f.toLowerCase()] = idx[f.toLowerCase()] || path.join(pasta, e.name, f);
+        }
+      }
+    }
+  } catch (e) {
+    // layout antigo
+    idx = {};
+    for (const [nome] of COVER_NAMES) {
+      const p = path.join(steamRoot, 'appcache', 'librarycache', appid + '_' + nome);
+      if (fs.existsSync(p)) idx[nome] = p;
+    }
+  }
+  for (const [nome, kind] of COVER_NAMES) {
+    if (idx[nome]) return { file: idx[nome], kind };
+  }
+  return null;
+}
+ex.steamCoverFile = steamCoverFile;
+
+// GDZ `gameCover`:
+//  1. capa da Steam (steamCoverFile) → nativeImage → resize 420 se maior → JPEG 82 base64
+//  2. senão o ícone do exe (app.getFileIcon size:'large') → toDataURL
+//  3. senão null (e NÃO cacheia a falha)
+// O GDZ recebe (game, GAME_SCAN) porque o ícone vem do 1º exe achado no scan.
+// Aqui o exe já vem dentro do próprio objeto do jogo (`g.exe`), então a
+// assinatura é (g). Mantenho o 2º parâmetro opcional para ficar idêntico ao GDZ.
+async function gameCover(g, scan) {
+  if (!g || !g.id) return null;
+  if (_coverCache.has(g.id)) return _coverCache.get(g.id);
+  let capa = null;
+  try {
+    // appid Steam: no GDZ é `game.steam` (array). O nosso jogo já traz appid/steamId.
+    const appids = (g.steam && g.steam.length ? g.steam : [g.appid || g.steamId]).filter(Boolean);
+    for (const appid of appids) {
+      const achado = await steamCoverFile(appid);
+      if (!achado) continue;
+      // nativeImage/app só existem dentro do Electron; em Node puro cai no catch
+      const { nativeImage } = require('electron');
+      const img = nativeImage.createFromPath(achado.file);
+      if (img.isEmpty()) continue;
+      const final = img.getSize().width > 420 ? img.resize({ width: 420, quality: 'good' }) : img;
+      capa = { src: 'data:image/jpeg;base64,' + final.toJPEG(82).toString('base64'), kind: achado.kind };
+      break;
+    }
+    const exeIcone = !capa && ((scan && scan[g.id] && scan[g.id].exes && scan[g.id].exes[0]) || g.exe);
+    if (exeIcone) {
+      const { app } = require('electron');
+      const icone = await app.getFileIcon(exeIcone, { size: 'large' });
+      if (icone && !icone.isEmpty()) capa = { src: icone.toDataURL(), kind: 'icon' };
+    }
+  } catch (e) {}
+  if (capa) _coverCache.set(g.id, capa);
+  return capa;
+}
+ex.gameCover = gameCover;
+
 ex.gamesScan = async () => {
   const games = [];
   if (!steamRoot) await ex.initSteam();
@@ -965,6 +1103,15 @@ ex.gamesScan = async () => {
   // FiveM
   const fivem = path.join(os.homedir(), 'AppData', 'Local', 'FiveM');
   if (fs.existsSync(fivem)) games.push({ id: 'fivem', name: 'FiveM (GTA RP)', dir: path.join(fivem, 'FiveM.app'), exe: path.join(fivem, 'FiveM.app', 'FiveM.exe'), gpu: true, canClean: true, store: 'fivem', bytes: 0 });
+  // Riot (Valorant, League of Legends) — via product_settings.yaml, como no GDZ.
+  // Só entra o que o Riot Client registrou E cujo exe existe no disco (installed).
+  try {
+    for (const g of await ex.riotScan()) {
+      if (!g.installed) continue;
+      if (games.some((x) => x.id === g.id)) continue;
+      games.push(g);
+    }
+  } catch (e) {}
   await Promise.all(games.map(async (g) => {
     if (!g.dir || !fs.existsSync(g.dir)) return;
     try {
@@ -973,6 +1120,13 @@ ex.gamesScan = async () => {
     } catch (e) {}
   }));
   for (const g of games) { g.installed = true; g.running = !!g.running; g.sizeLabel = fmtBytes(g.bytes); }
+  // Capa de jogo: o painel lê `info.cover` ({src, kind}). Feita depois da lista,
+  // em paralelo, para não segurar o retorno do scan.
+  try {
+    await Promise.all(games.map(async (g) => {
+      try { g.cover = await ex.gameCover(g); } catch (e) { g.cover = null; }
+    }));
+  } catch (e) {}
   gamesCache = games;
   return { success: true, games };
 };
@@ -987,17 +1141,25 @@ const fmtBytes = (b) => {
 
 ex.gamesStatus = async () => {
   if (!gamesCache) await ex.gamesScan();
+  const running = [];
   try {
     const r = await core.ps(`$n = @(Get-Process -ErrorAction SilentlyContinue | Select-Object -ExpandProperty ProcessName -Unique); Write-Output (Json $n)`);
     let names = [];
     try { const j = JSON.parse(r.out); names = Array.isArray(j) ? j : [j]; } catch (e) {}
     const set = new Set(names.map((n) => String(n).toLowerCase()));
     for (const g of gamesCache || []) {
+      // a Riot roda vezes com nome de processo diferente do exe (ex.: "League of Legends");
+      // o GDZ casa pela lista `proc` do jogo, então uso o mesmo critério.
+      const procs = [g.proc].flat().filter(Boolean).map((n) => String(n).toLowerCase());
       const base = g.exe ? path.basename(g.exe, path.extname(g.exe)).toLowerCase() : '';
-      g.running = !!(base && set.has(base)) || (g.store === 'fivem' && set.has('fivem'));
+      g.running = (!!base && set.has(base)) || procs.some((n) => set.has(n))
+        || (g.store === 'fivem' && set.has('fivem'));
+      if (g.running) running.push(g.id);
     }
   } catch (e) {}
-  return { scanning: false, games: gamesCache };
+  // o painel lê `r.running` como LISTA DE IDs (dashboard.html); `games` continua
+  // indo junto porque o setAutoUI usa a lista para o nome do jogo.
+  return { scanning: false, games: gamesCache, running };
 };
 
 ex.setAutoMode = (on) => {
@@ -1328,31 +1490,300 @@ ex.pcinfoGet = async (opts) => {
   } catch (e) { return { success: false, error: 'resposta inválida', raw: String(r.out || '').slice(0, 900) }; }
 };
 
-let lastLive = null;
-ex.pcinfoLive = async () => {
-  const [base, gpus] = await Promise.all([
-    core.ps(`
-      $cpu = (Get-CimInstance Win32_PerfFormattedData_PerfOS_Processor -Filter "Name='_Total'").PercentProcessorTime
-      $ram = Get-CimInstance Win32_OperatingSystem
-      $per = @(Get-CimInstance Win32_PerfFormattedData_PerfOS_Processor | Where-Object { $_.Name -ne '_Total' } | ForEach-Object { [int]$_.PercentProcessorTime })
-      $mhz = [int]((Get-CimInstance Win32_Processor).CurrentClockSpeed)
-      $coreMhz = @()
-      foreach ($p in @(Get-CimInstance Win32_PerfFormattedData_Counters_ProcessorInformation -ErrorAction SilentlyContinue | Where-Object { $_.Name -notmatch '_Total' })) { $coreMhz += [int]$p.ProcessorFrequency }
-      $o = @{ cpu = @{ usage=[int]$cpu; mhz=$mhz; coreMhz=$coreMhz; cores=$per; temp=$null }; ram = @{ used=([int64]($ram.TotalVisibleMemorySize - $ram.FreePhysicalMemory) * 1024); total=([int64]$ram.TotalVisibleMemorySize * 1024); cache=$null }; gpus = @(); disks = @{} }
-      Write-Output (Json $o)`, 30000),
-    nvQuery(),
-  ]);
-  if (!base.ok) return { success: false, error: base.err || 'falha' };
-  let live;
-  try { live = JSON.parse(base.out); } catch (e) { return { success: false, error: 'resposta inválida' }; }
-  live.gpus = gpus;
-  const disks = await diskSensors(false);
-  const map = {};
-  for (const d of disks) if (d.temp != null) map[d.id] = d.temp;
-  live.disks = map;
-  lastLive = live;
-  return { success: true, ...live };
+// ─────────────────── PAINEL AO VIVO (pcLive do GDZ) ───────────────────
+//
+// Fonte: GDZ Optimizer, pcLiveSpawn / pcLiveStart / pcLiveStop
+// (C:\VLTemp\deob\gdz-SEM-MANGLE.js, linhas 6542–6765).
+//
+// Como o GDZ faz o painel de GPU/CPU ao vivo, em três partes:
+//
+//   1. pcLiveSpawn — sobe DOIS processos de longa duração, uma vez só:
+//      (a) nvidia-smi em streaming (-lms 2000) com 9 colunas por GPU, quando o
+//          nvidia-smi existe. Enquanto ele responde, a GPU vem daqui;
+//      (b) um PowerShell em laço infinito (o template PCLIVE_PS) que a cada
+//          1500 ms emite uma linha `GDZPI:{json}` com a frequência e o % de
+//          performance de cada núcleo, a temperatura térmica e a temperatura
+//          de cada disco (de 5 em 5 ciclos).
+//      O PowerShell só coleta GPU pelos contadores do Windows (eng/vram)
+//      quando NÃO há nvidia-smi — daí a variável GDZ_NEED_GPU.
+//
+//   2. pcLiveStart — um setInterval de 1000 ms que calcula o uso da CPU por
+//      delta de os.cpus() (por núcleo e total), ressuscita o processo que
+//      morreu (no máximo 1 vez a cada 30 s) e se encerra sozinho depois de
+//      PCLIVE_IDLE_MS (8000 ms) sem ninguém pedir leitura.
+//
+//   3. pcLiveStop — mata os dois processos, limpa o intervalo e zera o estado.
+//
+// Por que NÃO é "chamar o PowerShell a cada 2 s", que é o que este arquivo
+// fazia antes em pcinfoLive: um powershell.exe custa ~300–600 ms de partida e
+// 5+ CIM por chamada. Medido na bancada (C:\VLTemp\j3-teste-painel.js): o laço
+// entrega a leitura em 1600 ms de intervalo sem relançar nada. Como o painel
+// consulta a cada 2 s, o processo antigo subia e morria o tempo todo.
+//
+// O que muda do GDZ para cá (tudo registrado no relatório j3-painel-FEITO.md):
+//   - as marcas GDZPI:/GDZ_NEED_GPU/GDZ_PARENT viraram VLLIVE:/VL_NEED_GPU/
+//     VL_PARENT, para os dois apps conviverem no mesmo PC;
+//   - o GDZ não tem arquivo .ps1, tem o script num template literal. Aqui ele é
+//     o painel-live.ps1 (o mesmo padrão do snapshot.ps1: arquivo separado, sem
+//     cifrão brigando com o JS, validável pelo parser do PowerShell);
+//   - no GDZ a linha era um spawn com -EncodedCommand; aqui é -File, porque o
+//     script está em disco e o buffer de stdout fica o mesmo dos outros.
+const PCLIVE_IDLE_MS = 8000;   // igual ao GDZ: sem leitura por 8 s, para tudo
+const PCLIVE_RESPAWN_MS = 30000; // igual ao GDZ: ressuscita no máximo 1x/30 s
+const ARQUIVO_PAINEL = path.join(__dirname, 'painel-live.ps1');
+
+// Os mesmos dois caminhos do GDZ (NVIDIA_SMI_PATHS).
+const NVIDIA_SMI_PATHS = [
+  path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'nvidia-smi.exe'),
+  path.join(process.env.ProgramFiles || 'C:\\Program Files', 'NVIDIA Corporation', 'NVSMI', 'nvidia-smi.exe'),
+];
+function nvidiaSmiExe() {
+  return NVIDIA_SMI_PATHS.find((p) => fs.existsSync(p)) || null;
+}
+
+// O estado, igual ao objeto `pcLive` do GDZ.
+const pcLive = {
+  timer: null,
+  ps: null,
+  smi: null,
+  wantSmi: false,
+  lastUse: 0,
+  lastCpu: null,
+  respawnAt: 0,
+  cores: [],
+  cpu: null,
+  perf: null,
+  temp: null,
+  nv: [],
+  wingpu: [],
+  disks: {},
 };
+
+// Leitor de linhas em streaming — o mesmo lineReader do GDZ (t2-motor.md): acumula
+// o buffer, quebra em \r?\n e guarda a sobra (linha incompleta) para o próximo pedaço.
+// Não entrega a sobra final, igual ao GDZ (o diagnóstico disso está no relatório).
+function leitorDeLinhas(proc, cb) {
+  let buf = '';
+  proc.stdout.on('data', (d) => {
+    buf += String(d).replace(/^\uFEFF/, '');
+    const linhas = buf.split(/\r?\n/);
+    buf = linhas.pop();
+    for (const l of linhas) cb(l);
+  });
+}
+
+// As 9 colunas pedidas ao nvidia-smi e o teto de sanidade de cada uma (o mesmo
+// par índice/teto do GDZ): o que vem fora da faixa vira null, e não 0.
+const NV_COLS = [
+  ['name', 0, -1], ['usage', 1, 100], ['temp', 2, 130], ['memUsed', 3, 1000000],
+  ['memTotal', 4, 1000000], ['power', 5, 2000], ['fan', 6, 100],
+  ['clock', 7, 100000], ['memClock', 8, 100000],
+];
+
+// ── pcLiveSpawn: sobe nvidia-smi e o Laço PowerShell (uma vez cada) ──
+function pcLiveSpawn() {
+  const smiExe = nvidiaSmiExe();
+  pcLive.wantSmi = !!smiExe;
+
+  // (a) nvidia-smi em streaming, a cada 2000 ms.
+  if (smiExe && !pcLive.smi) {
+    let p;
+    try {
+      p = spawn(smiExe, ['--query-gpu=name,utilization.gpu,temperature.gpu,memory.used,memory.total,power.draw,fan.speed,clocks.gr,clocks.mem', '--format=csv,noheader,nounits', '-lms', '2000'], { windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] });
+    } catch (e) { p = null; }
+    if (p) {
+      let acumulado = [];
+      let agendado = null;
+      leitorDeLinhas(p, (linha) => {
+        const c = linha.split(',').map((x) => x.trim());
+        if (c.length < 9) return;
+        const num = (i, teto) => {
+          const v = parseFloat(c[i]);
+          return Number.isFinite(v) && v >= 0 && v <= teto ? v : null;
+        };
+        const g = {};
+        for (const [campo, i, teto] of NV_COLS) g[campo] = i === 0 ? c[0] : num(i, teto);
+        acumulado.push(g);
+        // O GDZ guarda as leituras 150 ms depois da última linha (para juntar as
+        // várias GPUs numa só leitura) e zera o acumulador.
+        clearTimeout(agendado);
+        agendado = setTimeout(() => { pcLive.nv = acumulado; acumulado = []; }, 150);
+        if (agendado.unref) agendado.unref();
+      });
+      p.on('error', () => {});
+      p.on('exit', () => {
+        if (pcLive.smi === p) { pcLive.smi = null; pcLive.nv = []; }
+      });
+      pcLive.smi = p;
+    }
+  }
+
+  // (b) o laço PowerShell do painel-live.ps1.
+  if (!pcLive.ps) {
+    if (!fs.existsSync(ARQUIVO_PAINEL)) return;
+    let p;
+    try {
+      p = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', ARQUIVO_PAINEL], {
+        windowsHide: true,
+        stdio: ['ignore', 'pipe', 'ignore'],
+        env: Object.assign({}, process.env, {
+          // Sem nvidia-smi, a GPU tem de sair dos contadores do Windows.
+          VL_NEED_GPU: smiExe ? '0' : '1',
+          // O laço checa este PID a cada volta e morre sozinho se o app fechou.
+          VL_PARENT: String(process.pid),
+        }),
+      });
+    } catch (e) { p = null; }
+    if (!p) return;
+
+    // "a=1=b" | {a:1,b:2} -> [[a,1],[b,2]] — o `pares` do GDZ.
+    const pares = (v) => (Array.isArray(v) ? v : v ? [v] : []).map((x) => String(x).split('='));
+
+    leitorDeLinhas(p, (linha) => {
+      if (!linha.startsWith('VLLIVE:')) return;
+      let j;
+      try { j = JSON.parse(linha.slice(7)); } catch (e) { return; }
+
+      // Frequência efetiva por núcleo: ProcessorFrequency × PercentProcessorPerformance / 100,
+      // sem a instância _Total, ordenada por (grupo, núcleo). É o `perf` do GDZ.
+      const perf = pares(j.perf)
+        .filter((a) => !/_Total/.test(a[0]) && +a[1] > 0 && +a[2] > 0)
+        .map((a) => ({ k: a[0].split(',').map(Number), mhz: Math.round(+a[2] * +a[1] / 100) }))
+        .sort((x, y) => x.k[0] - y.k[0] || x.k[1] - y.k[1])
+        .map((x) => x.mhz);
+      pcLive.perf = perf.length ? perf : null;
+
+      // Temperatura das zonas térmicas: HighPrecisionTemperature em décimos de
+      // Kelvin -> °C. O GDZ só aceita entre 30 °C e 115 °C (fora disso é lixo do
+      // driver) e deixa null quando o contador não existe no PC.
+      const t = j.tz == null ? NaN : Number(j.tz) / 10 - 273.15;
+      pcLive.temp = t > 30 && t < 115 ? Math.round(t) : null;
+
+      // GPU pelos contadores do Windows (só quando não há nvidia-smi).
+      if (j.eng || j.vram) {
+        // O nome da instância traz o LUID em hex; o vram vem com o MESMO LUID.
+        // É por ele que se junta uso e memória do mesmo adaptador.
+        const luidDe = (nome) => {
+          const m = /luid_0x([0-9A-F]+)_0x([0-9A-F]+)/i.exec(nome);
+          return m ? String(BigInt('0x' + m[1] + m[2].padStart(8, '0'))) : null;
+        };
+        const porLuid = new Map();
+        const pega = (luid) => {
+          if (!porLuid.has(luid)) porLuid.set(luid, { luid, usage: 0, memUsed: 0 });
+          return porLuid.get(luid);
+        };
+        for (const [nome, v] of pares(j.vram)) {
+          const luid = luidDe(nome);
+          if (luid) pega(luid).memUsed = Math.round((+v || 0) / 1048576);
+        }
+        for (const [nome, v] of pares(j.eng)) {
+          const luid = luidDe(nome);
+          if (luid) pega(luid).usage += +v || 0;
+        }
+        pcLive.wingpu = [...porLuid.values()].map((x) => Object.assign({}, x, { usage: Math.min(100, Math.round(x.usage)) }));
+      }
+
+      // Temperatura dos discos: só as plausíveis (0 < t < 120).
+      if (j.disks) {
+        pcLive.disks = Object.fromEntries(pares(j.disks).filter((a) => +a[1] > 0 && +a[1] < 120).map((a) => [a[0], +a[1]]));
+      }
+    });
+    p.on('error', () => {});
+    p.on('exit', () => {
+      if (pcLive.ps === p) { pcLive.ps = null; pcLive.perf = null; pcLive.wingpu = []; }
+    });
+    pcLive.ps = p;
+  }
+}
+
+// ── pcLiveStart: o intervalo de 1000 ms ──
+function pcLiveStart() {
+  if (pcLive.timer) return;
+  pcLive.lastCpu = (os.cpus() || []).map((c) => c.times);
+  pcLive.timer = setInterval(() => {
+    // Ninguém pediu leitura há PCLIVE_IDLE_MS: para tudo (o GDZ faz igual, e é o
+    // que impede o laço do PowerShell de comer CPU com a tela fechada).
+    if (Date.now() - pcLive.lastUse > PCLIVE_IDLE_MS) { pcLiveStop(); return; }
+
+    // Processo morto? Ressuscita, no máximo 1 vez a cada 30 s.
+    if ((!pcLive.ps || (pcLive.wantSmi && !pcLive.smi)) && Date.now() >= pcLive.respawnAt) {
+      pcLive.respawnAt = Date.now() + PCLIVE_RESPAWN_MS;
+      pcLiveSpawn();
+    }
+
+    // CPU: delta de os.cpus() entre esta leitura e a anterior, por núcleo e total.
+    const agora = (os.cpus() || []).map((c) => c.times);
+    const antes = pcLive.lastCpu || [];
+    const deltas = agora.map((a, i) => {
+      const b = antes[i] || a;
+      return [(a.user + a.nice + a.sys + a.idle + a.irq) - (b.user + b.nice + b.sys + b.idle + b.irq), a.idle - b.idle];
+    });
+    const total = deltas.reduce((s, d) => s + d[0], 0);
+    const idle = deltas.reduce((s, d) => s + d[1], 0);
+    // Amostra curta demais (o PC acabou de acordar) não é número: descarta.
+    if (total < agora.length * 400) return;
+    pcLive.cores = deltas.map(([t, i]) => (t > 0 ? Math.max(0, Math.min(100, Math.round((1 - i / t) * 100))) : 0));
+    pcLive.cpu = Math.max(0, Math.min(100, Math.round((1 - idle / total) * 100)));
+    pcLive.lastCpu = agora;
+  }, 1000);
+  // O intervalo não segura o processo do app vivo (igual ao watchdog do FPS).
+  if (pcLive.timer.unref) pcLive.timer.unref();
+}
+
+// ── pcLiveStop: mata os dois processos e zera o estado ──
+function pcLiveStop() {
+  clearInterval(pcLive.timer);
+  pcLive.timer = null;
+  for (const k of ['smi', 'ps']) {
+    const p = pcLive[k];
+    pcLive[k] = null;
+    if (p) { try { p.kill(); } catch (e) {} }
+  }
+  Object.assign(pcLive, {
+    cores: [], cpu: null, perf: null, temp: null, nv: [], wingpu: [], disks: {}, respawnAt: 0,
+  });
+}
+
+// O `pcinfo-live` do GDZ (ipcMain.handle): responde o que o painel desenha e,
+// de quebra, é o "pedido de leitura" que liga/mantém o coletor ligado.
+ex.pcinfoLive = async () => {
+  pcLive.lastUse = Date.now();
+  pcLiveStart();
+
+  // Nome dos adaptadores (vindo da ficha) para dar nome à GPU dos contadores
+  // do Windows, que só traz o LUID.
+  const nomes = new Map(((pcinfoCache.data && pcinfoCache.data.info && pcinfoCache.data.info.adapters) || []).map((a) => [a.luid, a.name]));
+
+  const perf = pcLive.perf;
+  return {
+    success: true,
+    cpu: {
+      usage: pcLive.cpu,
+      cores: pcLive.cores,
+      mhz: perf ? Math.round(perf.reduce((s, x) => s + x, 0) / perf.length) : null,
+      coreMhz: perf || [],
+      temp: pcLive.temp,
+    },
+    ram: {
+      used: os.totalmem() - os.freemem(),
+      total: os.totalmem(),
+    },
+    // Com nvidia-smi, a GPU vem dele (tem memUsed/memTotal/power/fan/clocks).
+    // Sem, vem dos contadores do Windows — só uso e memória, e é só o que existe.
+    gpus: pcLive.nv.length
+      ? pcLive.nv
+      : pcLive.wingpu.filter((g) => nomes.has(g.luid)).map((g) => ({ name: nomes.get(g.luid), usage: g.usage, memUsed: g.memUsed })),
+    disks: pcLive.disks,
+  };
+};
+
+// Para o coletor quando o app fecha — no GDZ é `app.on("will-quit", pcLiveStop)`.
+// O main.js chama esta função; se ele não chamar, o laço ainda morre sozinho
+// porque checa VL_PARENT a cada ciclo.
+ex.pcLiveStop = () => pcLiveStop();
+ex.pcLiveAtivo = () => ({ timer: !!pcLive.timer, ps: !!pcLive.ps, smi: !!pcLive.smi, nv: pcLive.nv.length });
+// O arquivo do template, para o build/teste conferirem que ele foi junto.
+ex.PAINEL_PS = ARQUIVO_PAINEL;
 
 ex.getHardware = async () => {
   const r = await core.ps(`
