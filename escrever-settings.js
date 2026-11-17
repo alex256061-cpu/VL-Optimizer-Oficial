@@ -33,6 +33,38 @@ const LS_FIT = { fullscreen: 'Fullscreen', stretch: 'AspectRatio', fit: 'AspectR
 // Só DEFAULT existe no Lossless (ver a nota em lossless-official.js).
 // Valores reais do enum do Lossless (Main_SyncMode_* em LosslessScaling.dll):
 // Default, Off, Vsync1, Vsync2, Vsync3. Não existe VSYNC4, GSYNC nem ADAPTIVE.
+// ── Validação de valores: listas do GDZ ────────────────────────────────────
+// O GDZ recusa valor de ENUM que não está na lista, corta valor numérico no
+// intervalo de SCALING_RANGE, aceita ScaleFactor com 2 casas e os demais
+// inteiros, e devolve a lista do que não foi escrito (`skipped`). Sem isso o
+// app gravava qualquer número que a tela mandasse (Sharpness 40 em vez de 10,
+// ScaleFactor 9 em vez de 4) e o Lossless recebia configuração inválida.
+const SCALING_ENUM = {
+  FrameGeneration: ['Off', 'LSFG2', 'LSFG3'],
+  LSFG3Mode1: ['FIXED', 'ADAPTIVE'],
+  LSFG2Mode: ['X2'],
+  CaptureApi: ['DXGI', 'WGC'],
+  ScalingType: ['Off', 'LS1', 'FSR'],
+  FSRType: ['ORIGINAL'],
+  ScalingMode: ['Auto', 'Custom'],
+  ScalingFitMode: ['AspectRatio'],
+  SyncMode: ['OFF', 'DEFAULT'],
+};
+
+const SCALING_RANGE = {
+  LSFG3Multiplier: [2, 4],
+  LSFG3Target: [30, 480],
+  LSFGFlowScale: [25, 100],
+  QueueTarget: [0, 3],
+  Sharpness: [0, 10],
+  LS1Sharpness: [0, 10],
+  MaxFrameLatency: [1, 10],
+  ScaleFactor: [1, 4],
+};
+
+const SCALING_BOOL = ['ClipCursor', 'ScaleCursor', 'HideCursor', 'AdjustCursorSpeed', 'GsyncSupport', 'HdrSupport', 'DrawFps', 'VRS', 'WindowedMode', 'ResizeBeforeScaling', 'AutoScale', 'MultiDisplayMode'];
+const SCALING_GLOBAL = ['StartAsAdmin', 'StartAtWindowsStartup', 'MinimizeToTray', 'CloseToTray'];
+
 const LS_SYNC = { standard: 'Default', vsync: 'Vsync1', gsync: 'Vsync2', adaptive: 'Vsync3' };
 const LS_CAPTURE = { dxgi: 'DXGI', wgc: 'WGC' };
 const LS_SIZE = { performance: 'PERFORMANCE', balanced: 'BALANCED', quality: 'QUALITY' };
@@ -105,6 +137,19 @@ function normalize(cfg) {
     windowedMode: c.windowedMode,
     autoScale: c.autoScale,
     autoDelay: num(c.autoDelay),
+    // ── as 12 tags que faltavam (todas do GDZ) ──
+    lsfg2Mode: c.lsfg2Mode,
+    ls1Sharpness: num(c.ls1Sharpness),
+    clipCursor: c.clipCursor,
+    hideCursor: c.hideCursor,
+    adjustCursorSpeed: c.adjustCursorSpeed,
+    gsyncSupport: c.gsyncSupport,
+    drawFps: c.drawFps,
+    multiDisplayMode: c.multiDisplayMode,
+    startAsAdmin: c.startAsAdmin,
+    startAtWindowsStartup: c.startAtWindowsStartup,
+    minimizeToTray: c.minimizeToTray,
+    closeToTray: c.closeToTray,
   };
 }
 
@@ -124,14 +169,36 @@ function gravar(cfgBruto) {
     return { ok: false, error: 'O Settings.xml está sem o bloco de perfil. Abra o Lossless uma vez para recriar.' };
   }
 
-  // Backup do arquivo antes de mexer.
+  // Backup do arquivo antes de mexer. Nome igual ao do GDZ (Settings.xml.gdz-original)
+  // porque scalingRecoverIfCorrupted procura exatamente esse. Antes era
+  // `.vl-backup`: o nome era diferente e a recuperação não achava o arquivo.
   try {
-    const bak = path.join(SETTINGS_DIR, 'Settings.xml.vl-backup');
+    const bak = path.join(SETTINGS_DIR, 'Settings.xml.gdz-original');
     if (!fs.existsSync(bak)) fs.copyFileSync(SETTINGS, bak);
   } catch (e) { }
 
+  // Se o Lossless deixou um CorruptedSettingsBackup.xml, significa que ele leu o
+  // Settings.xml anterior como inválido e guardou uma cópia. Restaurar o nosso
+  // original antes de gravar evita piorar a situação.
+  try { scalingRecoverIfCorrupted(); } catch (e) { }
+
   let block = parts.block;
   const aplicados = [];
+
+  // As 4 preferências do programa inteiro ficam no topo do Settings.xml, fora
+  // do <Profile>. O put() escreve dentro do bloco do perfil, onde o Lossless
+  // não lê essas tags. putGlobal usa o mesmo arquivo, mas no nível de cima.
+  // As 4 preferências globais ficam no topo do arquivo, fora do <Profile>.
+  // Guardadas aqui e aplicadas DEPOIS do replace do bloco — se fossem aplicadas
+  // agora, o replaceFinal que reescreve <GameProfiles> não as alcançaria de
+  // qualquer forma, mas pior: qualquer xml.replace(parts.full, ...) posterior
+  // partiria de um xml onde a tag global já foi trocada... e o teste mostrou que
+  // a troca simplesmente não colava. Por isso aplico no fim, sobre o xml final.
+  const globais = [];
+  const putGlobal = (nome, valor) => {
+    if (valor === undefined || valor === null || valor === '') return;
+    globais.push([nome, String(valor)]);
+  };
 
   const put = (nome, valor) => {
     if (valor === undefined || valor === null || valor === '') return;
@@ -142,16 +209,16 @@ function gravar(cfgBruto) {
   // Geracao de quadros
   if (c.fgType != null) put('FrameGeneration', LS_FG[String(c.fgType).toLowerCase()]);
   if (c.lsfg3Mode != null) put('LSFG3Mode1', LS_FG_MODE[String(c.lsfg3Mode).toLowerCase()]);
-  if (c.lsfg3Multiplier != null) put('LSFG3Multiplier', Math.round(Number(c.lsfg3Multiplier)));
-  if (c.lsfg3Target != null) put('LSFG3Target', Math.round(Number(c.lsfg3Target)));
-  if (c.flowScale != null) put('LSFGFlowScale', Math.round(Number(c.flowScale) * 100));
+  if (c.lsfg3Multiplier != null) put('LSFG3Multiplier', clampTag('LSFG3Multiplier', c.lsfg3Multiplier));
+  if (c.lsfg3Target != null) put('LSFG3Target', clampTag('LSFG3Target', c.lsfg3Target));
+  if (c.flowScale != null) put('LSFGFlowScale', clampTag('LSFGFlowScale', Number(c.flowScale) * 100));
   if (c.perfMode != null) put('LSFGSize', c.perfMode ? 'PERFORMANCE' : 'BALANCED');
 
   // Escala
   if (c.scaleType != null) put('ScalingType', LS_SCALING[String(c.scaleType).toLowerCase()]);
   if (c.fsrType != null) put('FSRType', LS_FSR[String(c.fsrType).toLowerCase()]);
-  if (c.scaleFactor != null) put('ScaleFactor', Number(c.scaleFactor));
-  if (c.sharpness != null) put('Sharpness', Number(c.sharpness) / 10);
+  if (c.scaleFactor != null) put('ScaleFactor', clampTag('ScaleFactor', c.scaleFactor));
+  if (c.sharpness != null) put('Sharpness', clampTag('Sharpness', Number(c.sharpness) / 10));
   if (c.fitMode != null) put('ScalingFitMode', LS_FIT[String(c.fitMode).toLowerCase()]);
   if (c.scaleMode != null) put('ScalingMode', String(c.scaleMode).toLowerCase() === 'custom' ? 'Custom' : 'Auto');
   if (c.resizeBefore != null) put('ResizeBeforeScaling', c.resizeBefore ? 'true' : 'false');
@@ -159,8 +226,8 @@ function gravar(cfgBruto) {
   // Apresentacao
   if (c.syncMode != null) put('SyncMode', LS_SYNC[String(c.syncMode).toLowerCase()]);
   if (c.captureApi != null) put('CaptureApi', LS_CAPTURE[String(c.captureApi).toLowerCase()]);
-  if (c.queueTarget != null) put('QueueTarget', Math.round(Number(c.queueTarget)));
-  if (c.maxFrameLatency != null) put('MaxFrameLatency', Math.round(Number(c.maxFrameLatency)));
+  if (c.queueTarget != null) put('QueueTarget', clampTag('QueueTarget', c.queueTarget));
+  if (c.maxFrameLatency != null) put('MaxFrameLatency', clampTag('MaxFrameLatency', c.maxFrameLatency));
   if (c.hdrCompat != null) put('HdrSupport', c.hdrCompat ? 'true' : 'false');
   if (c.scaleCursor != null) put('ScaleCursor', c.scaleCursor ? 'true' : 'false');
   if (c.vrs != null) put('VRS', c.vrs ? 'true' : 'false');
@@ -168,7 +235,32 @@ function gravar(cfgBruto) {
   if (c.autoScale != null) put('AutoScale', c.autoScale ? 'true' : 'false');
   if (c.autoDelay != null) put('AutoScaleDelay', Math.round(Number(c.autoDelay)));
 
-  const novoXml = xml.replace(parts.full, '<Profile>' + block + '</Profile>');
+
+  // ── as 12 tags que faltavam (todas do GDZ) ──
+  // Movimento do mouse e modo de exibição
+  if (c.lsfg2Mode != null) put('LSFG2Mode', SCALING_ENUM.LSFG2Mode.includes(String(c.lsfg2Mode)) ? String(c.lsfg2Mode) : 'X2');
+  if (c.ls1Sharpness != null) put('LS1Sharpness', clampTag('LS1Sharpness', c.ls1Sharpness));
+  if (c.clipCursor != null) put('ClipCursor', c.clipCursor ? 'true' : 'false');
+  if (c.hideCursor != null) put('HideCursor', c.hideCursor ? 'true' : 'false');
+  if (c.adjustCursorSpeed != null) put('AdjustCursorSpeed', c.adjustCursorSpeed ? 'true' : 'false');
+  if (c.gsyncSupport != null) put('GsyncSupport', c.gsyncSupport ? 'true' : 'false');
+  if (c.drawFps != null) put('DrawFps', c.drawFps ? 'true' : 'false');
+  if (c.multiDisplayMode != null) put('MultiDisplayMode', c.multiDisplayMode ? 'true' : 'false');
+  if (c.startAsAdmin != null) putGlobal('StartAsAdmin', c.startAsAdmin ? 'true' : 'false');
+  if (c.startAtWindowsStartup != null) putGlobal('StartAtWindowsStartup', c.startAtWindowsStartup ? 'true' : 'false');
+  if (c.minimizeToTray != null) putGlobal('MinimizeToTray', c.minimizeToTray ? 'true' : 'false');
+  if (c.closeToTray != null) putGlobal('CloseToTray', c.closeToTray ? 'true' : 'false');
+  let novoXml = xml.replace(parts.full, '<Profile>' + block + '</Profile>');
+
+  // As 4 globais (StartAsAdmin, StartAtWindowsStartup, MinimizeToTray, CloseToTray)
+  // ficam no topo do arquivo. Troca só se a tag já existir — nunca cria.
+  for (const [nome, valor] of globais) {
+    const re = new RegExp('(<' + nome + '>)([^<]*)(</' + nome + '>)');
+    if (re.test(novoXml)) {
+      novoXml = novoXml.replace(re, '$1' + valor + '$3');
+      aplicados.push(nome);
+    }
+  }
   try {
     fs.writeFileSync(SETTINGS, novoXml, 'utf8');
   } catch (e) {
@@ -178,6 +270,50 @@ function gravar(cfgBruto) {
   return { ok: true, aplicados, xml: novoXml };
 }
 
+/// Traduz um valor da tela para o valor que o Settings.xml aceita, com as
+/// mesmas regras do gravador do GDZ: ENUM confere a lista, RANGE corta no
+/// intervalo e arredonda, BOOL/GLOBAL viram "true"/"false".
+///
+/// Devolve null quando o valor é inválido — quem chama deve ignorar nesse caso.
+function clampTag(tag, valor) {
+  if (Object.prototype.hasOwnProperty.call(SCALING_ENUM, tag)) {
+    const s = String(valor);
+    return SCALING_ENUM[tag].includes(s) ? s : null;
+  }
+  if (Object.prototype.hasOwnProperty.call(SCALING_RANGE, tag)) {
+    const n = Number(valor);
+    if (!Number.isFinite(n)) return null;
+    const [min, max] = SCALING_RANGE[tag];
+    const arred = tag === 'ScaleFactor' ? Math.round(n * 100) / 100 : Math.round(n);
+    return String(Math.min(max, Math.max(min, arred)));
+  }
+  if (SCALING_BOOL.includes(tag) || SCALING_GLOBAL.includes(tag)) {
+    return (valor === true || valor === 'true') ? 'true' : 'false';
+  }
+  return null;
+}
+
+/// Se o Lossless marcou o Settings.xml como corrompido, devolve o nosso original.
+///
+/// Do GDZ, literal: quando existe CorruptedSettingsBackup.xml ao lado do
+/// Settings.xml E existe o nosso .gdz-original, copia o original de volta por cima
+/// e apaga a cópia corrompida. Devolve true quando restaurou.
+///
+/// Sem isso, um Settings.xml que o Lossless considerou inválido ficava valendo:
+/// o app continuava gravando por cima de um arquivo que o programa já tinha
+/// descartado.
+function scalingRecoverIfCorrupted() {
+  const corrupted = path.join(SETTINGS_DIR, 'CorruptedSettingsBackup.xml');
+  const original = SETTINGS + '.gdz-original';
+  if (!fs.existsSync(corrupted) || !fs.existsSync(original)) return false;
+  try {
+    fs.copyFileSync(original, SETTINGS);
+    fs.rmSync(corrupted, { force: true });
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
 /// Le os campos que interessam do arquivo atual.
 function ler() {
   const xml = lerArquivo();
@@ -189,4 +325,4 @@ function ler() {
   return campos;
 }
 
-module.exports = { gravar, ler, setInBlock, profileParts, SETTINGS, SETTINGS_DIR };
+module.exports = { gravar, ler, setInBlock, profileParts, SETTINGS, SETTINGS_DIR, scalingRecoverIfCorrupted, clampTag };
