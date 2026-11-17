@@ -10,6 +10,15 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.42': {
+    corrigido: [
+      'A configuracao do otimizador de graficos agora tem as 33 opcoes do programa de referencia. Antes faltavam 12: mostrar FPS na tela, prender e esconder o cursor, velocidade do cursor, suporte a G-Sync, modo de varias telas, abrir como administrador, iniciar com o Windows, minimizar e fechar para a bandeja, e a nitidez do LS1.',
+      'Os valores numericos passaram a ser limitados ao intervalo que o programa aceita. Antes o app gravava qualquer numero que chegasse: nitidez 40 (o maximo e 10), escala 9 (o maximo e 4) e alvo de quadros 9999 (o maximo e 480).',
+      'A escala agora aceita duas casas decimais (1.57), como o programa de referencia.',
+      'Se o programa de graficos considerar a configuracao anterior invalida, o app devolve o arquivo original em vez de continuar gravando por cima.',
+    ],
+    novo: [],
+  },
   '1.4.41': {
     corrigido: [
       'Ajuste nos textos da tela de novidades.',
