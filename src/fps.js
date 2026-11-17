@@ -167,7 +167,8 @@
     big.textContent = live ? live.fps : '--';
     big.className = 'fpm-big-num' + (live ? ' ' + tone(live.fps) : '');
     $('fpm-ft').textContent = live ? fmt(live.frametime, 1) + ' ms' : '--';
-    $('fpm-low').textContent = live ? live.low1 + ' FPS' : '--';
+    // live.low1 já vem inteiro do medidor (é o round() do fpsStats do GDZ).
+    $('fpm-low').textContent = live ? fmt(live.low1, 0) + ' FPS' : '--';
 
     const msg = $('fpm-msg');
     if (!d.success) { msg.className = 'fpm-msg err'; msg.textContent = d.error || 'O medidor não iniciou.'; }

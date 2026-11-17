@@ -388,6 +388,9 @@ function applyOverlay(payload) {
 }
 
 // tick do medidor
+// 500 ms é o intervalo do overlayTimer do GDZ. Antes eram 1500 ms: o número do jogo
+// aparecia com até 1,5 s de atraso. O custo de sensor no fpsTick é tratado no
+// engine-extras (o nvidia-smi fica cacheado lá), não aqui.
 let tickTimer = null;
 function startTicker() {
   if (tickTimer) return;
@@ -397,11 +400,14 @@ function startTicker() {
       if (!st.on) return; // sem overlay, nada de PowerShell de segundo em segundo
       await ex.fpsTick();
       const ov = ex.fpsOverlayPayload();
-      if (overlayWin && !overlayWin.isDestroyed() && ov.live) {
+      // Manda SEMPRE, com ou sem jogo: é o que o GDZ faz (ele não testa ov.live).
+      // Sem isto, ao fechar o jogo o overlay congelava no último número em vez de
+      // mostrar "--" e voltar a esperar.
+      if (overlayWin && !overlayWin.isDestroyed()) {
         overlayWin.webContents.send('overlay-update', { ...ov, on: true, pos: st.pos, show: st.show });
       }
     } catch (e) {}
-  }, 1500);
+  }, 500);
 }
 
 // ── IPC ──
@@ -619,7 +625,15 @@ H('autostart-set', async ({ on }) => {
 
 H('tweaks-status', () => core.tweaksStatus());
 H('actions-status', () => core.actionsStatus());
-H('get-caps', () => core.getCaps());
+// O GDZ devolve `{ ...caps, blocked }` em get-caps: é o mapa que a tela usa para
+// apagar o botão e mostrar o motivo. Antes o VL devolvia só o caps, então o
+// `hwCaps.blocked` da tela era sempre undefined e nenhum botão era bloqueado.
+H('get-caps', async () => {
+  const caps = await core.getCaps();
+  let blocked = {};
+  try { blocked = core.blockedActions(caps); } catch (e) { blocked = {}; }
+  return { ...caps, blocked };
+});
 H('tweak-set', ({ id, on }) => core.applyTweak(id, on));
 H('run-action', ({ action }) => {
   if (action && action.startsWith('GPU Dedicada: ')) return ex.gpuDedicated(action.slice(14));
@@ -1116,6 +1130,17 @@ app.whenReady().then(async () => {
       app.exit(0);
     });
   } catch (e) {}
+  // Modo automático: avisa pelo sistema quando o jogo abre, como o GDZ faz
+  // ("Modo automático ativo para X"). O gancho existe porque features.js também
+  // roda fora do Electron, onde `Notification` não existe.
+  feat.setAutoNotifier((texto) => {
+    try {
+      if (!Notification.isSupported()) return;
+      const n = new Notification({ title: MARCA.nome, body: String(texto).slice(0, 200), silent: false });
+      n.on('click', () => { if (win && !win.isDestroyed()) { win.show(); win.focus(); } });
+      n.show();
+    } catch (e) {}
+  });
   feat.autoStart();
   feat.ramStart();
   // Auto-update pelo GitHub Releases: consulta em segundo plano, baixa sozinho e deixa a
@@ -1151,7 +1176,7 @@ setInterval(() => {
 // recriar a janela no meio da saída.
 app.on('before-quit', () => { app.isQuitting = true; });
 
-app.on('will-quit', () => { try { globalShortcut.unregisterAll(); } catch (e) { } try { updater.stop(); } catch (e) { } });
+app.on('will-quit', () => { try { globalShortcut.unregisterAll(); } catch (e) { } try { updater.stop(); } catch (e) { } try { ex.fpsStop(); } catch (e) { } });
 
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 
