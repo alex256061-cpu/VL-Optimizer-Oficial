@@ -1,4 +1,4 @@
-/* tema-l.css â€” acabamento da versÃ£o vermelha/preto (carregado por Ãºltimo) */
+/* tema-l.css — acabamento da versão vermelha/preto (carregado por último) */
 :root {
   --bg: #050506;
   --bg2: #141416;
@@ -48,15 +48,15 @@ body::before {
 .titlebar .tb-app b { color: #fff; }
 .titlebar .tb-app i { color: #ff5560; font-style: normal; }
 
-/* botÃ£o principal com texto preto sobre vermelho claro */
+/* botão principal com texto preto sobre vermelho claro */
 .qo-btn, .apply-btn, .dh-cta {
   box-shadow: 0 8px 26px rgba(255, 31, 46, 0.28), inset 0 -1px 0 rgba(163, 15, 26, 0.35);
 }
 
-/* foco de teclado visÃ­vel e acessÃ­vel */
+/* foco de teclado visível e acessível */
 :focus-visible { outline: 2px solid rgba(255, 85, 96, 0.65); outline-offset: 2px; }
 
-/* Ã­cones que ainda usam o roxo legado em gradientes inline */
+/* ícones que ainda usam o roxo legado em gradientes inline */
 .nav-indicator::before { background: linear-gradient(180deg, #ffffff, #ff8a91); }
 
 /* -- Ações e estados: vermelho no lugar do volt -- */

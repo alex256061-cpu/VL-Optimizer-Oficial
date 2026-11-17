@@ -2767,6 +2767,26 @@ ex.measureBottleneck = async ({ seconds, pid }) => {
 // ────────────────────────────── OPTISCALER ──────────────────────────────
 // Instalação real: baixa o release (.7z), extrai com 7zr, copia TUDO para a pasta do jogo,
 // renomeia OptiScaler.dll para o proxy escolhido (dxgi.dll por padrão) e guarda backup de tudo.
+const OPTI_API = 'https://api.github.com/repos/optiscaler/OptiScaler/releases/latest';
+const OPTI_FALLBACK = { tag: 'v0.9.4', url: 'https://github.com/optiscaler/OptiScaler/releases/download/v0.9.4/Optiscaler_0.9.4-final.20260718._MM.7z' };
+// A pasta vai dentro do jogo, à vista do usuário: leva o nome do app, não o do GDZ.
+const OPTI_MARK = 'VL_OptiScaler';
+const OPTI_SKIP = /^(setup_windows\.bat|setup_linux\.sh|!!.*\.txt)$/i;
+const OPTI_LOGS = ['OptiScaler.log', 'fakenvapi.log', 'dlssg_to_fsr3.log'];
+// Regex ancorada do GDZ. Antes disto a checagem era um .includes() sobre uma lista
+// de nomes de jogo: 'cod' casava com qualquer pasta que tivesse "cod" no caminho.
+const OPTI_AC_RE = /^(EasyAntiCheat.*|EAAntiCheat.*|BattlEye|BEService.*|.*_BE\.exe|start_protected_game\.exe|vgc.*|PnkBstr.*|xigncode.*|GameGuard|nProtect|AntiCheatExpert|ACE-.*|mhyprot.*|FACEIT.*|Vanguard)$/i;
+const OPTI_UPS = [['dlss', /^(nvngx_dlss.*|sl\.interposer|sl\.dlss.*)\.dll$/i], ['fsr', /^(amd_fidelityfx_.*|ffx_fsr.*|ffx_backend.*|ffxfsr.*|fsr\d.*)\.dll$/i], ['xess', /^libxess.*\.dll$/i]];
+const OPTI_OPTS_DEFAULT = { upscaler: 'auto', fg: 'off', spoof: true, fps: false, menu: true, menuKey: 'home' };
+// Vão literais (string hex) para dentro do .ini, como no GDZ: 0x24=VK_HOME, 0x2D=VK_INSERT, 0x23=VK_END.
+const OPTI_MENU_KEYS = { home: '0x24', insert: '0x2D', end: '0x23' };
+const OPTI_QUIRKS = {
+  'crimsondesert.exe': {
+    noSpoof: true,
+    note: 'Crimson Desert fecha ao abrir com o spoof de GPU ligado: o VL deixa desligado neste jogo.',
+  },
+};
+const optiQuirk = (exe) => OPTI_QUIRKS[path.basename(String(exe || '')).toLowerCase()] || null;
 const OPTI_DIR = () => path.join(APP_DATA(), 'optiscaler');
 const OPTI_JSON = () => path.join(APP_DATA(), 'opti.json');
 function optiStore() { try { return JSON.parse(fs.readFileSync(OPTI_JSON(), 'utf8')); } catch (e) { return { installs: [], pkg: null }; } }
@@ -2876,13 +2896,53 @@ function scanUpscalers(dir) {
 ex.optiAnalyze = async ({ exe }) => {
   if (!exe || !fs.existsSync(exe)) return { success: false, error: 'executável inválido' };
   const dir = path.dirname(exe);
-  const name = (path.basename(exe) + ' ' + path.basename(dir)).toLowerCase();
-  const antiCheat = ANTI_CHEAT.filter((a) => name.includes(a));
-  const upscalers = scanUpscalers(dir);
+
+  // Anti-cheat pela regex ancorada do GDZ, sobre o NOME DO ARQUIVO (não o caminho
+  // inteiro). A lista antiga de substrings casava com pasta que tivesse "cod" ou
+  // "rust" no meio do nome.
+  const antiCheat = [];
+  try {
+    for (const f of fs.readdirSync(dir)) {
+      if (OPTI_AC_RE.test(f)) antiCheat.push(f);
+    }
+  } catch (e) { }
+
+  // Upscalers presentes: as regex de DLL do GDZ (OPTI_UPS), não um teste frouxo.
+  const upscalers = [];
+  try {
+    const arquivos = fs.readdirSync(dir);
+    for (const [tipo, re] of OPTI_UPS) {
+      if (arquivos.some((f) => re.test(f))) upscalers.push(tipo);
+    }
+  } catch (e) { }
+
+  // Excentricidades por jogo (o GDZ só tem uma: Crimson Desert não aceita spoof).
+  const quirk = optiQuirk(exe);
+  const notes = [];
+  if (quirk && quirk.note) notes.push(quirk.note);
+
   const st = optiStore();
   const installed = (st.installs || []).find((i) => i.dir === dir);
   const existing = OPTI_PROXIES.find((d) => fs.existsSync(path.join(dir, d)));
-  return { success: true, exe, dir, installed: !!installed, block: antiCheat.length > 0, antiCheat, upscalers, existingProxy: existing || null, notes: [] };
+
+  // Os logs do OptiScaler não contam como "jogo com upscaler próprio".
+  const limpos = [];
+  try {
+    for (const f of fs.readdirSync(dir)) if (!OPTI_LOGS.includes(f)) limpos.push(f);
+  } catch (e) { }
+
+  return {
+    success: true,
+    exe,
+    dir,
+    installed: !!installed,
+    block: antiCheat.length > 0,
+    antiCheat: antiCheat.slice(0, 5),
+    upscalers,
+    existingProxy: existing || null,
+    quirk: quirk ? { noSpoof: !!quirk.noSpoof } : null,
+    notes,
+  };
 };
 
 ex.optiDetect = async () => {

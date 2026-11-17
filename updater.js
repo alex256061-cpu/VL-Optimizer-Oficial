@@ -1,11 +1,11 @@
-// updater.js â€” atualizaÃ§Ã£o automÃ¡tica pelo GitHub Releases.
+// updater.js — atualização automática pelo GitHub Releases.
 //
-// O app consulta o release mais recente de alex256061-cpu/VL-Optimizer-Oficial e, quando hÃ¡ versÃ£o
-// nova, baixa em segundo plano. O usuÃ¡rio escolhe quando instalar: nada reinicia sozinho no meio de
-// uma otimizaÃ§Ã£o ou de uma mediÃ§Ã£o de FPS.
+// O app consulta o release mais recente de alex256061-cpu/VL-Optimizer-Oficial e, quando há versão
+// nova, baixa em segundo plano. O usuário escolhe quando instalar: nada reinicia sozinho no meio de
+// uma otimização ou de uma medição de FPS.
 //
-// Tudo aqui Ã© tolerante a falha. Sem internet, sem release, ou com o updater indisponÃ­vel, o app
-// abre normalmente e a tela mostra "sem atualizaÃ§Ã£o" em vez de erro.
+// Tudo aqui é tolerante a falha. Sem internet, sem release, ou com o updater indisponível, o app
+// abre normalmente e a tela mostra "sem atualização" em vez de erro.
 'use strict';
 
 const fs = require('fs');
@@ -66,11 +66,11 @@ let state = {
   notes: null,      // texto do release (o que mudou)
 };
 let timer = null;
-let listeners = [];   // funÃ§Ãµes avisadas quando o estado muda
+let listeners = [];   // funções avisadas quando o estado muda
 
 function emit() {
   for (const fn of listeners) {
-    try { fn({ ...state }); } catch (e) { /* ouvinte quebrado nÃ£o derruba o app */ }
+    try { fn({ ...state }); } catch (e) { /* ouvinte quebrado não derruba o app */ }
   }
 }
 
@@ -156,9 +156,9 @@ function extrairNotas(info) {
 }
 
 function currentVersion() {
-  // `app` sÃ³ existe dentro do Electron; fora dele (teste em Node puro) cai no package.json.
+  // `app` só existe dentro do Electron; fora dele (teste em Node puro) cai no package.json.
   try { if (app && typeof app.getVersion === 'function') return app.getVersion(); }
-  catch (e) { /* nÃ£o Ã© Electron */ }
+  catch (e) { /* não é Electron */ }
   try { return require('./package.json').version; }
   catch (e) { return '0.0.0'; }
 }
@@ -189,7 +189,7 @@ function isPackaged() {
 
 function init() {
   state.currentVersion = currentVersion();
-  // Em desenvolvimento nÃ£o hÃ¡ app-update.yml e o updater lanÃ§a. SÃ³ ativa no app empacotado.
+  // Em desenvolvimento não há app-update.yml e o updater lança. Só ativa no app empacotado.
   if (!isPackaged()) {
     state.error = null;
     state.checked = true;
@@ -199,12 +199,12 @@ function init() {
     autoUpdater = require('electron-updater').autoUpdater;
   } catch (e) {
     state.checked = true;
-    state.error = 'AtualizaÃ§Ã£o automÃ¡tica indisponÃ­vel: ' + e.message;
+    state.error = 'Atualização automática indisponível: ' + e.message;
     return false;
   }
 
-  autoUpdater.autoDownload = true;          // baixa sozinho, mas nÃ£o instala sozinho
-  autoUpdater.autoInstallOnAppQuit = false; // instalar Ã© escolha do usuÃ¡rio
+  autoUpdater.autoDownload = true;          // baixa sozinho, mas não instala sozinho
+  autoUpdater.autoInstallOnAppQuit = false; // instalar é escolha do usuário
   autoUpdater.allowPrerelease = false;
 
   autoUpdater.on('checking-for-update', () => { emit(); });
@@ -293,9 +293,9 @@ async function check() {
   return status();
 }
 
-// Instala a versÃ£o baixada e reinicia. SÃ³ Ã© chamado por aÃ§Ã£o explÃ­cita do usuÃ¡rio.
+// Instala a versão baixada e reinicia. Só é chamado por ação explícita do usuário.
 function install() {
-  if (!autoUpdater || !state.downloaded) return { ok: false, error: 'Nenhuma atualizaÃ§Ã£o baixada.' };
+  if (!autoUpdater || !state.downloaded) return { ok: false, error: 'Nenhuma atualização baixada.' };
   // Segunda fechadura: `downloaded` só fica true depois da assinatura conferida, mas
   // se algo reprovou no caminho, o botão não instala de jeito nenhum.
   if (state.assinatura === 'reprovada') {
@@ -311,7 +311,7 @@ function install() {
 
 function start() {
   if (!init()) return;
-  // Primeira consulta some segundos depois de abrir: nÃ£o atrasa a janela.
+  // Primeira consulta some segundos depois de abrir: não atrasa a janela.
   setTimeout(() => { check().catch(() => { }); }, 8000);
   if (timer) clearInterval(timer);
   timer = setInterval(() => { check().catch(() => { }); }, CHECK_INTERVAL_MS);
