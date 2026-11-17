@@ -10,6 +10,15 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.43': {
+    corrigido: [
+      'O medidor de FPS passou a guardar as medicoes e enviar em lotes, como o programa de referencia: fila de ate 500 no disco, 50 por envio a cada 5 minutos, e o par antes/depois e ligado pelo identificador da medicao (funciona mesmo depois de fechar o app).',
+      'O envio so acontece com a sua autorizacao. Quem nunca respondeu a pergunta nao envia nada, e a fila fica vazia.',
+      'As estatisticas de uso do plano (quando a tela de planos aparece, quando voce clica) voltaram a ser registradas. Antes o app respondia "ok" e descartava tudo.',
+      'O resumo do PC enviado junto (processador, placa de video, memoria, disco, tela) segue a mesma lista e os mesmos limites do programa de referencia.',
+    ],
+    novo: [],
+  },
   '1.4.42': {
     corrigido: [
       'A configuracao do otimizador de graficos agora tem as 33 opcoes do programa de referencia. Antes faltavam 12: mostrar FPS na tela, prender e esconder o cursor, velocidade do cursor, suporte a G-Sync, modo de varias telas, abrir como administrador, iniciar com o Windows, minimizar e fechar para a bandeja, e a nitidez do LS1.',

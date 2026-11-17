@@ -31,6 +31,7 @@ const feat = require('./features');
 const elev = require('./elevacao');
 const updater = require('./updater');
 const conta = require('./supabase');
+const telemetria = require('./telemetria');
 const MARCA = require('./marca');
 require('./engine-scaler').mountScaler(ex);
 
@@ -59,6 +60,41 @@ function dataDir() {
   return dir;
 }
 core.setDataDir(dataDir());
+
+// ── Telemetria (fila + envio a cada 5 min) ───────────────────────────────
+// O consentimento é UM só: o mesmo telemetry-consent.json que o
+// ex.telemetryConsentSet grava. A tela do Sobre e este módulo precisam ler
+// a mesma fonte, senão o módulo acha que ninguém aceitou nada.
+const TEL_CONSENT_FILE = path.join(dataDir(), "telemetry-consent.json");
+function lerConsentTelemetria() {
+  try {
+    const j = JSON.parse(fs.readFileSync(TEL_CONSENT_FILE, "utf8"));
+    return typeof j.consent === "boolean" ? j.consent : null;
+  } catch (e) { return null; }
+}
+let _telHwHash = null;
+function lerSettingsTel() {
+  let sessoes = { a: null, b: null };
+  try { sessoes = JSON.parse(fs.readFileSync(path.join(dataDir(), "fps-sessions.json"), "utf8")); } catch (e) { }
+  return { telemetryConsent: lerConsentTelemetria(), telemetryHwHash: _telHwHash, fpsSessions: sessoes || { a: null, b: null } };
+}
+function gravarSettingsTel(chave, valor) {
+  if (chave === "telemetryHwHash") { _telHwHash = valor; }
+}
+telemetria.configurar({
+  dataDir: dataDir(),
+  settings: lerSettingsTel,
+  setSetting: gravarSettingsTel,
+  backups: () => { try { return core.loadBackups(); } catch (e) { return { entries: {} }; } },
+  appVersion: () => app.getVersion(),
+  screen: require("electron").screen,
+  getCaps: async () => { try { return await core.getCaps(); } catch (e) { return null; } },
+  ps: (script, ms) => core.ps(script, ms).then((r) => (r && r.out) || ""),
+  usuario: () => conta.usuario(),
+  sessaoAtual: () => _sessaoCache.valor,
+  apiCall: (metodo, rota, corpo) => conta.telemetriaPedir(metodo, rota, corpo),
+});
+telemetria.iniciar();
 ex.fpsRestore();
 
 
@@ -622,7 +658,13 @@ H('claim-key', (a) => ex.claimKey(a && a.codigo));
 H('telemetry-consent', () => ex.telemetryConsent());
 H('telemetry-consent-set', (e, a) => ex.telemetryConsentSet(a));
 H('offers', () => ex.offers());
-H('plan-event', () => ({ success: true }));
+// Renderer (src/plano.js track()) manda { type, trigger }, no mesmo formato do
+// funil do GDZ (upsell_view, upsell_click, offer_view, referral_copy).
+H('plan-event', (e, a) => {
+  const r = a && typeof a === 'object' ? a : {};
+  telemetria.planEvent(r.type || r.name || 'evento', r.trigger !== undefined ? String(r.trigger) : null);
+  return { success: true };
+});
 H('get-hardware', () => ex.getHardware());
 H('get-stats', () => ex.getStats());
 H('get-mem-stats', () => ex.getMemStats());

@@ -8,6 +8,12 @@ const core = require('./engine');
 const disco = require('./engine-disco');
 const MARCA = require('./marca');
 
+// Telemetria carregada de forma preguiçosa: quem chama telemetria.configurar()
+// é o main.js. O engine-extras só precisa dele para enfileirar a medição de FPS.
+// Se o arquivo não existir, o app abre sem telemetria em vez de não abrir.
+let telemetriaMod = null;
+try { telemetriaMod = require('./telemetria'); } catch (e) { telemetriaMod = null; }
+
 const ex = {};
 
 // Pasta de dados DESTA marca (ver o mesmo ajuste em features.js).
@@ -2541,6 +2547,13 @@ ex.fpsRecord = async ({ slot, secs, label } = {}) => {
     secs: st.secs,
     at: Date.now(),
   };
+  // Telemetria de FPS: o GDZ chama enqueueFpsTelemetry ANTES de gravar a sessão,
+  // porque o "antes" cria o pairId e esse pairId precisa ficar salvo junto com a
+  // sessão — é o que liga o "depois" ao "antes" mesmo depois de reiniciar o app.
+  // Gravar primeiro fazia o pairId se perder e o par virava "manual".
+  try {
+    if (telemetriaMod) telemetriaMod.enqueueFpsTelemetry(slot, ses);
+  } catch (e) { }
   fps.sessions[slot] = ses;
   writeJson('fps-sessions.json', fps.sessions);
   return { success: true, session: ses };

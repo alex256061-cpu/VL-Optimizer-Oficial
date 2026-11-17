@@ -965,9 +965,45 @@ async function usuario() {
   return { username: 'visitante', email: null, plan: 'free', features: ['painel'] };
 }
 
+// ── Telemetria: POST na Edge Function `telemetria` ───────────────────────
+// O GDZ manda { fps, hardware } para api.gdzfps.com/app/telemetry. Aqui vai
+// para https://<projeto>.supabase.co/functions/v1/telemetria, autenticado com
+// o access_token da sessão. Recebe as mesmas rotas que o módulo usa, para a
+// lógica de fila do telemetria.js continuar igual à do GDZ.
+async function telemetriaPedir(metodo, rota, corpo) {
+  if (!configurado()) return { status: 0, data: {} };
+  const sess = lerSessao();
+  const token = sess && sess.access_token;
+  if (!token) return { status: 401, data: {} };
+
+  // /app/x -> /functions/v1/telemetria/x
+  const caminho = String(rota || "").replace(/^\/app\//, "/");
+  const url = CONFIG.url.replace(/\/$/, "") + "/functions/v1/telemetria" + caminho;
+
+  try {
+    const r = await fetch(url, {
+      method: metodo || "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: CONFIG.anonKey,
+        Authorization: "Bearer " + token,
+      },
+      body: corpo === undefined ? undefined : JSON.stringify(corpo),
+      signal: (typeof AbortSignal !== "undefined" && AbortSignal.timeout) ? AbortSignal.timeout(TIMEOUT_MS) : undefined,
+    });
+    let dados = {};
+    try { dados = await r.json(); } catch (e) { }
+    return { status: r.status, data: dados };
+  } catch (e) {
+    return { status: 0, data: {} };
+  }
+}
+
+
 module.exports = {
   configurado, entrar, registrar, sessao, sair, recuperar, perfil, usuario,
   verificarPc, enviarHardware, resgatarChave, CONFIG,
   // proteções: expostas para teste e para a tela mostrar a data do modo offline
   CLOCK_ROLLBACK_TOLERANCE_MS, DIAS_OFFLINE, offlineUntilDe, licencaOffline, copiaLicenca,
+  telemetriaPedir,
 };

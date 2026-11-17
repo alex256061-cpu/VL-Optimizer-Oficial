@@ -29,6 +29,7 @@
     "updater.js",
     "assinatura-update.js",
     "supabase.js",
+    "telemetria.js",
     "hwid.js",
     "lossless-official.js",
     "escrever-settings.js",
