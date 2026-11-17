@@ -386,8 +386,8 @@ const T = (id, o) => ({ id, ...o });
 const TWEAKS = [
   // — Desempenho
   T('game-mode', { padrao: 1,
-    cat: 'desempenho', title: 'Modo de Jogo ligado', rec: true, tags: ['FPS mais estável'],
-    desc: 'O Windows prioriza o jogo quando você abre um: menos disputa com processos de fundo.',
+    cat: 'desempenho', title: 'Modo de Jogo do Windows', rec: true, tags: ['FPS mais estável'],
+    desc: 'Quando um jogo abre, o Windows segura atualizações e tarefas de fundo e dá prioridade de processador e placa de vídeo para ele.',
     reg: [{ path: HKCU + '\\Software\\Microsoft\\GameBar', name: 'AutoGameModeEnabled', type: 'DWord', on: 1, off: 0 }],
     // O Windows assume Modo de Jogo LIGADO quando o valor NÃO existe (padrao: 1).
     //
@@ -398,35 +398,39 @@ const TWEAKS = [
     probe: `$v = Get-Val '${HKCU}\\Software\\Microsoft\\GameBar' 'AutoGameModeEnabled'; if ($null -eq $v) { $v = 1 }; if ($v -eq 1) { Write-Output '1' } else { Write-Output '0' }`,
   }),
   T('steam-overlay', {
-    cat: 'desempenho', title: 'Sobreposição da Steam desligada', tags: ['Mais FPS'],
-    desc: 'A sobreposição Shift+Tab da Steam desenha por cima do jogo e custa FPS.',
+    cat: 'desempenho', title: 'Sobreposição do Steam (Shift+Tab) desligada', tags: ['Mais FPS'],
+    desc: 'Desliga a tela que o Steam abre por cima do jogo com o Shift+Tab. Ela injeta código em todo jogo do Steam e é causa conhecida de queda de FPS, travadinhas e conflito com outros programas de captura.',
     reg: [{ path: HKCU + '\\Software\\Valve\\Steam', name: 'EnableGameOverlay', type: 'DWord', on: 0, off: 1 }],
-    note: 'A Steam pode reescrever ao abrir a loja; desligue também em Steam > Configurações > Na biblioteca.',
+    note: 'O Steam fecha e abre de novo para a alteração valer. Sem a sobreposição você perde o chat, o navegador e as conquistas por cima do jogo (e o Steam Input de alguns controles).',
   }),
   T('bg-apps', {
-    cat: 'desempenho', title: 'Apps em segundo plano desligados', tags: ['PC fraco'],
-    desc: 'Apps de fábrica param de rodar escondidos e gastar CPU/RAM.',
+    cat: 'desempenho', title: 'Sem apps da Loja rodando escondidos', tags: ['PC fraco'],
+    desc: 'Apps instalados pela Microsoft Store (Clima, Fotos, Xbox, Your Phone...) param de rodar em segundo plano quando estão fechados.',
+    note: 'Apps da Loja, como o WhatsApp, deixam de mostrar notificações com a janela fechada.',
     reg: [{ path: HKCU + '\\Software\\Microsoft\\Windows\\CurrentVersion\\BackgroundAccessApplications', name: 'GlobalUserDisabled', type: 'DWord', on: 1, off: 0 }],
   }),
   T('edge-bg', { rec: true,
-    cat: 'desempenho', title: 'Edge sem ficar em segundo plano', tags: ['PC fraco'],
-    desc: 'O Edge deixa de continuar residente depois de fechar.',
+    cat: 'desempenho', title: 'Edge fechado de verdade', tags: ['PC fraco'],
+    desc: 'Impede o Edge de abrir escondido junto com o Windows e de continuar rodando depois que você fecha a janela. Devolve memória e deixa a inicialização mais leve.',
+    note: 'Nas configurações do Edge vai aparecer "Gerenciado pela sua organização". É normal: é assim que o Windows marca essa regra.',
     reg: [{ path: HKLM + '\\SOFTWARE\\Policies\\Microsoft\\Edge', name: 'BackgroundModeEnabled', type: 'DWord', on: 0, off: 1 }],
   }),
-  T('dlss-ind', {
-    cat: 'desempenho', title: 'Indicador do DLSS na tela', cap: 'rtx', tags: ['Só verifica'],
-    desc: 'Mostra "DLSS" escrito no canto do jogo: serve para confirmar qual modelo de DLSS está rodando.',
-    reg: [{ path: HKCU + '\\Software\\NVIDIA Corporation\\Global\\NGXCore', name: 'ShowDlssIndicator', type: 'DWord', on: 1, off: 0 }],
-    note: 'O preset do DLSS 4.5 fica na NVIDIA App (Sobreposição/Substituição do DLSS).',
-  }),
-  T('dlss-rec', {
+  // 'dlss-ind' REMOVIDO: não existe no GDZ.
+  //
+  // O catálogo do GDZ (33 tweaks, extraído por execução isolada do bundle)
+  // não tem 'dlss-ind', nem 'ShowDlssIndicator', nem 'NGXCore' — zero
+  // ocorrências dos três. Ele tem só o 'dlss-rec'.
+  //
+  // Este ajuste foi escrito aqui sem referência: foi invenção. Sai do catálogo.
+T('dlss-rec', {
     cat: 'desempenho', title: 'DLSS no modelo recomendado pela NVIDIA', cap: 'rtx', tags: ['Imagem', 'Mais FPS'],
     desc: 'Os jogos com DLSS passam a usar a versao mais nova que o driver tem, com o modelo que a NVIDIA recomenda para cada modo: o DLSS 4.5 nos modos Desempenho e Ultra Desempenho e o DLSS 4 nos outros. E o botao Recomendado de Substituicao do DLSS na NVIDIA App. A imagem dos modos mais leves melhora, entao da para trocar Qualidade por Desempenho dentro do jogo e ganhar FPS.',
     note: 'O preset fica na NVIDIA App (Sobreposicao/Substituicao do DLSS).',
   }),
   T('gpu-msi', {
-    cat: 'desempenho', title: 'MSI na placa de vídeo', tags: ['Menos atraso'],
-    desc: 'Interrupções por mensagem no lugar do modo legado: menos stutter de IRQ.',
+    cat: 'desempenho', title: 'Placa de vídeo com interrupção MSI e prioridade alta', tags: ['Menos atraso'],
+    desc: 'A placa de vídeo passa a avisar o processador pelo modo moderno (MSI), em vez de dividir uma linha de interrupção antiga com outros dispositivos, e o Windows atende esse aviso na frente dos demais. É o que o MSI Utility faz, sem instalar programa nenhum. Costuma tirar travadinhas e encurtar o tempo entre o clique e o tiro.',
+    note: 'Vale só depois de reiniciar o PC. Se a imagem ficar estranha ou o PC travar ao iniciar, desligue aqui de novo (ou use um ponto de restauração).',
     on: `
       $gpus = @(Get-CimInstance Win32_VideoController | Where-Object { $_.PNPDeviceID -match '^PCI\\\\' })
       foreach ($g in $gpus) {
@@ -462,22 +466,23 @@ if ($gpus.Count -eq 0) { Write-Output '0' } else {
     restart: 'reboot',
   }),
   T('mpo', {
-    cat: 'desempenho', title: 'MPO desligado (corrige piscadas)', tags: ['Estabilidade'],
-    desc: 'Tira a sobreposição de planos da GPU: resolve piscada/tela preta com G-Sync e FreeSync.',
+    cat: 'desempenho', title: 'Correção de tela piscando (MPO)', tags: ['Estabilidade'],
+    desc: 'Desliga o Multiplane Overlay, causa conhecida de tela piscando, faixas pretas e travadinhas com G-Sync/FreeSync ou com dois monitores.',
     // OverlayTestMode = 5 desliga o MPO. O off era 5 também, então aplicar e desaplicar
     // gravavam o mesmo valor e o ajuste nunca mudava nada. Agora desaplicar volta para 0.
     reg: [{ path: HKCU + '\\Software\\Microsoft\\Windows\\DWM', name: 'OverlayTestMode', type: 'DWord', on: 5, off: 0 }],
-    note: 'Vale depois de reiniciar o PC.',
+    note: 'Só ative se você tem esse problema. Sem ele, não muda nada.',
   }),
   T('transparency', {
-    cat: 'desempenho', title: 'Transparência do Windows desligada', tags: ['PC fraco'],
-    desc: 'Sem acrílico/blur nas janelas: alivia vídeo integrado e ganha um pouco de RAM.',
+    cat: 'desempenho', title: 'Sem transparência nas janelas', tags: ['PC fraco'],
+    desc: 'Desliga o efeito de vidro fosco da barra de tarefas, do menu Iniciar e das janelas. A placa de vídeo para de desfocar o fundo o tempo todo, o que alivia PC com vídeo integrado.',
+    note: 'Com placa de vídeo dedicada a diferença no FPS é praticamente zero. A barra de tarefas e os menus ficam com cor sólida.',
     reg: [{ path: HKCU + '\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize', name: 'EnableTransparency', type: 'DWord', on: 0, off: 1 }],
   }),
   // — Mouse e teclado
   T('mouse-accel', {
-    cat: 'inputlag', title: 'Aceleração do mouse desligada', rec: true, tags: ['Mira consistente'],
-    desc: 'O ponteiro anda sempre o mesmo tanto para o mesmo movimento: mira 1:1.',
+    cat: 'inputlag', title: 'Mira sem aceleração do mouse', rec: true, tags: ['Mira consistente'],
+    desc: 'Desliga a "Precisão do ponteiro aprimorada". O cursor anda sempre a mesma distância para o mesmo movimento da mão, e a memória muscular da mira funciona.',
     reg: [
       { path: HKCU + '\\Control Panel\\Mouse', name: 'MouseSpeed', type: 'String', on: '0', off: '1' },
       { path: HKCU + '\\Control Panel\\Mouse', name: 'MouseThreshold1', type: 'String', on: '0', off: '6' },
@@ -491,39 +496,42 @@ if ($gpus.Count -eq 0) { Write-Output '0' } else {
     probe: `if ((Get-Val '${HKCU}\\Control Panel\\Mouse' 'MouseSpeed') -eq '0') { Write-Output '1' } else { Write-Output '0' }`,
   }),
   T('kbd-repeat', { rec: true,
-    cat: 'inputlag', title: 'Repetição do teclado rápida', tags: ['Resposta imediata'],
-    desc: 'Sem atraso para o caractere começar a repetir.',
+    cat: 'inputlag', title: 'Teclado repetindo na velocidade máxima', tags: ['Resposta imediata'],
+    desc: 'Põe no máximo as duas réguas de "Propriedades do Teclado": o intervalo até a tecla começar a repetir vai para o mais curto e a taxa de repetição para a mais rápida. Segurar A ou D passa a responder no primeiro instante.',
+    note: 'Vale para o Windows todo: digitando, segurar uma tecla enche a linha de letras mais rápido.',
     reg: [
       { path: HKCU + '\\Control Panel\\Keyboard', name: 'KeyboardDelay', type: 'String', on: '0', off: '1' },
       { path: HKCU + '\\Control Panel\\Keyboard', name: 'KeyboardSpeed', type: 'String', on: '31', off: null },
     ],
   }),
   T('sticky', { padrao: "506", rec: true,
-    cat: 'inputlag', title: 'Teclas de aderência desligadas', tags: ['Nada abrindo sozinho'],
-    desc: 'Apertar Shift cinco vezes não abre mais aquela janela no meio da partida.',
+    cat: 'inputlag', title: 'Sem janelas de acessibilidade no meio do jogo', tags: ['Nada abrindo sozinho'],
+    desc: 'Apertar Shift 5 vezes ou segurar Num Lock/Shift não abre mais as janelas de Teclas de Aderência e Filtragem no meio da partida. Os recursos continuam nas Configurações.',
     reg: [{ path: HKCU + '\\Control Panel\\Accessibility\\StickyKeys', name: 'Flags', type: 'String', on: "0", off: "506" }],
   }),
   T('numlock', {
     cat: 'inputlag', title: 'Num Lock ligado ao iniciar', tags: ['Praticidade'],
-    desc: 'O teclado numérico já acorda ligado.',
+    desc: 'O teclado numérico já vem ligado na tela de login e quando você entra no Windows.',
     reg: [{ path: HKCU + '\\Control Panel\\Keyboard', name: 'InitialKeyboardIndicators', type: 'String', on: '2', off: '0' }],
   }),
   // — Internet
   T('delivery', { padrao: 0, rec: true,
-    cat: 'live', title: 'Delivery Optimization desligado', tags: ['Internet livre'],
-    desc: 'O Windows para de usar sua internet para distribuir atualizações (P2P).',
+    cat: 'live', title: 'Sem upload de atualizações para outros PCs', tags: ['Internet livre'],
+    desc: 'O Windows para de enviar pedaços de atualizações para computadores de outras pessoas pela internet. Sobra upload para o jogo, a chamada e a live.',
     reg: [{ path: HKCU + '\\Software\\Microsoft\\Windows\\CurrentVersion\\DeliveryOptimization', name: 'SystemSettingsDownloadMode', type: 'DWord', on: 2, off: 0 }],
   }),
   T('lso', {
-    cat: 'live', title: 'LSO desligado (upload estável)', tags: ['Live'],
-    desc: 'Corrige a live/discord caindo quando você joga: desliga o Large Send Offload da placa de rede.',
+    cat: 'live', title: 'LSO da placa de rede desligado', tags: ['Live'],
+    desc: 'Com o LSO (Large Send Offload) quem divide os envios grandes é a placa de rede, e não o processador. Alguns drivers (Intel I219/I225 e certos Realtek) fazem isso com defeito: upload lento, Discord e live engasgando ou a conexão caindo do nada. Desligar resolve nesses casos.',
+    note: 'Só ative se você tem esse problema: não muda o ping nem o FPS do FiveM, e o processador trabalha um pouco mais em upload pesado. A internet cai por alguns segundos ao ligar e ao desligar.',
     on: `Get-NetAdapter | Disable-NetAdapterLso -ErrorAction SilentlyContinue; Write-Output 'ok'`,
     off: `Get-NetAdapter | Enable-NetAdapterLso -ErrorAction SilentlyContinue; Write-Output 'ok'`,
     probe: `$l = @(Get-NetAdapterLso -ErrorAction SilentlyContinue | Where-Object { $_.Enabled }); if ($l.Count -eq 0) { Write-Output '1' } else { Write-Output '0' }`,
   }),
   T('eee', {
-    cat: 'live', title: 'EEE desligado (sem queda de cabo)', tags: ['Rede'],
-    desc: 'Tira a economia de energia da placa de rede: acabam os picos de ping e as desconexoes.',
+    cat: 'live', title: 'Economia de energia da placa de rede desligada (EEE)', tags: ['Rede'],
+    desc: 'O EEE (Energy Efficient Ethernet) e o Green Ethernet põem a placa de rede para "cochilar" entre um pacote e outro e gastar menos energia. Com alguns roteadores e switches isso dá defeito: a conexão cai e volta, o ping dá picos ou a velocidade do cabo cai para 100 Mb. Desligar resolve nesses casos.',
+    note: 'É correção, não ganho de ping: com a rede funcionando bem, não muda nada no FiveM. A internet cai por alguns segundos ao ligar e ao desligar.',
     // Usa -RegistryKeyword e nao -DisplayName: o nome da propriedade muda com o idioma
     // ('Energy-Efficient Ethernet' em ingles, 'Energia Eficiente Ethernet' em portugues).
     on: `$n = 0
@@ -570,8 +578,9 @@ elseif ($tudoOff) { Write-Output '1' }
 else { Write-Output '0' }`,
   }),
   T('nic-intmod', {
-    cat: 'live', title: 'Interrupt Moderation desligado', tags: ['Ping'],
-    desc: 'Menos latencia na placa de rede (os micro-pacotes chegam na hora).',
+    cat: 'live', title: 'Placa de rede sem moderação de interrupção', tags: ['Ping'],
+    desc: 'Por padrão a placa de rede junta vários pacotes antes de avisar o processador. Sem a moderação ela avisa a cada pacote, e o pacote chega ao jogo uma fração de milissegundo antes.',
+    note: 'O ganho é menor que 1 ms: não espere ver diferença no ping. Em troca o processador trabalha mais durante downloads e lives, e é ele que limita o FPS do FiveM. Não use em PC fraco. A internet cai por alguns segundos ao ligar e ao desligar.',
     on: `$n = 0
 foreach ($prop in @(Get-NetAdapterAdvancedProperty -RegistryKeyword '*InterruptModeration' -ErrorAction SilentlyContinue)) {
   try { Set-NetAdapterAdvancedProperty -Name $prop.Name -RegistryKeyword '*InterruptModeration' -RegistryValue 0 -ErrorAction Stop; $n++ } catch { }
@@ -589,22 +598,23 @@ if ($p.Count -eq 0) { Write-Output '1' }
 # Comparar como texto funciona para os dois formatos.
 else { $off = @($p | Where-Object { (@($_.RegistryValue) -join '') -eq '0' }); if ($off.Count -eq $p.Count) { Write-Output '1' } else { Write-Output '0' } }`,
   }),  T('hibernate', { padrao: 1, rec: true,
-    cat: 'limpeza', title: 'Hibernação desligada', tags: ['Espaço em disco'],
-    desc: 'Apaga o hiberfil.sys (tamanho de boa parte da sua RAM) e a inicialização rápida.',
+    cat: 'limpeza', title: 'Desligar de verdade (sem hibernação)', tags: ['Espaço em disco'],
+    desc: 'Desativa a hibernação e a Inicialização Rápida. O "Desligar" passa a zerar o Windows (drivers e memória limpos a cada boot) e o arquivo hiberfil.sys some, liberando alguns GB no disco C:.',
+    note: 'O PC pode levar alguns segundos a mais para ligar. Em notebook, você perde a opção Hibernar.',
     on: `powercfg /h off; Write-Output 'ok'`,
     off: `powercfg /h on; Write-Output 'ok'`,
     probe: `$h = Get-Val '${HKLM}\\SYSTEM\\CurrentControlSet\\Control\\Power' 'HibernateEnabled'; if ($null -eq $h -or $h -eq 0) { Write-Output '1' } else { Write-Output '0' }`,
   }),
   // — Windows: privacidade
   T('telemetry', {
-    cat: 'tweaks', title: 'Telemetria desligada', rec: true, tags: ['Privacidade'],
-    desc: 'O Windows para de enviar dados de uso/diagnóstico.',
+    cat: 'tweaks', title: 'Telemetria e anúncios personalizados', rec: true, tags: ['Privacidade'],
+    desc: 'Desliga o serviço que envia dados de uso para a Microsoft, o ID de propaganda e as pesquisas de "dê sua opinião". Um processo a menos rodando o tempo todo.',
     reg: [{ path: HKLM + '\\SOFTWARE\\Policies\\Microsoft\\Windows\\DataCollection', name: 'AllowTelemetry', type: 'DWord', on: 0, off: 1 }],
     svc: ['DiagTrack'],
   }),
   T('suggestions', {
-    cat: 'tweaks', title: 'Sugestões e anúncios desligados', rec: true, tags: ['Privacidade'],
-    desc: 'Sem "dicas" no menu Iniciar, no Explorador e sem ID de propaganda.',
+    cat: 'tweaks', title: 'Sem sugestões, dicas e apps instalados sozinhos', rec: true, tags: ['Privacidade'],
+    desc: 'O Windows para de instalar apps promovidos (joguinhos, TikTok...) e tira as "sugestões" do Iniciar e das Configurações e as dicas que aparecem na tela.',
     reg: [
       { path: HKCU + '\\Software\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager', name: 'SubscribedContent-338388Enabled', type: 'DWord', on: 0, off: 1 },
       { path: HKCU + '\\Software\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager', name: 'SubscribedContent-338389Enabled', type: 'DWord', on: 0, off: 1 },
@@ -613,65 +623,74 @@ else { $off = @($p | Where-Object { (@($_.RegistryValue) -join '') -eq '0' }); i
     ],
   }),
   T('bing', { rec: true,
-    cat: 'tweaks', title: 'Pesquisa na web desligada', tags: ['Privacidade'],
-    desc: 'A busca do Windows deixa de consultar a internet/Bing.',
+    cat: 'tweaks', title: 'Pesquisa do Iniciar sem Bing', tags: ['Privacidade'],
+    desc: 'A pesquisa do menu Iniciar procura só no seu PC: sem resultados da web e sem sugestões do Bing. Fica mais rápida e o que você digita não vai para a internet.',
     reg: [{ path: HKLM + '\\SOFTWARE\\Policies\\Microsoft\\Windows\\Windows Search', name: 'DisableWebSearch', type: 'DWord', on: 1, off: 0 }],
   }),
   T('activity', { rec: true,
-    cat: 'tweaks', title: 'Histórico de atividades desligado', tags: ['Privacidade'],
-    desc: 'O Windows para de publicar e enviar o que você abriu.',
+    cat: 'tweaks', title: 'Sem histórico de atividades', tags: ['Privacidade'],
+    desc: 'O Windows para de registrar quais arquivos, sites e apps você abriu e de enviar esse histórico para a sua conta Microsoft.',
     reg: [
       { path: HKLM + '\\SOFTWARE\\Policies\\Microsoft\\Windows\\System', name: 'PublishUserActivities', type: 'DWord', on: 0, off: 1 },
       { path: HKLM + '\\SOFTWARE\\Policies\\Microsoft\\Windows\\System', name: 'UploadUserActivities', type: 'DWord', on: 0, off: 1 },
     ],
   }),
   T('widgets', { padrao: 0,
-    cat: 'tweaks', title: 'Widgets (notícias e clima) desligados', rec: true, tags: ['Mais FPS'],
-    desc: 'O painel de notícias sai da barra e deixa de carregar em segundo plano.',
+    cat: 'tweaks', title: 'Sem Widgets (notícias e clima)', rec: true, tags: ['Mais FPS'],
+    desc: 'Tira o painel de notícias e clima da barra de tarefas e impede que ele fique carregado em segundo plano: são centenas de MB de memória a menos.',
     reg: [{ path: ADV, name: 'TaskbarDa', type: 'DWord', on: 0, off: 1 }],
     restart: 'reboot',
   }),
   T('location', {
     cat: 'tweaks', title: 'Localização desligada', tags: ['Privacidade'],
-    desc: 'Apps param de conseguir sua posição.',
+    desc: 'Nenhum app consegue saber onde você está.',
+    note: 'O fuso horário automático, o Clima e o "Localizar meu dispositivo" deixam de funcionar.',
     reg: [{ path: HKLM + '\\SOFTWARE\\Policies\\Microsoft\\Windows\\LocationAndSensors', name: 'DisableLocation', type: 'DWord', on: 1, off: 0 }],
   }),
   // — Windows: praticidade
   T('end-task', { rec: true,
-    cat: 'tweaks', title: 'Encerrar tarefa no botão direito', tags: ['Praticidade'],
-    desc: 'Botão "Finalizar tarefa" direto no menu da barra de tarefas.',
+    cat: 'tweaks', title: 'Finalizar tarefa pela barra de tarefas', tags: ['Praticidade'],
+    desc: 'Botão direito num programa na barra de tarefas → "Finalizar tarefa". Fecha na hora um jogo travado, sem abrir o Gerenciador de Tarefas.',
     reg: [{ path: ADV, name: 'TaskbarEndTask', type: 'DWord', on: 1, off: 0 }],
   }),
   T('file-ext', { rec: true,
-    cat: 'tweaks', title: 'Mostrar extensões de arquivo', tags: ['Praticidade'],
-    desc: 'Vê .exe, .jpg e afins no nome, sem esconder nada.',
+    cat: 'tweaks', title: 'Mostrar a extensão dos arquivos', tags: ['Praticidade'],
+    desc: 'Mostra o final do nome dos arquivos (.exe, .zip, .pdf). Ajuda a não abrir vírus disfarçado, como "foto.jpg.exe".',
     reg: [{ path: ADV, name: 'HideFileExt', type: 'DWord', on: 0, off: 1 }],
   }),
   T('hidden-files', {
     cat: 'tweaks', title: 'Mostrar arquivos ocultos', tags: ['Praticidade'],
-    desc: 'Arquivos ocultos e de sistema aparecem no Explorador.',
+    desc: 'Mostra pastas escondidas como a AppData, onde ficam configs e saves de muitos jogos.',
     reg: [{ path: ADV, name: 'Hidden', type: 'DWord', on: 1, off: 2 }],
   }),
   T('this-pc', {
-    cat: 'tweaks', title: 'Explorador abre em Este PC', tags: ['Praticidade'],
-    desc: 'O Explorador começa em Este PC, não em Acesso rápido.',
+    cat: 'tweaks', title: 'Explorador abre em "Este Computador"', tags: ['Praticidade'],
+    desc: 'Ao abrir o Explorador (Win+E) você cai direto nos seus discos, em vez da página Início com arquivos recentes.',
     reg: [{ path: ADV, name: 'LaunchTo', type: 'DWord', on: 1, off: 2 }],
   }),
   T('classic-menu', {
-    cat: 'tweaks', title: 'Menu de contexto clássico', restart: 'explorer', tags: ['Praticidade'],
-    desc: 'O botão direito volta a mostrar todas as opções de uma vez (Windows 11).',
+    cat: 'tweaks', title: 'Menu do botão direito completo', restart: 'explorer', tags: ['Praticidade'],
+    desc: 'Volta o menu de contexto do Windows 10, com todas as opções, sem precisar clicar em "Mostrar mais opções".',
     reg: [],
     on: `New-Key '${HKCU}\\Software\\Classes\\CLSID\\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\\InprocServer32'; Set-ItemProperty -LiteralPath '${HKCU}\\Software\\Classes\\CLSID\\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\\InprocServer32' -Name '(default)' -Value '' -Force; Write-Output 'ok'`,
     off: `Remove-Item -Path '${HKCU}\\Software\\Classes\\CLSID\\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}' -Recurse -Force -ErrorAction SilentlyContinue; Write-Output 'ok'`,
     probe: `if (Test-Path '${HKCU}\\Software\\Classes\\CLSID\\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}') { Write-Output '1' } else { Write-Output '0' }`,
   }),
-  // T('dark') REMOVIDO: o GDZ não tem esse ajuste (0 ocorrências no código dele).
-  // Trocar o tema claro/escuro do cliente não é otimização de jogo, é preferência
-  // pessoal — e o desfazer gravava uma constante (1) em vez do valor que o
-  // Windows tinha antes.
+  T('dark', {
+    cat: 'tweaks', title: 'Tema escuro', tags: ['Visual'],
+    desc: 'Deixa o Windows e os apps compatíveis no modo escuro.',
+    // Igual ao GDZ (tweak nº 28 de 33, categoria windows).
+    // Havia sido removido aqui por engano: a varredura que disse "0 ocorrências" foi
+    // feita no código OFUSCADO, onde a string está em RC4 e não aparece como texto.
+    // Executando o bundle, o tweak está lá — com estes mesmos dois valores.
+    reg: [
+      { path: HKCU + '\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize', name: 'AppsUseLightTheme', type: 'DWord', on: 0, off: 1 },
+      { path: HKCU + '\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize', name: 'SystemUsesLightTheme', type: 'DWord', on: 0, off: 1 },
+    ],
+  }),
   T('task-view', {
-    cat: 'tweaks', title: 'Botão Visão de Tarefas escondido', tags: ['Aparência'],
-    desc: 'Tira o botão de visão de tarefas da barra.',
+    cat: 'tweaks', title: 'Esconder o botão Visão de Tarefas', tags: ['Aparência'],
+    desc: 'Tira da barra o botão de áreas de trabalho virtuais. O atalho Win+Tab continua funcionando.',
     reg: [{ path: ADV, name: 'ShowTaskViewButton', type: 'DWord', on: 0, off: 1 }],
   }),
   T('taskbar-left', {
@@ -682,13 +701,13 @@ else { $off = @($p | Where-Object { (@($_.RegistryValue) -join '') -eq '0' }); i
     reg: [{ path: ADV, name: 'TaskbarAl', type: 'DWord', on: 0, off: 1 }],
   }),
   T('search-icon', {
-    cat: 'tweaks', title: 'Busca só com ícone', tags: ['Aparência'],
-    desc: 'A busca vira um ícone discreto na barra.',
+    cat: 'tweaks', title: 'Pesquisa da barra só como ícone', tags: ['Aparência'],
+    desc: 'Troca a caixa de pesquisa larga por uma lupa e libera espaço na barra de tarefas.',
     reg: [{ path: HKCU + '\\Software\\Microsoft\\Windows\\CurrentVersion\\Search', name: 'SearchboxTaskbarMode', type: 'DWord', on: 1, off: 2 }],
   }),
   T('bsod-detail', {
-    cat: 'tweaks', title: 'Tela azul com mais detalhes', tags: ['Diagnóstico'],
-    desc: 'A tela azul mostra o código de parada em vez do texto genérico.',
+    cat: 'tweaks', title: 'Tela azul com detalhes do erro', tags: ['Diagnóstico'],
+    desc: 'Se o PC der tela azul, ela mostra o código e o arquivo que causou o erro. É a pista para achar o culpado (driver de vídeo, overclock, memória...).',
     reg: [{ path: HKLM + '\\SYSTEM\\CurrentControlSet\\Control\\CrashControl', name: 'DisplayParameters', type: 'DWord', on: 1, off: 0 }],
   }),
 ];
@@ -869,17 +888,43 @@ const ACTIONS = {
   },
   'Pagefile Automático': {
     tag: 'memoria', rec: true, restart: 'reboot', title: 'Memória virtual gerenciada pelo Windows',
-    desc: 'Volta o arquivo de paginação para o automático. Otimizadores que desligam ou fixam esse arquivo fazem jogos pesados, como o GTA, fecharem do nada.',
-    // PagingFiles é MultiString: cada item é "C:\pagefile.sys 1024 4096".
-    // Com ele vazio o Windows gerencia sozinho; com qualquer item o arquivo é fixo ou
-    // desligado. Antes o tipo declarado era String e o detect comparava [string] de um
-    // array, que nunca é vazio — dava "ligado" (1) nos 6 cenários, inclusive com pagefile
-    // fixo e desligado.
+    desc: 'Faz o Windows cuidar do arquivo de paginação. Sem ele, jogos pesados fecham do nada e o Windows fica sem memória.',
+    // VL: automatico de verdade.
+    //
+    // Gravar PagingFiles vazio NAO basta. Medido na maquina do dono: a chave ficou
+    // vazia, o Windows passou a ler '?:\\pagefile.sys' e o pagefile.sys nunca foi
+    // criado. Sem paginacao o Windows nao tem onde guardar memoria: o Explorer
+    // travou ("Area de Trabalho nao esta respondendo") e programas cairam com oom.
+    //
+    // O automatico do Windows sao DUAS coisas juntas:
+    //   1. Win32_ComputerSystem.AutomaticManagedPagefile = True
+    //   2. PagingFiles vazio (o Windows calcula o tamanho)
+    //
+    // O `on` faz as duas. O `detect` so diz ligado quando as duas valem. O
+    // `revert` grava um tamanho explicito razoavel em vez de deixar nulo.
     regs: [{ path: HKLM + '\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Memory Management', name: 'PagingFiles', type: 'MultiString', on: '', off: null }],
-    // Só é "automático" quando a lista está VAZIA. Qualquer item preenchido significa
-    // arquivo fixo ou desligado — e nesses casos o usuário precisa desta ação.
-    detect: `$v = Get-Val '${HKLM}\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Memory Management' 'PagingFiles'; $itens = @(); if ($null -ne $v) { $itens = @($v | Where-Object { $_ -ne $null -and ([string]\$_).Trim() -ne '' }) }; if ($itens.Count -eq 0) { Write-Output '1' } else { Write-Output '0' }`,
-    revert: `Write-Output 'ok'`,
+    on: `
+      $mm = 'HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Memory Management'
+      try {
+        $cs = Get-WmiObject Win32_ComputerSystem -EnableAllPrivileges -ErrorAction Stop
+        if (-not $cs.AutomaticManagedPagefile) {
+          $cs.AutomaticManagedPagefile = $true
+          $cs.Put() | Out-Null
+        }
+      } catch { }
+      Set-ItemProperty -LiteralPath $mm -Name PagingFiles -Value @() -Type MultiString -Force -ErrorAction SilentlyContinue
+      Write-Output 'ok'`,
+    detect: `
+      $auto = $false
+      try { $auto = [bool](Get-WmiObject Win32_ComputerSystem -ErrorAction Stop).AutomaticManagedPagefile } catch { }
+      $v = Get-Val '${HKLM}\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Memory Management' 'PagingFiles'
+      $tem = $false
+      if ($null -ne $v) { $tem = (@($v | Where-Object { $_ -ne $null -and ([string]$_).Trim() -ne '' }).Count -gt 0) }
+      if ($auto -and -not $tem) { Write-Output '1' } else { Write-Output '0' }`,
+    revert: `
+      $mm = 'HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Memory Management'
+      Set-ItemProperty -LiteralPath $mm -Name PagingFiles -Value @('C:\pagefile.sys 2048 8192') -Type MultiString -Force -ErrorAction SilentlyContinue
+      Write-Output 'ok'`,
   },
 };
 
