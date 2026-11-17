@@ -40,7 +40,7 @@ const ENUM = {
   fgType: { off: 'Off', lsfg11: 'LSFG1', lsfg23: 'LSFG2', lsfg31: 'LSFG3', lsfi: 'LSFI', lsfi1: 'LSFI1' },
   fgMode: { adaptive: 'ADAPTIVE', fixed: 'FIXED' },
   fg2Mode: { fusao: 'FUSION', normal: 'NORMAL' },
-  sync: { standard: 'DEFAULT', vsync: 'VSYNC2', gsync: 'GSYNC', adaptive: 'ADAPTIVE' },
+  sync: { standard: 'Default', vsync: 'Vsync1', gsync: 'Vsync2', adaptive: 'Vsync3' },
   capture: { dxgi: 'DXGI', wgc: 'WGC' },
   size: { performance: 'PERFORMANCE', quality: 'QUALITY' },
 };

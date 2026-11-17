@@ -969,8 +969,8 @@ const ACTIONS = {
       $tem = $false
       if ($null -ne $v) { $tem = (@($v | Where-Object { $_ -ne $null -and ([string]$_).Trim() -ne '' }).Count -gt 0) }
       if ($auto -and -not $tem) { Write-Output '1' } else { Write-Output '0' }`,
-    revert: `
-      $mm = 'HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Memory Management'
+    revert: String.raw`
+      $mm = 'HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management'
       Set-ItemProperty -LiteralPath $mm -Name PagingFiles -Value @('C:\pagefile.sys 2048 8192') -Type MultiString -Force -ErrorAction SilentlyContinue
       Write-Output 'ok'`,
   },
@@ -1108,7 +1108,7 @@ const TOOLS = {
   'net-reset': { title: 'Resetar a rede', btn: 'Resetar', desc: 'Refaz as configurações de rede do Windows (Winsock e TCP/IP). Use quando a internet funciona no celular mas não no PC.', note: 'Apaga IP fixo e pode desconfigurar VPNs. Reinicie o PC depois.', confirm: true, run: `netsh winsock reset 2>&1 | Out-Null; netsh int ip reset 2>&1 | Out-Null; Write-Output 'ok'` },
   'update-cleanup': { title: 'Limpar sobras do Windows Update', btn: 'Limpar', time: 'Leva de 5 a 20 minutos', desc: 'Apaga versões antigas de arquivos do sistema que as atualizações deixam para trás. Costuma liberar alguns GB no disco C:', run: `Dism /Online /Cleanup-Image /StartComponentCleanup 2>&1 | Select-Object -Last 2 | Out-String`, long: true },
   'repair': { title: 'Reparar arquivos do Windows', btn: 'Reparar', time: 'Leva de 15 a 40 minutos', desc: 'Roda o DISM e o SFC: verificam e consertam arquivos do Windows corrompidos.', confirm: true, run: `Dism /Online /Cleanup-Image /RestoreHealth 2>&1 | Select-Object -Last 2 | Out-String; sfc /scannow 2>&1 | Select-Object -Last 2 | Out-String`, long: true },
-  'restore-point': { title: 'Criar ponto de restauração', btn: 'Criar ponto', desc: 'Todo ajuste do VL já tem volta. O ponto de restauração é uma garantia extra do próprio Windows.', long: true, run: `
+  'restore-point': { title: 'Criar ponto de restauração', btn: 'Criar ponto', desc: 'Todo ajuste do VL já tem volta. O ponto de restauração é uma garantia extra do próprio Windows.', long: true, run: String.raw`
       $k = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\SystemRestore'
       $old = (Get-ItemProperty -LiteralPath $k -Name SystemRestorePointCreationFrequency -ErrorAction SilentlyContinue).SystemRestorePointCreationFrequency
       # O Windows aceita só um ponto a cada 24h. Sem esta liberação, o segundo
@@ -1359,16 +1359,6 @@ async function lerRegsAtuais(regs) {
 
 // Quais valores do ajuste NÃO estão no estado pedido? Lista curta para a mensagem e
 // para a decisão de gravar ou não o backup.
-function regsNoEstado(regs, atuais, want, tw) {
-  const alvo = (r) => String(want ? r.on : r.off);
-  const faltando = [];
-  regs.forEach((r, i) => {
-    const a = atuais[i];
-    if (!a || a.texto !== alvo(r)) faltando.push(r.name);
-  });
-  return faltando;
-}
-
 // O ajuste mexeu de verdade? Em tweaks SEM `padrao`, um valor ausente não é um estado
 // válido ("ligar = tirar o valor do ar" não existe no catálogo). Em tweaks COM `padrao`,
 // remover todos os valores também é um resultado — mas só para desligar.
@@ -2509,7 +2499,7 @@ const CHECKS = {
     // velho podia sair para a placa errada. Este é o do GDZ: filtra por fabricante
     // real (NVIDIA/AMD/Intel), ignora a integrada, e confere o Resizable BAR pelo
     // nvidia-smi.
-    run: `
+    run: String.raw`
       $level = 'ok'; $title = 'Placa de vídeo em ordem'; $lines = New-Object System.Collections.ArrayList
       foreach ($v in @(Get-CimInstance Win32_VideoController | Where-Object { $_.PNPDeviceID -match 'VEN_(10DE|1002|8086)' })) {
         $age = if ($v.DriverDate) { [int]((Get-Date) - $v.DriverDate).TotalDays } else { 0 }
@@ -2536,7 +2526,7 @@ const CHECKS = {
     // O check anterior comparava com $m.Speed (o que o pente DECLARA) e calculava
     // $ch (BankLabel) sem nunca usar — então dual channel nunca era detectado. Este
     // é o do GDZ: geração DDR, velocidade do kit pelo PartNumber, canal único e 16 GB.
-    run: `
+    run: String.raw`
       $lines = New-Object System.Collections.ArrayList
       $mods = @(Get-CimInstance Win32_PhysicalMemory)
       if (-not $mods.Count) { $o = @{ level = 'info'; title = 'Não foi possível ler a memória'; lines = @() }; Write-Output (Json $o); return }
@@ -2568,7 +2558,7 @@ const CHECKS = {
     // O check anterior só olhava o serviço amd3dvcacheSvc — o que dava falso aviso
     // em TODO Ryzen que não é X3D. Este é o do GDZ: procura o driver de chipset
     // pelos dispositivos, e só cobra a configuração especial nos X3D de dois CCDs.
-    run: `
+    run: String.raw`
       $lines = New-Object System.Collections.ArrayList
       $cpu = ([string](Get-CimInstance Win32_Processor | Select-Object -First 1).Name).Trim()
       [void]$lines.Add("Processador: $cpu")
@@ -2594,7 +2584,7 @@ const CHECKS = {
     // O check anterior só imprimia o microcode e devolvia 'ok' sempre — o cliente
     // lia "tudo certo" sem nada ter sido verificado. Este é o do GDZ: decodifica
     // o microcode, compara com o mínimo de cada geração e olha o Modo de Jogo.
-    run: `
+    run: String.raw`
       $cpu = ([string](Get-CimInstance Win32_Processor | Select-Object -First 1).Name).Trim()
       $lines = New-Object System.Collections.ArrayList; [void]$lines.Add("Processador: $cpu")
       $rev = (Get-ItemProperty 'HKLM:\HARDWARE\DESCRIPTION\System\CentralProcessor\0' -Name 'Update Revision' -ErrorAction SilentlyContinue).'Update Revision'
