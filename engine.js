@@ -1104,10 +1104,28 @@ const ONCES = {
 };
 
 const TOOLS = {
-  'flush-dns': { title: 'Limpar cache de DNS', btn: 'Limpar', desc: 'Resolve site ou servidor de jogo que "não abre" depois de mudar de rede ou de DNS. Instantâneo.', run: `Clear-DnsClientCache; Write-Output 'ok'` },
-  'net-reset': { title: 'Resetar a rede', btn: 'Resetar', desc: 'Refaz as configurações de rede do Windows (Winsock e TCP/IP). Use quando a internet funciona no celular mas não no PC.', note: 'Apaga IP fixo e pode desconfigurar VPNs. Reinicie o PC depois.', confirm: true, run: `netsh winsock reset 2>&1 | Out-Null; netsh int ip reset 2>&1 | Out-Null; Write-Output 'ok'` },
-  'update-cleanup': { title: 'Limpar sobras do Windows Update', btn: 'Limpar', time: 'Leva de 5 a 20 minutos', desc: 'Apaga versões antigas de arquivos do sistema que as atualizações deixam para trás. Costuma liberar alguns GB no disco C:', run: `Dism /Online /Cleanup-Image /StartComponentCleanup 2>&1 | Select-Object -Last 2 | Out-String`, long: true },
-  'repair': { title: 'Reparar arquivos do Windows', btn: 'Reparar', time: 'Leva de 15 a 40 minutos', desc: 'Roda o DISM e o SFC: verificam e consertam arquivos do Windows corrompidos.', confirm: true, run: `Dism /Online /Cleanup-Image /RestoreHealth 2>&1 | Select-Object -Last 2 | Out-String; sfc /scannow 2>&1 | Select-Object -Last 2 | Out-String`, long: true },
+  'flush-dns': { title: 'Limpar cache de DNS', btn: 'Limpar', desc: 'Resolve site ou servidor de jogo que "não abre" depois de mudar de rede ou de DNS. Instantâneo.', run: String.raw`
+Clear-DnsClientCache -ErrorAction SilentlyContinue
+ipconfig /flushdns | Out-Null
+Write-Output 'VL_AVISO: cache de DNS limpo.'` },
+  'net-reset': { title: 'Resetar a rede', btn: 'Resetar', desc: 'Refaz as configurações de rede do Windows (Winsock e TCP/IP). Use quando a internet funciona no celular mas não no PC.', note: 'Apaga IP fixo e pode desconfigurar VPNs. Reinicie o PC depois.', confirm: true, run: String.raw`
+ipconfig /flushdns | Out-Null
+netsh winsock reset | Out-Null
+netsh int ip reset | Out-Null
+Write-Output 'VL_AVISO: rede resetada. Reinicie o PC para concluir.'` },
+  'update-cleanup': { title: 'Limpar sobras do Windows Update', btn: 'Limpar', time: 'Leva de 5 a 20 minutos', desc: 'Apaga versões antigas de arquivos do sistema que as atualizações deixam para trás. Costuma liberar alguns GB no disco C:', run: String.raw`
+$d = $env:SystemDrive.TrimEnd(':')
+$antes = (Get-PSDrive $d).Free
+Dism.exe /Online /Cleanup-Image /StartComponentCleanup /NoRestart | Out-Null
+if ($LASTEXITCODE -ne 0) { Write-Output ("VL_ERRO: o DISM terminou com o código " + $LASTEXITCODE + ". Tente de novo depois de reiniciar o PC."); exit }
+$gb = [math]::Round(((Get-PSDrive $d).Free - $antes) / 1GB, 2)
+if ($gb -gt 0.05) { Write-Output ('VL_AVISO: limpeza concluída, ' + $gb + ' GB liberados.') } else { Write-Output 'VL_AVISO: limpeza concluída. Não havia sobras grandes de atualização.' }`, long: true },
+  'repair': { title: 'Reparar arquivos do Windows', btn: 'Reparar', time: 'Leva de 15 a 40 minutos', desc: 'Roda o DISM e o SFC: verificam e consertam arquivos do Windows corrompidos.', confirm: true, run: String.raw`
+Dism.exe /Online /Cleanup-Image /RestoreHealth /NoRestart | Out-Null
+$dism = $LASTEXITCODE
+sfc.exe /scannow | Out-Null
+if ($dism -ne 0) { Write-Output ("VL_ERRO: o DISM não conseguiu reparar a imagem do Windows (código " + $dism + "). Confira a internet e tente de novo."); exit }
+Write-Output 'VL_AVISO: verificação concluída. Se algum arquivo foi corrigido, reinicie o PC.'`, long: true },
   'restore-point': { title: 'Criar ponto de restauração', btn: 'Criar ponto', desc: 'Todo ajuste do VL já tem volta. O ponto de restauração é uma garantia extra do próprio Windows.', long: true, run: String.raw`
       $k = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\SystemRestore'
       $old = (Get-ItemProperty -LiteralPath $k -Name SystemRestorePointCreationFrequency -ErrorAction SilentlyContinue).SystemRestorePointCreationFrequency
@@ -2332,6 +2350,9 @@ function limpaSaida(txt) {
   return String(txt || '')
     .replace(/\u0000/g, '')
     .replace(/\r/g, '')
+    // Os marcadores do script (VL_AVISO:/VL_ERRO:) são para o motor, não para o
+    // cliente. Sem esta linha o toast mostrava "VL_AVISO: cache de DNS limpo.".
+    .replace(/^\s*VL_(AVISO|ERRO):\s*/gm, '')
     .split('\n')
     .map((l) => l.trim())
     .filter((l) => l && !/^\s*\+/.test(l) && !/\.ps1:\d+/.test(l) && !/^(No linha|At line|CategoryInfo|FullyQualifiedErrorId)/i.test(l) && !/\d+ characters?/.test(l))
@@ -2476,14 +2497,43 @@ async function provaDeEfeito(prova, saida) {
   return { ok: true };
 }
 
+// Timeout de cada ferramenta, igual ao programa de referência (TWEAK_TOOLS.timeout):
+//   restore-point   5 min     (antes: 60 min, 12x)
+//   flush-dns      30 s       (antes: 2 min, 4x)
+//   net-reset       2 min     (igual)
+//   update-cleanup 40 min     (antes: 60 min)
+//   repair         60 min     (igual)
+//
+// Antes era um booleano `long` que mandava 60 min para tudo. O efeito prático: uma
+// ferramenta travada deixava o cliente esperando 1 hora, e o flush-dns (que leva
+// menos de 1 s) tinha o mesmo teto de um DISM.
+const TOOL_TIMEOUT = {
+  'restore-point': 300000,
+  'flush-dns': 30000,
+  'net-reset': 120000,
+  'update-cleanup': 2400000,
+  'repair': 3600000,
+};
+
 async function runTool(id) {
   const t = TOOLS[id];
   if (!t) return { success: false, error: 'ferramenta desconhecida' };
-  const r = await ps(t.run, t.long ? 60 * 60 * 1000 : 120000);
+  const limite = TOOL_TIMEOUT[id] || 120000;
+  const r = await ps(t.run, limite);
   const v = resultadoPs(r, r.out);
   if (!v.ok) {
     // DISM sem admin: "Erro: 740 ... Permissões elevadas obrigatórias" fica na saída
     // padrão e o PowerShell termina com 0. Aqui vira success:false.
+    //
+    // Mas o restore-point pode falhar por um motivo QUE NÃO É permissão: o Windows
+    // devolve "Acesso negado" quando a Proteção do Sistema está desligada para o
+    // disco. Nesse caso mensagemDaFalha trocava a explicação ("verifique a Proteção
+    // do Sistema") por "Precisa de administrador", e o cliente ia atrás do problema
+    // errado. Se o script escreveu um VL_ERRO: com texto próprio, ele tem razão.
+    const textoDoScript = /VL_ERRO:\s*(.+)/i.exec(String(v.saidaOk || ''));
+    if (textoDoScript && String(textoDoScript[1]).trim()) {
+      return { success: false, error: limpaSaida(textoDoScript[1].trim()) };
+    }
     return { success: false, error: await mensagemDaFalha(v) };
   }
   const msg = limpaSaida(v.saidaOk).slice(-400);
