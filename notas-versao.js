@@ -10,6 +10,15 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.38': {
+    corrigido: [
+      'As 5 ferramentas de reparo agora fazem o que precisam fazer: "Limpar cache de DNS" limpa de fato (antes so limpava o cache do servidor de DNS e nao o do Windows), "Resetar a rede" tambem limpa o DNS, e as duas de DISM mostram quantos GB foram liberados e avisam quando o comando falha.',
+      'Cada ferramenta tem o seu proprio tempo limite. Antes, uma ferramenta travada podia deixar a tela esperando 1 hora, e o "Limpar DNS" (que leva menos de 1 segundo) tinha o mesmo teto de um reparo completo do Windows.',
+      'O ponto de restauracao agora explica o motivo real quando o Windows recusa: se a Protecao do Sistema estiver desligada no disco, a mensagem diz isso em vez de mandar reiniciar como administrador.',
+      'A leitura do identificador do PC agora tenta 3 vezes, com 2 segundos de espera, igual ao programa de referencia. Antes, uma resposta vazia do Windows logo apos ligar o PC fazia o login falhar e o cliente nao tinha o que fazer.',
+    ],
+    novo: [],
+  },
   '1.4.37': {
     corrigido: [
       'As verificacoes de hardware voltaram a dizer a verdade. Os scripts internos estavam em um formato que fazia o Windows receber os caminhos de registro sem a barra invetida (HKLM:SOFTWARE em vez de HKLM:\SOFTWARE). O resultado: a verificacao respondia "HAGS desligado" num PC com o HAGS ligado, e nunca detectava o aviso de BIOS nos processadores Intel. Afetava tambem 6 ajustes antigos (Game Bar, OBS, memoria do sistema, restauracao, escala da tela).',
