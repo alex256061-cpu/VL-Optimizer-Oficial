@@ -61,6 +61,16 @@ const PADRAO = {
   github: { owner: 'alex256061-cpu', repo: 'VL-Optimizer-Oficial' },
   assets: 'assets',
   cores: { principal: '#c8101f', secundaria: '#050506' },
+  // Assinatura da atualização (ver assinatura-update.js e ferramentas/chave-atualizacao.js).
+  //
+  // chaveReleasePublica: Ed25519 em DER/SPKI base64. Vazia = verificação DESLIGADA
+  // (o app registra "sem-chave" no estado, não finge que protege). Cada revendedor
+  // usa a PRÓPRIA chave — é por marca, não por produto.
+  //
+  // assinaturaModo: 'obrigatorio' (igual ao GDZ: sem assinatura não instala) ou
+  // 'opcional' (site sem assinatura publicada não trava a atualização).
+  chaveReleasePublica: '',
+  assinaturaModo: 'obrigatorio',
 };
 
 // Qual marca usar.

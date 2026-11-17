@@ -11,5 +11,6 @@
   "site": "https://vl-optimizer.pages.dev",
   "github": { "owner": "alex256061-cpu", "repo": "VL-Optimizer-Oficial" },
   "assets": "assets",
-  "cores": { "principal": "#c8101f", "secundaria": "#050506" }
+  "cores": { "principal": "#c8101f", "secundaria": "#050506" },
+  "chaveReleasePublica": "MCowBQYDK2VwAyEAM57MQF8MYD/3TIvewvKPBRumGZZaGut4WGm02KWTcCE="
 }

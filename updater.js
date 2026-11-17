@@ -1,4 +1,4 @@
-﻿// updater.js â€” atualizaÃ§Ã£o automÃ¡tica pelo GitHub Releases.
+// updater.js â€” atualizaÃ§Ã£o automÃ¡tica pelo GitHub Releases.
 //
 // O app consulta o release mais recente de alex256061-cpu/VL-Optimizer-Oficial e, quando hÃ¡ versÃ£o
 // nova, baixa em segundo plano. O usuÃ¡rio escolhe quando instalar: nada reinicia sozinho no meio de
@@ -8,8 +8,10 @@
 // abre normalmente e a tela mostra "sem atualizaÃ§Ã£o" em vez de erro.
 'use strict';
 
-const { app, shell } = require('electron');
+const fs = require('fs');
+const { app, shell, net } = require('electron');
 const MARCA = require('./marca');
+const assinatura = require('./assinatura-update');
 
 // De onde vem a atualização.
 //
@@ -27,6 +29,28 @@ const UPDATE_URL = MARCA.urlAtualizacoes;
 const DOWNLOAD_PAGE = MARCA.urlDownload;
 const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;   // 6 horas
 
+// ── Assinatura da atualização ────────────────────────────────────────────────
+//
+// O electron-updater já confere o SHA-512 do .exe baixado contra o latest.yml. Isso
+// pega download corrompido, mas NÃO pega quem troca o .exe E o latest.yml juntos —
+// o sha512 do yml passa a descrever o arquivo malicioso e bate.
+//
+// A proteção extra é a mesma do GDZ: uma assinatura Ed25519 separada, feita com uma
+// chave que NÃO está no servidor de arquivos e cuja pública está embutida aqui.
+// A conferência em si mora em assinatura-update.js (testável fora do Electron).
+//
+// De onde vem a assinatura: GET <site>/atualizacoes/assinatura/<versão> -> { signature }
+// (no GDZ é GET {API_URL}/updates/signature/<versão>, sem autenticação — aqui igual).
+const ASSINATURA_URL = UPDATE_URL + '/assinatura/';
+
+// PAR DO DEPLOY (assinatura-update.js / ferramentas/chave-atualizacao.js):
+//   sem chave   -> verificação DESLIGADA (estado `assinatura: 'sem-chave'`)
+//   com chave   -> tudo que for instalado precisa da assinatura dela
+// A chave é da marca: cada revendedor assina a própria build com a própria chave.
+const CHAVE_RELEASE = String(MARCA.chaveReleasePublica || '').trim();
+const ASSINATURA_MODO = MARCA.assinaturaModo === 'opcional' ? 'opcional' : 'obrigatorio';
+
+
 let autoUpdater = null;
 let state = {
   checked: false,
@@ -36,6 +60,8 @@ let state = {
   downloading: false,
   percent: 0,
   downloaded: false,
+  conferindo: false,
+  assinatura: null, // null | 'conferida' | 'sem-chave' | 'nao-conferida' | 'reprovada'
   error: null,
   notes: null,      // texto do release (o que mudou)
 };
@@ -51,6 +77,59 @@ function emit() {
 function onChange(fn) {
   if (typeof fn === 'function') listeners.push(fn);
   return () => { listeners = listeners.filter((f) => f !== fn); };
+}
+
+// Busca a assinatura do instalador no site. Sem autenticação, como no GDZ.
+//
+// Devolve a string base64 da assinatura, ou null quando o site não a tem / está fora.
+// Nunca lança: quem chama trata "sem assinatura" conforme o modo.
+async function buscarAssinatura(versao) {
+  if (!versao) return null;
+  const url = ASSINATURA_URL + encodeURIComponent(versao);
+  try {
+    const r = await net.fetch(url, {
+      method: 'GET',
+      headers: { 'content-type': 'application/json', 'user-agent': MARCA.nome + '/' + currentVersion() },
+      signal: AbortSignal.timeout(12000),   // mesmo API_TIMEOUT_MS do GDZ
+    });
+    if (!r || r.status !== 200) return null;
+    const dados = await r.json().catch(() => null);
+    const sig = dados && dados.signature;
+    return typeof sig === 'string' && sig.trim() ? sig.trim() : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+// Confere o instalador baixado ANTES de liberar a instalação.
+//
+// Este é o ponto do GDZ (`verifyInstaller` + o tratamento dentro de `update-downloaded`):
+// se a conferência falhar, o instalador é APAGADO e a atualização não fica "pronta".
+// O sha512 do electron-updater continua valendo — isto é uma camada a mais, não troca.
+//
+// Devolve null quando pode instalar, ou a MENSAGEM de erro quando não pode.
+async function verificarInstalador(arquivo, versao) {
+  if (!arquivo) return assinatura.MSG_SEM_ASSINATURA;
+
+  const sig = await buscarAssinatura(versao);
+  const r = await assinatura.conferirArquivo({
+    arquivo,
+    versao,
+    assinaturaB64: sig,
+    publicaB64: CHAVE_RELEASE,
+    modo: ASSINATURA_MODO,
+  });
+
+  if (r.ok) {
+    state.assinatura = r.pulado ? (r.motivo === 'sem-chave' ? 'sem-chave' : 'nao-conferida') : 'conferida';
+    return null;
+  }
+
+  state.assinatura = 'reprovada';
+  state.assinaturaDetalhe = r.motivo;
+  try { fs.unlinkSync(arquivo); }        // lixo perigoso não fica no disco
+  catch (e) { /* já não existia: nada a fazer */ }
+  return r.mensagem || assinatura.MSG_NAO_CONFERE;
 }
 
 // O electron-updater entrega releaseNotes como string ou como lista de {version, note}.
@@ -85,7 +164,15 @@ function currentVersion() {
 }
 
 function status() {
-  return { ...state, currentVersion: currentVersion(), repo: UPDATE_URL, site: SITE };
+  return {
+    ...state,
+    currentVersion: currentVersion(),
+    repo: UPDATE_URL,
+    site: SITE,
+    // Transparência: a tela (e o suporte) consegue dizer se a assinatura está ativa.
+    assinaturaAtiva: assinatura.temChave(CHAVE_RELEASE),
+    assinaturaModo: ASSINATURA_MODO,
+  };
 }
 
 // Abre a página de download DO SITE. Serve de saída quando a atualização automática
@@ -127,6 +214,9 @@ function init() {
     // releaseNotes vem do release do GitHub; pode ser string ou array de {version, note}
     state.notes = extrairNotas(info);
     state.error = null;
+    state.downloaded = false;
+    state.conferindo = false;
+    state.assinatura = null;
     emit();
   });
   autoUpdater.on('update-not-available', () => {
@@ -140,12 +230,46 @@ function init() {
     state.percent = p && typeof p.percent === 'number' ? Math.round(p.percent) : 0;
     emit();
   });
-  autoUpdater.on('update-downloaded', (info) => {
+  autoUpdater.on('update-downloaded', async (info) => {
+    // Igual ao GDZ: o download NÃO é a última palavra. Antes de marcar "baixado" (e
+    // portanto antes de liberar o botão Instalar), a assinatura é conferida.
+    // O evento é async de propósito: a conferência lê ~140 MB. A tela mostra
+    // "conferindo" nesse meio tempo (state.conferindo).
+    const versao = info && info.version ? info.version : state.version;
+    const arquivo = info && info.downloadedFile ? info.downloadedFile : null;
+
     state.downloading = false;
+    state.downloaded = false;
+    state.conferindo = true;
+    state.version = versao || state.version;
+    if (!state.notes) state.notes = extrairNotas(info);
+    emit();
+
+    let erro = null;
+    try {
+      erro = await verificarInstalador(arquivo, versao);
+    } catch (e) {
+      // Erro inesperado na conferência conta como reprovação: não instala no escuro.
+      state.assinatura = 'reprovada';
+      erro = assinatura.MSG_SEM_ASSINATURA;
+      try { if (arquivo) fs.unlinkSync(arquivo); } catch (e2) { }
+    }
+
+    state.conferindo = false;
+    if (erro) {
+      // Instalador descartado: a tela volta a "sem atualização pronta" com o motivo.
+      state.available = false;
+      state.downloaded = false;
+      state.version = null;
+      state.percent = 0;
+      state.error = erro;
+      emit();
+      return;
+    }
+
     state.downloaded = true;
     state.available = true;
-    state.version = info && info.version ? info.version : state.version;
-    if (!state.notes) state.notes = extrairNotas(info);
+    state.version = versao || state.version;
     emit();
   });
   autoUpdater.on('error', (e) => {
@@ -172,6 +296,11 @@ async function check() {
 // Instala a versÃ£o baixada e reinicia. SÃ³ Ã© chamado por aÃ§Ã£o explÃ­cita do usuÃ¡rio.
 function install() {
   if (!autoUpdater || !state.downloaded) return { ok: false, error: 'Nenhuma atualizaÃ§Ã£o baixada.' };
+  // Segunda fechadura: `downloaded` só fica true depois da assinatura conferida, mas
+  // se algo reprovou no caminho, o botão não instala de jeito nenhum.
+  if (state.assinatura === 'reprovada') {
+    return { ok: false, error: assinatura.MSG_NAO_CONFERE };
+  }
   try {
     setImmediate(() => { try { autoUpdater.quitAndInstall(false, true); } catch (e) { } });
     return { ok: true };
@@ -193,4 +322,9 @@ function stop() {
   if (timer) { clearInterval(timer); timer = null; }
 }
 
-module.exports = { start, stop, check, install, status, onChange, openReleasePage, UPDATE_URL, SITE };
+module.exports = {
+  start, stop, check, install, status, onChange, openReleasePage, UPDATE_URL, SITE,
+  // Exposto para teste e para o relatório de suporte poder conferir sem instalar.
+  verificarInstalador,
+  ASSINATURA_URL,
+};

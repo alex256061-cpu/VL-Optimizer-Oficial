@@ -26,13 +26,90 @@ const CONFIG = {
 };
 
 const DIR = MARCA.dirDados;
-const SESSAO = path.join(DIR, 'sessao.json');
+// LOPT_DATA_DIR força outra pasta de dados (testes e --shots). O engine.js já respeita a
+// variável (main.js chama core.setDataDir(dataDir())); o login ficava preso em APPDATA e
+// não dava para testar a sessão sem escrever na pasta real de %APPDATA%.
+const DIR_SESSAO = process.env.LOPT_DATA_DIR ? path.resolve(process.env.LOPT_DATA_DIR) : DIR;
+const SESSAO = path.join(DIR_SESSAO, 'sessao.json');
+
+// ── arquivo de sessão cifrado (mesmo esquema do GDZ: auth.bin + safeStorage) ─
+//
+// O GDZ grava a sessão em auth.bin cifrado com o safeStorage do Electron (DPAPI no
+// Windows); nós gravávamos sessao.json em texto puro. Ver t6-scaling.md § loadAuth /
+// saveAuth. A ordem de leitura tenta, nesta ordem:
+//
+//   1. auth.bin  cifrado        -> caminho novo
+//   2. SESSAO.bin cifrado       -> cifrado, mas sem poder gravar em auth.bin
+//   3. sessao.json (texto puro) -> arquivo antigo; é MIGRADO para cifrado na 1ª leitura
+//
+// O passo 3 é o que mantém o login de quem já usa o app: o sessao.json que está no PC
+// passa a ser lido e, se for bem lido, ainda é aceito (e apagado depois que a versão
+// cifrada for gravada).
+const AUTH_PRINCIPAL = path.join(DIR_SESSAO, 'auth.bin');
+const AUTH_ALTERNATIVO = path.join(DIR_SESSAO, 'sessao.bin');
+
+// Tolerância do anti-rollback, literal do GDZ (refreshEntitlement).
+const CLOCK_ROLLBACK_TOLERANCE_MS = 600000;
+
+// Partes que SOBREVIVEM a uma gravação de sessão: o token vem do servidor, mas o que
+// o servidor não manda (maxSeen, lastSeenAt, a última licença boa) não pode ser perdido.
+// No GDZ o mesmo campo é carregado em acceptEntitlement antes de gravar; aqui é aqui.
+const CAMPOS_LOCAIS = ['maxSeen', 'lastSeenAt', 'licenca', 'tokens'];
 
 function configurado() {
   return Boolean(CONFIG.url && CONFIG.anonKey);
 }
 
+// O safeStorage só existe dentro do Electron. Fora dele (teste em node puro, ou um
+// ambiente em que o Electron não o expõe) o require devolve null e tudo cai no texto
+// puro — o app continua entrando, só não cifra. Nunca lança.
+function safeStorageElectron() {
+  try {
+    const el = require('electron');
+    const ss = el && el.safeStorage;
+    if (ss && typeof ss.isEncryptionAvailable === 'function' && ss.isEncryptionAvailable()) return ss;
+  } catch (e) { }
+  return null;
+}
+
+// Grava cifrado onde der. Devolve { caminho, cifrado }.
+// Mesma regra de ordem do GDZ (loadAuth): sem cifra disponível, não há sessão cifrada.
+function gravarCifrado(texto) {
+  const ss = safeStorageElectron();
+  if (!ss) return { caminho: null, cifrado: false };
+  let buf = null;
+  try { buf = ss.encryptString(texto); } catch (e) { return { caminho: null, cifrado: false }; }
+  for (const alvo of [AUTH_PRINCIPAL, AUTH_ALTERNATIVO]) {
+    try {
+      fs.mkdirSync(DIR_SESSAO, { recursive: true });
+      fs.writeFileSync(alvo, buf);
+      return { caminho: alvo, cifrado: true };
+    } catch (e) { }
+  }
+  return { caminho: null, cifrado: false };
+}
+
+// Lê um arquivo cifrado. Devolve o objeto, `undefined` quando o arquivo não existe e
+// `null` quando existe mas não abriu (cifra indisponível, arquivo de outro PC/usuário
+// ou corrompido). A diferença importa: no `undefined` dá para apagar e trocar; no null
+// NÃO se pode apagar, senão um auth.bin de outra conta de Windows derrubaria o login.
+function lerCifrado(alvo) {
+  try {
+    if (!fs.existsSync(alvo)) return undefined;
+    const ss = safeStorageElectron();
+    if (!ss) return null; // arquivo cifrado e sem como abrir: não é texto puro
+    const j = JSON.parse(ss.decryptString(fs.readFileSync(alvo)));
+    if (j && j.access_token) return j;
+  } catch (e) { }
+  return null;
+}
+
 function lerSessao() {
+  for (const alvo of [AUTH_PRINCIPAL, AUTH_ALTERNATIVO]) {
+    const j = lerCifrado(alvo);
+    if (j && j.access_token) return j;
+  }
+  // Arquivo antigo, em texto puro.
   try {
     const j = JSON.parse(fs.readFileSync(SESSAO, 'utf8'));
     if (j && j.access_token) return j;
@@ -40,11 +117,69 @@ function lerSessao() {
   return null;
 }
 
+// Devolve o conteúdo cru do sessao.json antigo (para desfazer a migração se o login
+// falhar) ou null.
+function lerSessaoTextoPuro() {
+  try {
+    const bruto = fs.readFileSync(SESSAO, 'utf8');
+    const j = JSON.parse(bruto);
+    if (j && j.access_token) return { s: j, bruto };
+  } catch (e) { }
+  return null;
+}
+
+// Carimba o MAIOR instante já visto neste PC (anti-rollback de relógio).
+// Espelha o maxSeen do GDZ (acceptEntitlement / refreshEntitlement):
+//   maxSeen = Math.max(agora, maxSeen || 0)
+// No GDZ o carimbo é atualizado quando ele aceita uma licença nova e no modo offline.
+// Aqui não há arquivo de licença separado da sessão, então o carimbo vive na sessão:
+// toda verificação de sessão (`carimbar(s, true)`) atualiza o carimbo, e a gravação da
+// sessão também faz Math.max (ver gravarSessao).
+// mexer: false só informa o carimbo guardado e se o relógio está atrasado, sem gravar.
+// Só o `entrar()` usa false, para ler o maxSeen antigo antes de regravar a sessão.
+function carimbar(s, mexer) {
+  const guardado = (s && typeof s.maxSeen === 'number' && isFinite(s.maxSeen)) ? s.maxSeen : 0;
+  const agora = Date.now();
+  const atrasado = !!(guardado && agora < guardado - CLOCK_ROLLBACK_TOLERANCE_MS);
+  if (!mexer) return { guardado, atrasado };
+  if (agora > guardado) {
+    s.maxSeen = agora;
+    // Grava de volta só quando o carimbo mudou de fato: o maxSeen nunca diminui, então
+    // depois do primeiro carimbo do dia não há escrita em disco a cada leitura.
+    gravarSessao(s);
+  }
+  return { guardado, atrasado };
+}
+
 function gravarSessao(s) {
   try {
-    fs.mkdirSync(DIR, { recursive: true });
-    if (!s) { try { fs.unlinkSync(SESSAO); } catch (e) { } return; }
-    fs.writeFileSync(SESSAO, JSON.stringify(s), 'utf8');
+    fs.mkdirSync(DIR_SESSAO, { recursive: true });
+    if (!s) {
+      for (const alvo of [AUTH_PRINCIPAL, AUTH_ALTERNATIVO, SESSAO]) {
+        try { if (fs.existsSync(alvo)) fs.unlinkSync(alvo); } catch (e) { }
+      }
+      return;
+    }
+    // Uma gravação da sessão não pode apagar o que o servidor não manda de volta
+    // (maxSeen, lastSeenAt, última licença boa). Vale também quando `s` é o objeto LIDO
+    // do sessao.json e `s` ainda não tem maxSeen nenhum.
+    let anterior = null;
+    try { anterior = lerSessao(); } catch (e) { }
+    const base = (anterior && anterior.access_token === s.access_token) ? anterior : s;
+    for (const k of CAMPOS_LOCAIS) {
+      if (base && base[k] !== undefined && s[k] === undefined) s[k] = base[k];
+    }
+    s.maxSeen = Math.max(Date.now(), Number(s.maxSeen) || 0);
+    s.lastSeenAt = Date.now();
+
+    const texto = JSON.stringify(s);
+    const r = gravarCifrado(texto);
+    if (r.cifrado) {
+      // Migrou: o texto puro antigo não fica no disco.
+      try { if (fs.existsSync(SESSAO)) fs.unlinkSync(SESSAO); } catch (e) { }
+    } else {
+      fs.writeFileSync(SESSAO, texto, 'utf8');
+    }
   } catch (e) { }
 }
 
@@ -65,13 +200,16 @@ async function pedir(caminho, opcoes) {
 
   // Sem rede, servidor fora do ar ou DNS errado, o fetch rejeita. Isso não pode subir como
   // exceção e fechar o app: vira um resultado tratado, que a tela mostra em português.
+  // `semRede` separa "não houve resposta" de "o servidor respondeu errado" — é o `offline`
+  // do apiCall do GDZ (t6-scaling.md). O modo offline depende dessa diferença.
   let r;
   try {
     r = await fetch(url, o);
   } catch (e) {
-    const semRede = /ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ETIMEDOUT|fetch failed/i.test(String(e && e.message));
+    const semRede = /ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ETIMEDOUT|EHOSTUNREACH|ENETUNREACH|ECONNRESET|fetch failed/i.test(String(e && e.message));
     return {
       ok: false,
+      offline: true,
       status: 0,
       dados: { message: semRede ? 'Sem conexão com o servidor. Verifique sua internet.' : 'Falha ao conectar: ' + (e && e.message) },
     };
@@ -80,7 +218,11 @@ async function pedir(caminho, opcoes) {
   const texto = await r.text();
   let dados = null;
   try { dados = texto ? JSON.parse(texto) : null; } catch (e) { dados = { raw: texto }; }
-  return { ok: r.ok, status: r.status, dados };
+  // O apiCall do GDZ considera offline qualquer 5xx (o `fetch` do Chromium não rejeita em
+  // 500 como o do Node). Aqui 5xx vira offline do mesmo jeito; 404 é licença inexistente,
+  // não é queda de servidor — vai para o caminho normal, como no refreshEntitlement.
+  const offline = r.status >= 500;
+  return { ok: r.ok, offline, status: r.status, dados };
 }
 
 // ── mensagens de erro em português ────────────────────────────────────────
@@ -105,6 +247,13 @@ async function entrar(email, senha) {
 
   const limpo = String(email).trim().toLowerCase();
 
+  // 0. Anti-rollback: o maxSeen do arquivo é lido ANTES de regravar a sessão. No GDZ a
+  // entitlement é recusada quando o relógio está atrasado (refreshEntitlement:
+  // "O relógio do Windows está atrasado."). Aqui o login é justamente o caminho da
+  // internet, então ele continua valendo — quem bloqueia é o `sessao()` sem servidor.
+  // O login, ao passar, ressincroniza o carimbo (gravarSessao faz Math.max).
+  const textoPuro = lerSessaoTextoPuro();
+
   // 1. bloqueio por excesso de tentativas
   const bl = await pedir('/rest/v1/rpc/login_bloqueado', {
     method: 'POST',
@@ -125,6 +274,11 @@ async function entrar(email, senha) {
       method: 'POST',
       body: JSON.stringify({ p_email: limpo, p_ip: null }),
     }).catch(() => { });
+    // A migração do sessao.json antigo só pode acontecer num login que deu certo. Se a
+    // senha estava errada, o arquivo antigo volta intacto.
+    if (textoPuro) {
+      try { fs.mkdirSync(DIR_SESSAO, { recursive: true }); fs.writeFileSync(SESSAO, textoPuro.bruto, 'utf8'); } catch (e) { }
+    }
     return { success: false, message: traduzir(r.dados && (r.dados.error_description || r.dados.msg || r.dados.message), r.status) };
   }
 
@@ -139,9 +293,25 @@ async function entrar(email, senha) {
     expires_at: Date.now() + (Number(r.dados.expires_in) || 3600) * 1000,
     user: r.dados.user,
   };
+  // maxSeen: gravarSessao já faz Math.max(agora, maxSeen anterior). O anterior vem do
+  // arquivo antigo, quando existe.
   gravarSessao(s);
   const p = await perfil(s);
+  // A mesma verificação do servidor que o `sessao()` faz: é ela que diz se o plano vale
+  // neste PC. O resultado fica guardado na sessão (é a referência do offlineUntil).
   const v = await verificarPc(s);
+  gravarSessao(s);
+  // O login só conta se a licença vale neste PC. Credencial certa com plano já usado em
+  // outro PC não pode levar para o painel (a tela de planos lê r.user direto).
+  if (v && v.success === false && (v.reason === 'other_device' || v.reason === 'expired')) {
+    return Object.assign({ success: false }, sessaoRecusada({
+      motivo: v.reason,
+      licenca: s.licenca || null,
+      email: (p && p.email) || (s.user && s.user.email) || null,
+      plan: (p && p.plan) || 'free',
+      pcBound: !!v.pcBound,
+    }));
+  }
   return { success: true, user: { ...p, ...v } };
 }
 
@@ -183,10 +353,12 @@ async function renovar(s) {
     body: JSON.stringify({ refresh_token: s.refresh_token }),
   });
   if (!r.ok) {
-    // status 0 = nao houve resposta (sem rede, DNS, servidor fora). Nao e revogacao.
-    // Antes o app apagava a sessao e mandava quem pagou para a tela de login por
-    // causa de 3 segundos sem internet.
-    if (r.status === 0) return null;
+    // Sem rede (o `offline` do pedir) não é revogação: quem paga continua entrando.
+    // Antes desta mudança, 3 segundos de rede caída mandavam o cliente para a tela de
+    // login. Agora a sessão velha fica no disco e quem decide se ela ainda vale é
+    // `offlineUntil` em `sessaoValida` — como o refreshEntitlement do GDZ.
+    // A sessão é PRESERVADA (sem `gravarSessao(null)`) antes de devolver null.
+    if (r.status === 0 || r.offline) return null;
     gravarSessao(null);
     return null;
   }
@@ -196,18 +368,154 @@ async function renovar(s) {
     expires_at: Date.now() + (Number(r.dados.expires_in) || 3600) * 1000,
     user: r.dados.user || s.user,
   };
+  // Carrega o que não vem do servidor (maxSeen, a licença guardada). O maxSeen continua
+  // sendo o MAIOR — "agora" depois de uma queda do relógio não apaga o carimbo antigo.
+  for (const k of CAMPOS_LOCAIS) {
+    if (s[k] !== undefined) novo[k] = s[k];
+  }
+  // Se o refresh já está vencido pelo relógio do PC, ele pode ser recusado no próximo
+  // arranque por causa do rollback. Gravar o carimbo novo só DIMINUI a proteção, então
+  // o maxSeen antigo fica.
   gravarSessao(novo);
   return novo;
+}
+
+// ── licença offline (offlineUntil) ────────────────────────────────────────
+//
+// O GDZ recebe `offlineUntil` assinado pelo servidor dentro da entitlement e, sem
+// internet, aceita o uso até essa data (refreshEntitlement). Ver t6-scaling.md.
+//
+// O nosso modelo não tem esse campo: o Supabase devolve `licenseExpiresAt` (a validade
+// do plano) e nada mais. No lugar de inventar um endpoint, a validade offline é
+// calculada a partir da verificação boa do servidor, em DIAS, com duas guardas:
+//
+//   - a base é o instante da verificação que o servidor APROVOU (`licenca.okAt`); se o
+//     servidor entregou uma validade de licença nova (maior que a guardada), a base é
+//     essa validade — renovar o plano estende o prazo offline;
+//   - o teto é a validade da licença (`licenseExpiresAt`): min(base + N dias, validade).
+//     Licença de 3 dias não vira N dias de uso offline.
+//
+// `N` é o DIAS_OFFLINE abaixo. O briefing não fixa o número; ele vem daqui e pode ser
+// trocado sem tocar no resto do código.
+const DIAS_OFFLINE = 7;
+
+// `lifetime` e sem validade = não expira; para a licença offline é o caso mais longo
+// que existe: validade infinito.
+function validadeLicencaMs(exp) {
+  if (exp === null || exp === undefined || exp === '') return Infinity;
+  const t = typeof exp === 'number' ? exp : Date.parse(String(exp));
+  return isFinite(t) ? t : Infinity;
+}
+
+// Calcula o offlineUntil de uma licença que o servidor acabou de aprovar.
+function offlineUntilDe(v, licenca) {
+  const agora = Date.now();
+  let base = agora;
+  const expMs = validadeLicencaMs(v && v.licenseExpiresAt);
+  // Detalhe do formato: o Supabase devolve `license_expires_at` como texto ISO (é um
+  // timestamptz), não como número.
+  const houveValidadeNova = Number.isFinite(expMs) && expMs > (licenca && licenca.validadeRef ? licenca.validadeRef : 0);
+  if (houveValidadeNova) base = Math.max(agora, expMs);
+  const offlineUntil = Math.min(base + DIAS_OFFLINE * 24 * 60 * 60 * 1000, expMs);
+  return { offlineUntil, validadeRef: Number.isFinite(expMs) ? expMs : (licenca && licenca.validadeRef) || Infinity };
+}
+
+// Diz se a licença guardada ainda vale para uso sem internet, e por quê não.
+function licencaOffline(lic) {
+  const agora = Date.now();
+  if (!lic || typeof lic !== 'object') return { ok: false, motivo: 'sem_licenca' };
+  const guardado = typeof lic.offlineUntil === 'number' && isFinite(lic.offlineUntil) ? lic.offlineUntil : 0;
+  if (!guardado) return { ok: false, motivo: 'sem_offline' };
+  if (agora >= guardado) return { ok: false, motivo: 'offline_vencido' };
+  if (agora >= validadeLicencaMs(lic.licenseExpiresAt)) return { ok: false, motivo: 'licenca' };
+  let w = lic;
+  if (w.lifetime) w = { ...w, licenseExpiresAt: null };
+  return { ok: true, offlineUntil: guardado, user: w };
+}
+
+// Versão da licença guardada, para a tela (plano.js mostra a data).
+function copiaLicenca(lic) {
+  if (!lic || typeof lic !== 'object') return null;
+  const copia = {};
+  for (const k of Object.keys(lic)) {
+    if (Array.isArray(lic[k])) copia[k] = lic[k].slice();
+    else copia[k] = lic[k];
+  }
+  return copia;
+}
+
+// Registra o resultado de uma verificação do PC no arquivo de sessão.
+// Devolve a licença que fica guardada (nova ou a anterior).
+function anotarLicenca(s, v) {
+  if (!s || !v) return null;
+  const anterior = (s.licenca && typeof s.licenca === 'object') ? s.licenca : null;
+  // Plano gratuito não tem licença para guardar. 'pro' OU último veredito com licença:
+  // um 'pro' recusado (other_device, expirado) também cai aqui — é ele que precisa ser
+  // registrado, senão a licença offline anterior continuaria valendo para quem foi
+  // recusado pelo servidor.
+  const comLicenca = v.plan === 'pro'
+    || (v.licenseExpiresAt !== null && v.licenseExpiresAt !== undefined)
+    || (anterior && anterior.ok === true);
+  if (!v.success) {
+    if (!comLicenca && !anterior) return null;
+    // Licença recusada pelo servidor: guarda o estado (para a tela explicar o motivo) e
+    // derruba a licença offline, senão o cliente usaria sem internet um plano que o
+    // servidor acabou de negar.
+    const guardada = Object.assign({}, anterior || {}, {
+      ok: false, reason: v.reason || null, pcBound: !!v.pcBound,
+      plan: v.plan || 'free', features: Array.isArray(v.features) ? v.features : ['painel'],
+      licenseExpiresAt: v.licenseExpiresAt || null,
+      offlineUntil: 0, okAt: Date.now(),
+    });
+    s.licenca = guardada;
+    gravarSessao(s);
+    return guardada;
+  }
+  if (!comLicenca) {
+    if (anterior) {
+      s.licenca = Object.assign({}, anterior, { ok: false, reason: null, offlineUntil: 0, okAt: Date.now() });
+      gravarSessao(s);
+      return s.licenca;
+    }
+    return null;
+  }
+  const { offlineUntil, validadeRef } = offlineUntilDe(v, anterior);
+  const nova = {
+    ok: true,
+    okAt: Date.now(),
+    validadeRef,
+    plan: v.plan,
+    features: Array.isArray(v.features) ? v.features.slice() : ['painel'],
+    lifetime: !!v.lifetime,
+    licenseExpiresAt: v.licenseExpiresAt || null,
+    reason: v.reason || null,
+    pcBound: !!v.pcBound,
+    offlineUntil,
+  };
+  s.licenca = nova;
+  gravarSessao(s);
+  return nova;
 }
 
 async function sessaoValida() {
   let s = lerSessao();
   if (!s) return null;
-  if (s.expires_at && Date.now() > s.expires_at - 60000) {
-    s = await renovar(s);
-    if (!s) return null;
+  // 1. anti-rollback. Sem internet, usa a licença offline; com internet, o servidor
+  // decide (a proteção do GDZ na linha 243 do t6: maxSeen - 10min).
+  const carimbo = carimbar(s, true);
+  if (carimbo.atrasado) return { __offline: true, motivo: 'relogio_atrasado' };
+  if (!(s.expires_at && Date.now() > s.expires_at - 60000)) {
+    // token ainda no prazo (inclusive no modo offline): vale.
+    return s;
   }
-  return s;
+  // 2. token venceu. Renova.
+  const novo = await renovar(s);
+  if (novo) return novo;
+  // 3. Não renovou. Revogação de verdade já apagou a sessão; sem rede, o arquivo
+  //    continua no disco e a licença offline decide.
+  const depois = lerSessao();
+  if (!depois) return null;
+  return { __offline: true, sessao: depois };
 }
 
 // ── verificação do PC (mesma regra da referência) ──────────────────────
@@ -220,7 +528,10 @@ async function sessaoValida() {
 //       pcBound false -> plano em outro PC
 async function verificarPc(s) {
   const sess = s || (await sessaoValida());
+  // Sessão só com o arquivo guardado (sem internet): quem responde é a licença
+  // offline, não a tela de login.
   if (!sess) return { success: false, reason: 'no_session' };
+  if (sess.__offline || !sess.access_token) return licencaOffline(sess.sessao && sess.sessao.licenca);
 
   const h = hwid.ler();
   if (!hwid.valido(h)) return { success: false, reason: 'bad_hwid' };
@@ -236,11 +547,21 @@ async function verificarPc(s) {
   });
 
   if (!r.ok) {
+    // Sem resposta (rede caída/5xx) não é "PC errado": é falta de servidor. O perfil do
+    // Supabase é público por RLS, então ele também falha nesse caso. A resposta vem da
+    // última licença boa, até o `offlineUntil` — como no modo offline do GDZ.
+    if (r.status === 0 || r.offline) {
+      const local = licencaOffline(sess.licenca);
+      return local.ok
+        ? Object.assign({}, local.user, { offline: true, offlineUntil: local.offlineUntil, motivoOffline: null })
+        : Object.assign({ success: false, reason: 'offline', offline: true, motivoOffline: local.motivo },
+                        local.user || {});
+    }
     return { success: false, reason: 'erro_servidor', message: (r.dados && r.dados.message) || 'Falha ao verificar o PC.' };
   }
 
   const d = r.dados || {};
-  return {
+  const v = {
     success: !!d.success,
     plan: d.plan || 'free',
     features: Array.isArray(d.features) ? d.features : ['painel'],
@@ -250,6 +571,10 @@ async function verificarPc(s) {
     pcBound: !!d.pcBound,
     maxDevices: d.maxDevices,
   };
+  // Guarda o veredito do servidor: é a referência do `offlineUntil` e do motivo mostrado
+  // quando ele recusa (other_device / expired).
+  anotarLicenca(sess, v);
+  return v;
 }
 
 
@@ -324,6 +649,9 @@ async function resgatarChave(codigo) {
 
   const s = await sessaoValida();
   if (!s) return { ok: false, erro: 'Faça login antes de resgatar a chave.' };
+  if (s.__offline || !s.access_token) {
+    return { ok: false, erro: 'Resgatar chave precisa de internet. Conecte e tente de novo.' };
+  }
 
   const r = await pedir('/rest/v1/rpc/resgatar_chave', {
     method: 'POST',
@@ -345,7 +673,7 @@ async function resgatarChave(codigo) {
 // ── perfil (nome + plano) ─────────────────────────────────────────────────
 async function perfil(s) {
   const sess = s || (await sessaoValida());
-  if (!sess) return null;
+  if (!sess || sess.__offline || !sess.user) return null;
   const r = await pedir('/rest/v1/profiles?select=email,name,plan,features,lifetime,license_expires_at&id=eq.' + sess.user.id, {
     method: 'GET',
     token: sess.access_token,
@@ -374,9 +702,69 @@ async function perfil(s) {
 async function sessao() {
   const s = await sessaoValida();
   if (!s) return { valid: false };
+
+  // Depois do anti-rollback e sem servidor: a resposta vem da licença offline.
+  if (s.__offline) {
+    const lic = licencaOffline(s.sessao && s.sessao.licenca);
+    if (s.motivo === 'relogio_atrasado') return sessaoRecusada({ motivo: 'relogio' });
+    if (lic.ok) {
+      return {
+        valid: true,
+        offline: true,
+        offlineUntil: lic.offlineUntil,
+        user: Object.assign({}, lic.user, { pcAprovado: true, offline: true, offlineUntil: lic.offlineUntil }),
+      };
+    }
+    return sessaoRecusada({ motivo: lic.motivo, licenca: (s.sessao && s.sessao.licenca) || null });
+  }
+
   const p = await perfil(s);
-  if (!p) return { valid: false };
   const v = await verificarPc(s);
+
+  // O banco não respondeu mas a licença guardada ainda está no prazo: abre a tela, com
+  // o retrato do que o servidor aprovou por último.
+  // `v.success === true` (não só truthy): a resposta da licença offline traz success
+  // false quando o motivo é 'sem_offline'/'offline_vencido' — isso não abre a tela.
+  if (v && v.offline === true && v.success === true) {
+    return {
+      valid: true,
+      offline: true,
+      offlineUntil: v.offlineUntil,
+      user: Object.assign({}, v, {
+        email: (p && p.email) || (s.user && s.user.email) || null,
+        name: (p && p.name) || null,
+        expirada: v.reason === 'expired',
+        pcAprovado: true,
+        pcBound: !!v.pcBound,
+        offline: true,
+        offlineUntil: v.offlineUntil,
+      }),
+    };
+  }
+
+  // Sem perfil do servidor (rede caiu / 500) e sem licença no prazo. Vem ANTES da
+  // checagem de other_device: sem perfil não há resposta de licença nenhuma, e o motivo
+  // correto é 'sem servidor', não a ausência de licença guardada.
+  if (!p) {
+    return sessaoRecusada({
+      motivo: (v && v.motivoOffline) || 'offline',
+      licenca: s.licenca || null,
+    });
+  }
+
+  // Servidor respondeu e negou o PC (other_device). O login do provedor funciona, mas a
+  // licença não vale neste PC — 'valid: true' com pcAprovado false era o que a tela de
+  // planos lia (plano.js: `if (r && r.success) user = r.user`), então este caso vira
+  // sessão inválida com o motivo, como o 401 do refreshEntitlement do GDZ.
+  if (v && v.success === false && (v.reason === 'other_device' || v.reason === 'expired' || v.reason === 'offline')) {
+    return sessaoRecusada({
+      motivo: v.reason === 'offline' ? (v.motivoOffline || 'offline') : v.reason,
+      licenca: s.licenca || null,
+      email: (p && p.email) || (s.user && s.user.email) || null,
+      plan: (p && p.plan) || 'free',
+      pcBound: !!v.pcBound,
+    });
+  }
   // O verificar_pc devolve reason ('other_device'), pcBound e success. O spread
   // simples perdia o 'success', e o conta-plano so olhava 'expirada'. Resultado:
   // o plano vitalicio funcionava em QUALQUER PC, bastando copiar o sessao.json.
@@ -388,7 +776,60 @@ async function sessao() {
       pcAprovado: !(v && v.success === false),
       reason: (v && v.reason) || null,
       pcBound: !!(v && v.pcBound),
+      offlineUntil: (s.licenca && s.licenca.offlineUntil) || null,
+      // Para a tela explicar: por que a resposta veio do arquivo local e não do servidor.
+      motivoOffline: (v && v.success === false) ? ((v && v.motivoOffline) || v.reason || null) : null,
+      licencaRef: copiaLicenca(s.licenca),
     },
+  };
+}
+
+// Recusa a entrada com motivo legível. Mesmas palavras do GDZ onde ele tem uma
+// (t6-scaling.md, refreshEntitlement), adaptadas para a nossa tela.
+function sessaoRecusada(info) {
+  const i = info || {};
+  if (i.motivo === 'relogio') {
+    return {
+      valid: false,
+      motivo: 'relogio',
+      message: 'O relógio do Windows está atrasado. Acerte a data e hora ou conecte à internet.',
+    };
+  }
+  if (i.motivo === 'offline_vencido') {
+    return {
+      valid: false,
+      motivo: 'offline_vencido',
+      offlineUntil: (i.licenca && i.licenca.offlineUntil) || null,
+      message: 'Sem conexão com o servidor e o período offline venceu. Conecte à internet para entrar.',
+    };
+  }
+  if (i.motivo === 'other_device') {
+    // Mesmo motivo que o main.js já mostrava (conta-plano › outraMaquina).
+    return {
+      valid: false,
+      motivo: 'other_device',
+      outraMaquina: true,
+      pcBound: !!i.pcBound,
+      email: i.email || null,
+      nome: i.plan || null,
+      message: i.pcBound
+        ? 'Seu plano está ligado a outro PC. Se você formatou ou trocou de PC, renove o PC no site.'
+        : 'Seu plano está sendo usado em outro PC.',
+    };
+  }
+  if (i.motivo === 'expired') {
+    return {
+      valid: false,
+      motivo: 'expired',
+      expirada: true,
+      message: 'Sua licença venceu. Renove para voltar a usar o plano completo.',
+    };
+  }
+  // 'sem_licenca' / 'sem_offline' / 'licenca': sem resposta e sem licença guardada.
+  return {
+    valid: false,
+    motivo: i.motivo || 'offline',
+    message: 'Sem conexão com o servidor. Conecte à internet para entrar.',
   };
 }
 
@@ -411,7 +852,20 @@ async function recuperar(email) {
 // ── usuário local (compatibilidade com o que a tela já usa) ───────────────
 async function usuario() {
   const p = await perfil();
-  return p || { username: 'visitante', email: null, plan: 'free', features: ['painel'] };
+  if (p) return p;
+  // Sem servidor mas com licença offline válida: o renderer (engine-extras) usa o plano,
+  // então ele precisa continuar vindo.
+  try {
+    const s = lerSessao();
+    const lic = s && licencaOffline(s.licenca);
+    if (lic && lic.ok) return Object.assign({}, lic.user, { offline: true, offlineUntil: lic.offlineUntil });
+  } catch (e) { }
+  return { username: 'visitante', email: null, plan: 'free', features: ['painel'] };
 }
 
-module.exports = { configurado, entrar, registrar, sessao, sair, recuperar, perfil, usuario, verificarPc, enviarHardware, resgatarChave, CONFIG };
+module.exports = {
+  configurado, entrar, registrar, sessao, sair, recuperar, perfil, usuario,
+  verificarPc, enviarHardware, resgatarChave, CONFIG,
+  // proteções: expostas para teste e para a tela mostrar a data do modo offline
+  CLOCK_ROLLBACK_TOLERANCE_MS, DIAS_OFFLINE, offlineUntilDe, licencaOffline, copiaLicenca,
+};

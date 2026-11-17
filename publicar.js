@@ -41,7 +41,7 @@ console.log('===============================================');
 passo(1, 'Conferindo a sintaxe do codigo');
 const arquivos = [
   'main.js', 'preload.js', 'engine.js', 'engine-extras.js', 'engine-scaler.js',
-  'engine-bridge.js', 'updater.js', 'supabase.js', 'hwid.js', 'lossless-official.js',
+  'engine-bridge.js', 'updater.js', 'assinatura-update.js', 'supabase.js', 'hwid.js', 'lossless-official.js',
   'escrever-settings.js', 'gdz-launch.js', 'features.js', 'elevacao.js', 'notas-versao.js',
   // Os novos: a fotografia do estado e o desfazer dos 8 tipos.
   'foto-sistema.js', 'restaurar-sistema.js',
@@ -118,6 +118,54 @@ try {
 const setup = path.join(releaseDir, 'Instalar-VL-Optimizer-' + versao + '.exe');
 if (!fs.existsSync(setup)) parar('o build nao gerou o instalador');
 ok('Instalar-VL-Optimizer-' + versao + '.exe  ' + Math.round(fs.statSync(setup).size / 1048576) + ' MB');
+
+// ── 4b. assinatura Ed25519 do instalador ──────────────────────────────────
+//
+// O electron-updater já confere o sha512 deste .exe contra o latest.yml. Isso não
+// protege contra alguém trocar os DOIS juntos (o hash do yml acompanha o arquivo).
+// A assinatura abaixo é feita com a chave privada, que não fica no site — é ela que
+// o app confere em assinatura-update.js antes de liberar o "Instalar".
+//
+// Sem chave privada o publish NÃO para: avisa e segue. Assim o fluxo de hoje
+// continua funcionando enquanto o dono não gerar a chave.
+passo('4b', 'Assinando o instalador');
+const arqPrivada = process.env.VL_RELEASE_KEY_FILE || 'C:\\VLTemp\\vl-release-private.key';
+let assinou = false;
+if (!fs.existsSync(arqPrivada)) {
+  console.log('    AVISO: sem chave privada em ' + arqPrivada);
+  console.log('    A atualizacao sai SEM assinatura. O app ainda instala enquanto');
+  console.log('    "chaveReleasePublica" estiver vazia em marca/marca-vl.json.');
+  console.log('    Para ligar a protecao: node ferramentas/chave-atualizacao.js gerar');
+} else {
+  try {
+    const crypto = require('crypto');
+    const priv = crypto.createPrivateKey({
+      key: Buffer.from(fs.readFileSync(arqPrivada, 'utf8').trim(), 'base64'),
+      format: 'der', type: 'pkcs8',
+    });
+    // SHA-512 do arquivo inteiro. `crypto.hash` é síncrono (Node 21+) — aqui é um
+    // script de build, não há por que complicar com stream.
+    const digest = crypto.hash('sha512', fs.readFileSync(setup), 'buffer');
+    const sig = crypto.sign(null, digest, priv).toString('base64');
+    // a assinatura tem de validar com a MESMA pública que vai embutida no app
+    const publicaMarca = String(require(path.join(RAIZ, 'marca.js')).chaveReleasePublica || '').trim();
+    if (publicaMarca) {
+      const okSig = crypto.verify(null, digest,
+        crypto.createPublicKey({ key: Buffer.from(publicaMarca, 'base64'), format: 'der', type: 'spki' }),
+        Buffer.from(sig, 'base64'));
+      if (!okSig) parar('a chave privada de ' + arqPrivada + ' NAO corresponde a "chaveReleasePublica" de marca.js.\n' +
+        '  Publicar assim mandaria uma atualizacao que todo app instalado recusaria.');
+    } else {
+      console.log('    AVISO: marca.js sem chaveReleasePublica — a assinatura sera gerada');
+      console.log('    mas nenhum app instalado vai conferi-la.');
+    }
+    fs.writeFileSync(path.join(releaseDir, 'Instalar-VL-Optimizer-' + versao + '.exe.sig'), sig, 'utf8');
+    ok('assinatura gerada (' + sig.length + ' chars base64)');
+    assinou = true;
+  } catch (e) {
+    parar('nao consegui assinar o instalador: ' + e.message);
+  }
+}
 
 // ── 5. GitHub ─────────────────────────────────────────────────────────────
 passo(5, 'Publicando o release no GitHub');
@@ -209,6 +257,31 @@ async function api(url, opts) {
   fs.copyFileSync(path.join(releaseDir, 'latest.yml'), path.join(UPD, 'latest.yml'));
   ok('site\\atualizacoes\\latest.yml');
   console.log('      ' + fs.readFileSync(path.join(UPD, 'latest.yml'), 'utf8').split('\n').slice(0, 2).join('\n      '));
+
+  // ── 6b. assinatura para o site ──────────────────────────────────────────
+  //
+  // Vai para site\atualizacoes\assinatura\<versao>.sig. A Function
+  // site/functions/atualizacoes/assinatura/[[versao]].js serve isso como
+  // { signature } em GET /atualizacoes/assinatura/<versao> — que é o endpoint
+  // que o app consulta antes de liberar a instalação.
+  if (assinou) {
+    const pastaSig = path.join(UPD, 'assinatura');
+    fs.mkdirSync(pastaSig, { recursive: true });
+    // limpa .sig de versões antigas: o app só pede a versão que está baixando,
+    // e manter o histórico só incha o pacote do site.
+    for (const a of fs.readdirSync(pastaSig)) {
+      if (a.toLowerCase().endsWith('.sig') && a !== versao + '.sig') {
+        fs.rmSync(path.join(pastaSig, a), { force: true });
+      }
+    }
+    fs.copyFileSync(
+      path.join(releaseDir, 'Instalar-VL-Optimizer-' + versao + '.exe.sig'),
+      path.join(pastaSig, versao + '.sig')
+    );
+    ok('site\\atualizacoes\\assinatura\\' + versao + '.sig');
+  } else {
+    console.log('    (sem assinatura: nada publicado em atualizacoes/assinatura)');
+  }
 
   // ── 7. deploy ───────────────────────────────────────────────────────────
   if (!PULAR_SITE) {

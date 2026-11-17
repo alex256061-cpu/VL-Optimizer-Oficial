@@ -5420,6 +5420,11 @@
     if (info.baixando) {
       html += '<div class="upd-bar"><i style="width:' + (info.percentual || 0) + '%"></i></div>' +
         '<div class="upd-ver" style="margin-top:6px">Baixando… ' + (info.percentual || 0) + '%</div>';
+    } else if (info.conferindo) {
+      // O app está conferindo a assinatura do instalador baixado. Lê ~140 MB, então
+      // leva alguns segundos: a tela precisa dizer que está trabalhando.
+      html += '<div class="upd-bar"><i style="width:100%"></i></div>' +
+        '<div class="upd-ver" style="margin-top:6px">Conferindo a assinatura da atualização…</div>';
     } else if (info.baixado) {
       html += '<div style="margin-top:14px"><button class="upd-btn primary" onclick="updInstalar()">Instalar agora e reiniciar</button></div>';
     } else {
