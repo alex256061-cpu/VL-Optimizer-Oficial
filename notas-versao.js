@@ -10,6 +10,18 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.37': {
+    corrigido: [
+      'As verificacoes de hardware voltaram a dizer a verdade. Os scripts internos estavam em um formato que fazia o Windows receber os caminhos de registro sem a barra invetida (HKLM:SOFTWARE em vez de HKLM:\SOFTWARE). O resultado: a verificacao respondia "HAGS desligado" num PC com o HAGS ligado, e nunca detectava o aviso de BIOS nos processadores Intel. Afetava tambem 6 ajustes antigos (Game Bar, OBS, memoria do sistema, restauracao, escala da tela).',
+      'Os 5 checks agora confirmam de verdade: placa de video lista todas as placas e confere o Resizable BAR; memoria mostra a geracao (DDR4/DDR5), a velocidade do kit e avisa quando tem um pente so; AMD lista os dispositivos do driver de chipset e so cobra a configuracao especial nos X3D de dois chips; Intel compara o microcode com as versoes que corrigem a degradacao.',
+      'FiveM: o preset era aplicado em 4 campos em vez de 18, e podia estar gravando em um arquivo que nao e o de graficos do jogo. Agora usa o caminho certo (%APPDATA%\CitizenFX\gta5_settings.xml), aplica os 18 campos do preset de FPS e os 16 do equilibrado, grava de forma atomica e preserva a pasta cache/game.',
+      'FiveM: o SamplingMode gravava 5 em 83% dos casos por causa de um deslocamento na lista. Corrigido para 0-4-3-2-1.',
+      'FiveM: o preset reportava sucesso sem gravar nada, porque duas funcoes internas com o mesmo nome se sobrescreviam. Renomeadas.',
+      'Scaling: a opcao de sincronizacao da tela gravava sempre o mesmo valor, entao escolher V-Sync, G-Sync ou Adaptativo nao mudava nada no Lossless. Agora cada opcao grava o valor correspondente (Default, Vsync1, Vsync2, Vsync3).',
+      'Scaling: o editor nao cria mais campos que o Lossless nao conhece. Era um dos motivos de ele considerar o arquivo invalido e guardar uma copia com erro.',
+    ],
+    novo: [],
+  },
   '1.4.36': {
     corrigido: [
       'O ponto de restauração falhava sem avisar: o Windows aceita só um ponto a cada 24 horas, então o segundo pedido do dia não criava nada e o app respondia que tinha dado certo. Agora ele libera esse limite durante a criação, volta como estava e mostra o erro quando não consegue.',

@@ -12,7 +12,7 @@
 //                  nearest:'Nearest', xbr:'XBR', anime4k:'Anime4K' }
 //   LS_FSR     = { fsr1:'ORIGINAL', fsr2:'ORIGINAL', fsr3:'ORIGINAL', optimized:'OPTIMIZED' }
 //   LS_FIT     = { fullscreen:'Fullscreen', stretch:'AspectRatio', fit:'AspectRatio' }
-//   LS_SYNC    = { standard:'DEFAULT', vsync:'VSYNC1', gsync:'VSYNC2', adaptive:'VSYNC4' }
+//   LS_SYNC    = { standard:'Default', vsync:'Vsync1', gsync:'Vsync2', adaptive:'Vsync3' }
 'use strict';
 
 const fs = require('fs');
@@ -30,7 +30,10 @@ const LS_SCALING = {
 };
 const LS_FSR = { fsr1: 'ORIGINAL', fsr2: 'ORIGINAL', fsr3: 'ORIGINAL', original: 'ORIGINAL', optimized: 'OPTIMIZED' };
 const LS_FIT = { fullscreen: 'Fullscreen', stretch: 'AspectRatio', fit: 'AspectRatio' };
-const LS_SYNC = { standard: 'DEFAULT', vsync: 'VSYNC1', gsync: 'VSYNC2', adaptive: 'VSYNC4' };
+// Só DEFAULT existe no Lossless (ver a nota em lossless-official.js).
+// Valores reais do enum do Lossless (Main_SyncMode_* em LosslessScaling.dll):
+// Default, Off, Vsync1, Vsync2, Vsync3. Não existe VSYNC4, GSYNC nem ADAPTIVE.
+const LS_SYNC = { standard: 'Default', vsync: 'Vsync1', gsync: 'Vsync2', adaptive: 'Vsync3' };
 const LS_CAPTURE = { dxgi: 'DXGI', wgc: 'WGC' };
 const LS_SIZE = { performance: 'PERFORMANCE', balanced: 'BALANCED', quality: 'QUALITY' };
 const LS_FG_MODE = { adaptive: 'ADAPTIVE', fixed: 'FIXED' };
@@ -39,12 +42,19 @@ function esc(v) {
   return String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-/// Troca o valor de um campo dentro de um bloco XML. Se o campo nao existe, insere antes do fim.
+/// Troca o valor de um campo dentro de um bloco XML.
+///
+/// ANTES: quando o campo não existia no bloco, ele era CRIADO no fim. O programa de
+/// referência nunca faz isso — ele devolve o bloco intacto. Criar tag que o Lossless
+/// não conhece só serve para poluir o arquivo, e é um dos motivos de ele achar o XML
+/// inválido e jogar uma cópia em CorruptedSettingsBackup.xml.
+///
+/// AGORA: se o campo não existe, nada é escrito. Quem precisar escrever uma tag nova
+/// tem de atualizar o modelo com o Lossless aberto, não deixar o app inventar.
 function setInBlock(block, name, value) {
   const re = new RegExp('<' + name + '>[^<]*</' + name + '>');
-  const novo = '<' + name + '>' + esc(value) + '</' + name + '>';
-  if (re.test(block)) return block.replace(re, novo);
-  return block + '\n      ' + novo;
+  if (!re.test(block)) return block;
+  return block.replace(re, '<' + name + '>' + esc(value) + '</' + name + '>');
 }
 
 /// Pega o bloco <Profile> do arquivo. Retorna { xml, block } ou null.

@@ -1172,8 +1172,18 @@ ex.gameClean = async ({ id }) => {
   if (!g) return { success: false, error: 'jogo não encontrado' };
   if (g.store === 'fivem') {
     const base = path.join(os.homedir(), 'AppData', 'Local', 'FiveM', 'FiveM.app', 'data');
+    // Igual ao cleanScript do GDZ (cache === 'fivem'): apaga o CONTEÚDO de cache,
+    // server-cache e server-cache-priv, mas PRESERVA ...\data\cache\game (os dados
+    // do GTA). Antes apagávamos a pasta `cache` inteira e levávamos o game junto.
+    const keep = path.join(base, 'cache', 'game');
     for (const sub of ['cache', 'server-cache', 'server-cache-priv']) {
-      try { fs.rmSync(path.join(base, sub), { recursive: true, force: true }); } catch (e) {}
+      const dir = path.join(base, sub);
+      let ents; try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch (e) { continue; }
+      for (const e of ents) {
+        const p = path.join(dir, e.name);
+        if (p === keep) continue;
+        try { fs.rmSync(p, { recursive: true, force: true }); } catch (err) {}
+      }
     }
     return { success: true };
   }
@@ -1190,36 +1200,106 @@ ex.shaderClean = async () => {
   return { success: true };
 };
 
-// FiveM graphics
-function fivemSettingsFile() {
-  const base = path.join(os.homedir(), 'AppData', 'Local', 'FiveM');
-  const hits = [];
-  const walk = (d, depth) => {
-    if (depth > 5) return;
-    let es; try { es = fs.readdirSync(d, { withFileTypes: true }); } catch (e) { return; }
-    for (const e of es) {
-      const p = path.join(d, e.name);
-      if (e.isDirectory()) walk(p, depth + 1);
-      else if (e.isFile() && e.name.toLowerCase() === 'settings.xml') hits.push(p);
-    }
-  };
-  walk(base, 0);
-  return hits.sort((a, b) => b.length - a.length)[0] || null;
-}
-const FIVEM_BAK = () => path.join(APP_DATA(), 'fivem-settings.backup.xml');
+// ────────────────────────────── FIVEM (GTA RP) ──────────────────────────────
+// Copiado do GDZ (gdz-SEM-MANGLE.js): arquivo, presets, chaves, leitura/escrita e
+// a trava de jogo aberto. O FiveM (CitizenFX) guarda os gráficos do GTA V em
+// %APPDATA%\CitizenFX\gta5_settings.xml — NÃO num settings.xml dentro da pasta
+// do FiveM (a versão anterior varria %LOCALAPPDATA%\FiveM e achava outro arquivo,
+// então o ajuste não tinha efeito nenhum).
+const FIVEM_XML = [
+  path.join(process.env.APPDATA || '', 'CitizenFX', 'gta5_settings.xml'),
+  path.join(process.env.LOCALAPPDATA || '', 'CitizenFX', 'gta5_settings.xml'),
+];
+const FIVEM_BACKUP = () => path.join(APP_DATA(), 'fivem-gta5_settings.original.xml');
+// Frame Scaling na ordem da tela: Nativo, 83%, 75%, 67%, 50%.
+const FIVEM_SCALING = [0, 4, 3, 2, 1];
+// fps = 18 campos, balanced = 16 (sem HdStreamingInFlight e sem TXAA_Enabled).
+const FIVEM_PRESETS = {
+  fps: {
+    MSAA: 0,
+    MSAAFragments: 0,
+    MSAAQuality: 0,
+    ReflectionMSAA: 0,
+    GrassQuality: 0,
+    ShadowQuality: 1,
+    Shadow_SoftShadows: 1,
+    ReflectionQuality: 0,
+    PostFX: 0,
+    SSAO: 0,
+    Tessellation: 0,
+    MaxLodScale: '0.000000',
+    Shadow_LongShadows: 'false',
+    UltraShadows_Enabled: 'false',
+    HdStreamingInFlight: 'false',
+    DoF: 'false',
+    MotionBlurStrength: '0.000000',
+    TXAA_Enabled: 'false',
+  },
+  balanced: {
+    MSAA: 0,
+    MSAAFragments: 0,
+    MSAAQuality: 0,
+    ReflectionMSAA: 0,
+    GrassQuality: 1,
+    ShadowQuality: 2,
+    Shadow_SoftShadows: 2,
+    ReflectionQuality: 1,
+    PostFX: 2,
+    SSAO: 1,
+    Tessellation: 1,
+    MaxLodScale: '0.000000',
+    Shadow_LongShadows: 'false',
+    UltraShadows_Enabled: 'false',
+    DoF: 'false',
+    MotionBlurStrength: '0.000000',
+  },
+};
+// As 16 chaves que a tela lê (ScreenWidth/ScreenHeight/FXAA_Enabled/LodScale não são escritas).
+const FIVEM_KEYS = ['SamplingMode', 'MSAA', 'ReflectionMSAA', 'GrassQuality', 'ShadowQuality', 'Shadow_SoftShadows', 'ReflectionQuality', 'PostFX', 'SSAO', 'Tessellation', 'MaxLodScale', 'LodScale', 'Windowed', 'ScreenWidth', 'ScreenHeight', 'FXAA_Enabled'];
 
-function parseFivemValues(xml) {
-  const v = {};
-  for (const k of ['MSAA', 'GrassQuality', 'MaxLodScale', 'SamplingMode', 'Windowed', 'ShadowQuality', 'TextureQuality', 'ShaderQuality', 'CityDensity', 'ParticleQuality', 'ReflectionQuality', 'ExtendedDistanceScaling']) {
-    const m = new RegExp(`<${k}[^>]*value="([^"]*)"`, 'i').exec(xml);
-    if (m) v[k] = m[1];
-  }
-  return v;
+// o 1º dos dois candidatos que existir
+function fivemXml() {
+  return FIVEM_XML.find((p) => { try { return fs.existsSync(p); } catch (e) { return false; } }) || null;
+}
+
+// mesmo regex do GDZ: lê `<tag ... value="x">`
+// (nome com prefixo fivemXml*: o bloco do Lossless já tem um xmlGet/xmlSet de
+//  outra sintaxe, `<tag>valor</tag>` — nomes iguais se sobrescreviam)
+function fivemXmlGet(xml, tag) {
+  const m = new RegExp('<' + tag + '\\s+value="([^"]*)"').exec(xml);
+  return m ? m[1] : null;
+}
+// troca o valor da tag; se a tag não existir, devolve o xml intacto (o GDZ nunca cria tag).
+function fivemXmlSet(xml, tag, val) {
+  const re = new RegExp('(<' + tag + '\\s+value=")[^"]*(")');
+  return re.test(xml) ? xml.replace(re, '$1' + val + '$2') : xml;
+}
+
+// o preset aplicado fica salvo para a tela marcar a opção certa ao reabrir
+const FIVEM_SETTINGS = () => readJson('fivem-settings.json', {});
+function fivemSaveSettings(v) { writeJson('fivem-settings.json', v || {}); }
+
+// Igual ao fivemRunning do GDZ: usa a lista de processos do `tasklist`, casa
+// "fivem.exe" ou a família "FiveM_<build>_GTAProcess.exe" (o build muda a cada
+// atualização: b2372, b3095...). Com o jogo aberto, ele regrava o arquivo ao fechar.
+function fivemRunning() {
+  return new Promise((resolve) => {
+    try {
+      execFile('tasklist', ['/FO', 'CSV', '/NH'], { windowsHide: true, timeout: 10000, maxBuffer: 8388608 }, (err, stdout) => {
+        if (err) return resolve(false);
+        const nomes = [];
+        for (const line of String(stdout).split(/\r?\n/)) {
+          const m = /^"([^"]+)"/.exec(line);
+          if (m) nomes.push(m[1].toLowerCase());
+        }
+        resolve(nomes.some((n) => n === 'fivem.exe' || /^fivem_.*gtaprocess\.exe$/.test(n)));
+      });
+    } catch (e) { resolve(false); }
+  });
 }
 
 // Verifica se algum dos processos está aberto (por nome, sem o .exe).
-// Usado pelo FiveM antes de mexer no arquivo de configuração: com o jogo aberto,
-// a alteração seria sobrescrita quando ele fechasse.
+// (O FiveM usa o `fivemRunning` acima; esta continua servindo o resto do arquivo.)
 async function processRunning(nomes) {
   const lista = (Array.isArray(nomes) ? nomes : [nomes])
     .filter(Boolean)
@@ -1242,44 +1322,90 @@ async function processRunning(nomes) {
 }
 
 ex.fivemGfxStatus = async () => {
-  const file = fivemSettingsFile();
-  // await: sem isso, 'running' era uma Promise e o JSON saia {}.
-  const running = await processRunning(['FiveM', 'FiveM_b2372_GTAProcess', 'GTA5']);
-  if (!file) return { success: false, installed: !!fs.existsSync(path.join(os.homedir(), 'AppData', 'Local', 'FiveM')), file: null, running };
-  let xml = '';
-  try { xml = fs.readFileSync(file, 'utf8'); } catch (e) {}
-  const values = parseFivemValues(xml);
-  const idx = { 0: 0, 5: 0, 4: 1, 3: 2, 2: 3, 1: 4 };
-  return { success: true, installed: true, file, running, backup: fs.existsSync(FIVEM_BAK()), values, preset: null, scaleIndex: idx[Number(values.SamplingMode)] ?? 0 };
-};
-
-ex.fivemGfxApply = async ({ preset, scaling, borderless }) => {
-  const file = fivemSettingsFile();
-  if (!file) return { success: false, error: 'Abra o FiveM uma vez e feche para ele criar o arquivo de configuração.' };
-  if (await processRunning(['FiveM', 'GTA5'])) return { success: false, error: 'O FiveM está aberto. Feche o jogo para mudar os gráficos.' };
-  let xml = fs.readFileSync(file, 'utf8');
-  if (!fs.existsSync(FIVEM_BAK())) fs.writeFileSync(FIVEM_BAK(), xml, 'utf8');
-  const set = (tag, val) => {
-    const re = new RegExp(`<${tag}([^>]*)value="[^"]*"`, 'i');
-    if (re.test(xml)) xml = xml.replace(re, `<${tag}$1value="${val}"`);
+  let caps = null;
+  try { caps = await core.getCaps(); } catch (e) { caps = null; }
+  const file = fivemXml();
+  const installed = fs.existsSync(path.join(process.env.LOCALAPPDATA || '', 'FiveM', 'FiveM.exe'));
+  const out = {
+    success: true,
+    installed,
+    file: !!file,
+    backup: fs.existsSync(FIVEM_BACKUP()),
+    running: await fivemRunning(),
+    gpu: caps ? (caps.nvidia ? 'nvidia' : caps.amdGpu ? 'amd' : (caps.gpus || []).some((g) => g.vendor === 'intel' && !g.integrated) ? 'intel' : 'other') : 'other',
+    gpuName: caps ? (((caps.gpus || []).find((g) => !g.integrated) || (caps.gpus || [])[0] || {}).name || '') : '',
+    values: {},
+    preset: FIVEM_SETTINGS().fivemPreset || null,
   };
-  if (preset === 'fps') { set('MSAA', '0'); set('GrassQuality', '0'); set('MaxLodScale', '0'); set('ShadowQuality', '0'); }
-  if (preset === 'balanced') { set('MSAA', '0'); set('GrassQuality', '1'); set('MaxLodScale', '1'); set('ShadowQuality', '1'); }
-  if (scaling != null) {
-    const map = ['0', '5', '4', '3', '2'];
-    set('SamplingMode', map[scaling] ?? '0');
+  if (file) {
+    let xml = '';
+    try { xml = fs.readFileSync(file, 'utf8'); } catch (e) { xml = ''; }
+    // as 16 chaves saem sempre (com null quando a tag não está no arquivo), igual ao GDZ:
+    // a tela lê `values.Windowed` direto e `null` é o que significa "não tem"
+    for (const k of FIVEM_KEYS) out.values[k] = fivemXmlGet(xml, k);
   }
-  if (borderless != null) set('Windowed', borderless ? '2' : '0');
-  fs.writeFileSync(file, xml, 'utf8');
-  return { success: true };
+  // `file` na tela é o CAMINHO do arquivo (o src/gtarp.js usa `d.file` para exibir);
+  // `hasFile` é o booleano do GDZ.
+  out.hasFile = out.file;
+  out.file = file;
+  // índice do Frame Scaling para a tela marcar o botão certo
+  const si = FIVEM_SCALING.indexOf(Number(out.values.SamplingMode));
+  out.scaleIndex = si >= 0 ? si : 0;
+  return out;
 };
 
-ex.fivemGfxRestore = async () => {
-  const file = fivemSettingsFile();
-  if (!file || !fs.existsSync(FIVEM_BAK())) return { success: false, error: 'sem backup' };
-  fs.copyFileSync(FIVEM_BAK(), file);
-  return { success: true };
-};
+// Trava de ação do FiveM: no GDZ os dois handlers de escrita estão dentro de
+// withActionLock. Aqui não existe um withActionLock no projeto, então esta
+// fila resolve o mesmo problema (duas escritas no mesmo XML ao mesmo tempo).
+let fivemFila = Promise.resolve();
+function fivemLock(fn) {
+  const r = fivemFila.then(fn, fn);
+  fivemFila = r.then(() => {}, () => {});
+  return r;
+}
+
+ex.fivemGfxApply = ({ preset, scaling, borderless } = {}) => fivemLock(async () => {
+  const file = fivemXml();
+  if (!file) return { success: false, error: 'Não achamos as configurações do FiveM. Abra o FiveM uma vez e feche.' };
+  if (await fivemRunning()) return { success: false, error: 'Feche o FiveM antes: ele regrava as configurações quando fecha.' };
+  if (preset !== undefined && preset !== null && !FIVEM_PRESETS[preset]) return { success: false, error: 'Pedido inválido.' };
+  if (scaling !== undefined && (!Number.isInteger(scaling) || scaling < 0 || scaling >= FIVEM_SCALING.length)) return { success: false, error: 'Pedido inválido.' };
+  try {
+    let xml = fs.readFileSync(file, 'utf8');
+    // backup só na 1ª vez: é o original de antes de o VL mexer
+    if (!fs.existsSync(FIVEM_BACKUP())) fs.writeFileSync(FIVEM_BACKUP(), xml, 'utf8');
+    if (preset) {
+      for (const [k, v] of Object.entries(FIVEM_PRESETS[preset])) xml = fivemXmlSet(xml, k, v);
+      fivemSaveSettings({ ...FIVEM_SETTINGS(), fivemPreset: preset });
+    }
+    if (scaling !== undefined) xml = fivemXmlSet(xml, 'SamplingMode', FIVEM_SCALING[scaling]);
+    if (typeof borderless === 'boolean') xml = fivemXmlSet(xml, 'Windowed', borderless ? 2 : 0);
+    // escrita atômica: grava no .tmp e renomeia sobre o original
+    const tmp = file + '.vl-tmp';
+    fs.writeFileSync(tmp, xml, 'utf8');
+    fs.renameSync(tmp, file);
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: 'Não foi possível gravar: ' + e.message };
+  }
+});
+
+ex.fivemGfxRestore = () => fivemLock(async () => {
+  // se o XML já não existe, restaura no 1º candidato (igual ao GDZ)
+  const file = fivemXml() || FIVEM_XML[0];
+  if (!fs.existsSync(FIVEM_BACKUP())) return { success: false, error: 'Não há backup: as configurações nunca foram alteradas pelo VL.' };
+  if (await fivemRunning()) return { success: false, error: 'Feche o FiveM antes de restaurar.' };
+  try {
+    fs.copyFileSync(FIVEM_BACKUP(), file);
+    fs.rmSync(FIVEM_BACKUP(), { force: true });
+    const s = FIVEM_SETTINGS();
+    delete s.fivemPreset;
+    fivemSaveSettings(s);
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: 'Não foi possível restaurar: ' + e.message };
+  }
+});
 
 // ────────────────────────────── PC INFO ──────────────────────────────
 // ── Sensores reais: nvidia-smi para GPU, contadores de confiabilidade para disco ──
@@ -2938,7 +3064,9 @@ const LS_FG = { lsfg31: 'LSFG3', lsfg23: 'LSFG2', lsfg11: 'LSFG1', off: 'Off' };
 const LS_SCALING = { off: 'Off', ls1: 'LS1', fsr: 'FSR', nis: 'NIS', integer: 'Integer', nearest: 'Nearest', xbr: 'XBR', anime4k: 'Anime4K' };
 const LS_FSR = { fsr1: 'ORIGINAL', fsr2: 'ORIGINAL', fsr3: 'ORIGINAL', original: 'ORIGINAL', optimized: 'OPTIMIZED' };
 const LS_FIT = { fullscreen: 'Fullscreen', stretch: 'AspectRatio', fit: 'AspectRatio' };
-const LS_SYNC = { standard: 'DEFAULT', vsync: 'VSYNC1', gsync: 'VSYNC2', adaptive: 'VSYNC3' };
+// Valores reais do enum do Lossless (Main_SyncMode_* em LosslessScaling.dll):
+// Default, Off, Vsync1, Vsync2, Vsync3. Não existe VSYNC4, GSYNC nem ADAPTIVE.
+const LS_SYNC = { standard: 'Default', vsync: 'Vsync1', gsync: 'Vsync2', adaptive: 'Vsync3' };
 const LS_MODE = { auto: 'Auto', custom: 'Custom' };
 
 function xmlGet(xml, name) {
@@ -2949,9 +3077,10 @@ function xmlGet(xml, name) {
 function xmlSet(xml, name, value) {
   const re = new RegExp('(<' + name + '>)([^<]*)(</' + name + '>)');
   if (re.test(xml)) return xml.replace(re, '$1' + String(value) + '$3');
-  const idx = xml.lastIndexOf('</');
-  if (idx < 0) return xml;
-  return xml.slice(0, idx) + '<' + name + '>' + String(value) + '</' + name + '>\n' + xml.slice(idx);
+  // ANTES: criava a tag no fim do bloco. O programa de referência nunca cria tag —
+  // devolve o XML intacto. Tag inventada no Settings.xml só serve para o Lossless
+  // achar o arquivo inválido.
+  return xml;
 }
 function setInBlock(block, name, value) {
   const wrapped = '<r>' + block + '</r>';

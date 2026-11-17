@@ -45,7 +45,9 @@ const FRAME_GENERATION = {
   lsfg3: 'LSFG3', lsfg31: 'LSFG3',
   lsfi: 'LSFI', lsfi1: 'LSFI1',
 };
-const SYNC_MODE = { standard: 'VSYNC2', vsync: 'VSYNC1', gsync: 'VSYNC3', adaptive: 'VSYNC4' };
+// Valores reais do enum do Lossless (Main_SyncMode_* em LosslessScaling.dll):
+// Default, Off, Vsync1, Vsync2, Vsync3. Não existe VSYNC4, GSYNC nem ADAPTIVE.
+const SYNC_MODE = { standard: 'Default', vsync: 'Vsync1', gsync: 'Vsync2', adaptive: 'Vsync3' };
 const CAPTURE_API = { dxgi: 'DXGI', wgc: 'WGC' };
 const LS1_MODE = { off: 'OFF', performance: 'PERFORMANCE', balanced: 'BALANCED', quality: 'QUALITY' };
 const LSFG_SIZE = { performance: 'PERFORMANCE', quality: 'QUALITY' };
