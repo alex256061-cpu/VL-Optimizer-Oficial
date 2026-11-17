@@ -183,6 +183,9 @@ function gravarSessao(s) {
   } catch (e) { }
 }
 
+// Teto de qualquer chamada ao servidor (o GDZ usa API_TIMEOUT_MS = 12000).
+const TIMEOUT_MS = 12000;
+
 async function pedir(caminho, opcoes) {
   const o = Object.assign({}, opcoes);
   o.headers = Object.assign(
@@ -202,16 +205,34 @@ async function pedir(caminho, opcoes) {
   // exceção e fechar o app: vira um resultado tratado, que a tela mostra em português.
   // `semRede` separa "não houve resposta" de "o servidor respondeu errado" — é o `offline`
   // do apiCall do GDZ (t6-scaling.md). O modo offline depende dessa diferença.
+  // 12 s é o teto do programa de referência (API_TIMEOUT_MS). Sem isto, um
+  // servidor que aceita a conexão e não responde deixava o login pendurado.
   let r;
   try {
+    const sinal = (typeof AbortSignal !== 'undefined' && AbortSignal.timeout)
+      ? AbortSignal.timeout(o.timeoutMs || TIMEOUT_MS)
+      : undefined;
+    if (sinal) o.signal = sinal;
+    delete o.timeoutMs;
     r = await fetch(url, o);
   } catch (e) {
-    const semRede = /ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ETIMEDOUT|EHOSTUNREACH|ENETUNREACH|ECONNRESET|fetch failed/i.test(String(e && e.message));
+    // AbortSignal.timeout não gera ETIMEDOUT: gera um AbortError com
+    // "The operation was aborted due to timeout" (medido pela auditoria n2). Sem
+    // tratar esse caso, o cliente lia na tela de login
+    // "Falha ao conectar: The operation was aborted due to timeout", em inglês.
+    const nome = String((e && e.name) || '');
+    const texto = String((e && e.message) || '');
+    const estourou = nome === 'TimeoutError' || nome === 'AbortError' || /aborted due to timeout/i.test(texto);
+    const semRede = /ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ETIMEDOUT|EHOSTUNREACH|ENETUNREACH|ECONNRESET|fetch failed/i.test(texto);
     return {
       ok: false,
       offline: true,
       status: 0,
-      dados: { message: semRede ? 'Sem conexão com o servidor. Verifique sua internet.' : 'Falha ao conectar: ' + (e && e.message) },
+      dados: {
+        message: estourou
+          ? 'O servidor demorou demais para responder. Confira sua internet e tente de novo.'
+          : (semRede ? 'Sem conexão com o servidor. Verifique sua internet.' : 'Não foi possível falar com o servidor agora. Tente de novo em instantes.'),
+      },
     };
   }
 
@@ -686,15 +707,33 @@ async function perfil(s) {
   const planoValido = p.plan === 'pro' && !vencida;
   const features = planoValido ? (Array.isArray(p.features) ? p.features : []) : ['painel'];
 
+  // Mesmos campos que o userFromClaims do GDZ devolve, sem inventar nada.
+  //
+  // O GDZ recebe um entitlement ASSINADO do servidor com did/pcBound/offlineUntil/
+  // minVersion/latestVersion. Aqui o plano vem da tabela `profiles` do Supabase, que
+  // NÃO tem essas colunas (conferido: profiles tem email, name, plan, features,
+  // lifetime, license_expires_at). Então:
+  //
+  //   - deviceId, pcBound, offlineUntil, latestVersion, minVersion ficam de FORA:
+  //     devolver null/true para eles seria dado inventado aparecendo como se
+  //     viesse do servidor. Quem precisa do PC preso, o gate do main já resolve
+  //     com a RPC verificar_pc.
+  //   - user_metadata também não serve: nada no projeto escreve nele, então ler
+  //     de lá dava sempre undefined (medido pela auditoria).
+  const meta = sess.user.user_metadata || {};
   return {
     id: sess.user.id,
+    userId: sess.user.id,
     email: p.email || sess.user.email,
-    name: p.name || (sess.user.user_metadata && sess.user.user_metadata.name) || String(sess.user.email || '').split('@')[0],
+    username: p.name || meta.name || String(sess.user.email || '').split('@')[0],
+    name: p.name || meta.name || String(sess.user.email || '').split('@')[0],
     plan: planoValido ? 'pro' : 'free',
+    reason: planoValido ? null : (vencida ? 'expired' : null),
     features,
     lifetime: !!p.lifetime,
     licenseExpiresAt: p.license_expires_at || null,
     expirada: vencida,
+    offline: false,
   };
 }
 
@@ -833,8 +872,71 @@ function sessaoRecusada(info) {
   };
 }
 
-function sair() {
+/// Sai da conta E revoga o token no servidor.
+///
+/// O GDZ faz ipcMain.on("logout") com a mesma ordem: lê o token guardado, apaga
+/// o arquivo e manda POST /app/logout com ele. Só apagar o arquivo (como era
+/// antes) deixava o refresh_token que estava no disco válido para sempre — quem
+/// copiasse o arquivo continuava entrando.
+///
+/// Ordem escolhida: revoga PRIMEIRO (com o token ainda em mão) e apaga depois.
+/// Se a rede falhar, apaga do mesmo jeito e devolve um aviso: o cliente pediu
+/// para sair, então ele sai.
+async function sair() {
+  let s = null;
+  try { s = lerSessao(); } catch (e) { }
+  const access = s && s.access_token;
+  const refresh = s && s.refresh_token;
+  let revogou = false;
+
+  if (configurado() && (access || refresh)) {
+    // `/auth/v1/logout` do Supabase revoga o token de ACESSO que vai no header —
+    // não o refresh_token. Mandar o refresh_token ali fazia o GoTrue responder 401
+    // em toda saída e a tela avisava "o servidor não confirmou" mesmo com internet
+    // boa (achado da auditoria n2).
+    //
+    // Então são duas chamadas, cada uma com o token que a API espera:
+    //   1) logout do access token (e o 401 aqui também conta como revogado)
+    //   2) revogação do refresh token em /auth/v1/user? Ele não tem endpoint de
+    //      revogação por refresh no GoTrue padrão; o caminho que existe é o
+    //      `?scope=global` do logout, que encerra TODAS as sessões do usuário.
+    //      Usamos `global` só quando temos access token válido; se só houver
+    //      refresh, tentamos renovar primeiro.
+    try {
+      let tokenParaRevogar = access;
+      if (!tokenParaRevogar && refresh) {
+        const renov = await pedir('/auth/v1/token?grant_type=refresh_token', {
+          method: 'POST',
+          body: JSON.stringify({ refresh_token: refresh }),
+          timeoutMs: 8000,
+        });
+        if (renov && renov.ok && renov.dados && renov.dados.access_token) {
+          tokenParaRevogar = renov.dados.access_token;
+        }
+      }
+      if (tokenParaRevogar) {
+        const r = await pedir('/auth/v1/logout?scope=global', {
+          method: 'POST',
+          token: tokenParaRevogar,
+          timeoutMs: 8000,
+        });
+        // 204 = sem conteúdo (ok), 401 = token já não valia (também ok: o objetivo
+        // era justamente ficar inválido), 404 = sessão já encerrada pelo servidor.
+        revogou = !!(r && (r.ok || r.status === 204 || r.status === 401 || r.status === 404));
+      }
+    } catch (e) { }
+  }
+
   gravarSessao(null);
+
+  // Aviso só quando realmente não deu: sem conexão ou servidor fora. Se o token
+  // já não valia, o objetivo foi cumprido e não há o que avisar.
+  if ((access || refresh) && !revogou) {
+    return {
+      success: true,
+      message: 'Saímos no PC. O servidor não respondeu agora, então a sessão antiga só expira sozinha — entre de novo para renovar.',
+    };
+  }
   return { success: true };
 }
 

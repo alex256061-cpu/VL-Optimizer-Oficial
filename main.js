@@ -471,9 +471,21 @@ const H = (name, fn) => ipcMain.handle(name, async (e, arg) => {
 H('get-user', () => conta.usuario());
 H('check-session', () => conta.sessao());
 H('login', async (a) => { const r = await conta.entrar(a && a.email, a && a.password); esquecerSessao(); if (r && r.success) setTimeout(() => conta.enviarHardware().catch(() => {}), 2500); return r; });
-H('register', (a) => conta.registrar(a && a.name, a && a.email, a && a.password));
-H('logout', () => { const r = conta.sair(); esquecerSessao(); return r; });
-H('ir-para-login', () => { conta.sair(); esquecerSessao(); if (win && !win.isDestroyed()) win.loadFile(path.join(__dirname, 'src', 'login.html')); return { success: true }; });
+// Registro com as mesmas guardas do GDZ: e-mail e senha obrigatórios, os termos
+// precisam ter sido aceitos (o campo 	erms tem de ser exatamente true) e o nome
+// é cortado em 40 caracteres. Antes o handler passava direto e quem chamasse o
+// canal por fora da tela criava conta sem aceitar os termos.
+H('register', (a) => {
+  const r = a && typeof a === 'object' ? a : {};
+  const email = typeof r.email === 'string' ? r.email.trim() : '';
+  const senha = typeof r.password === 'string' ? r.password : '';
+  if (!email || !senha) return { success: false, message: 'Preencha e-mail e senha.' };
+  if (r.terms !== true) return { success: false, message: 'Aceite os termos de uso para criar a conta.' };
+  const nome = typeof r.name === 'string' && r.name.trim() ? r.name.trim().slice(0, 40) : null;
+  return conta.registrar(nome, email, senha);
+});
+H('logout', async () => { const r = await conta.sair(); esquecerSessao(); return r; });
+H('ir-para-login', async () => { await conta.sair(); esquecerSessao(); if (win && !win.isDestroyed()) win.loadFile(path.join(__dirname, 'src', 'login.html')); return { success: true }; });
 H('recuperar-senha', (a) => conta.recuperar(a && a.email));
 H('conta-status', () => ({ configurado: conta.configurado() }));
 // Abre o site no navegador do sistema.
