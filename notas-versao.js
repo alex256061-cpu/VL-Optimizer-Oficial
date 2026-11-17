@@ -10,6 +10,21 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.41': {
+    corrigido: [
+      'Ajuste nos textos da tela de novidades.',
+    ],
+    novo: [],
+  },
+  '1.4.40': {
+    corrigido: [
+      'A analise de jogo para o otimizador de graficos (OptiScaler) ficou mais precisa: o aviso de jogo online usa a lista de nomes de anti-cheat do programa de referencia em vez de procurar pedaco de palavra, e por isso nao acusa mais jogo normal por engano.',
+      'Agora o app reconhece os upscalers ja presentes na pasta do jogo (DLSS, FSR, XeSS) pela lista real de arquivos, e nao por aproximacao.',
+      'Crimson Desert: o app avisa que o jogo fecha ao abrir com a troca de placa de video simulada ligada, e deixa essa opcao desligada nele.',
+      'Os textos do atualizador automatico estavam com a acentuacao corrompida. Corrigidos.',
+    ],
+    novo: [],
+  },
   '1.4.39': {
     corrigido: [
       'Sair da conta agora encerra a sessao no servidor. Antes o app so apagava o arquivo do PC, e o acesso copiado do disco continuava valendo para sempre.',
