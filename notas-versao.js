@@ -10,6 +10,14 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.32': {
+    corrigido: [
+      'Ajuste de memoria virtual: ele gravava um valor invalido na chave PagingFiles e o Windows deixava de criar o arquivo de paginacao. Sem ele o PC trava e programas fecham sozinhos. Agora o ajuste liga o gerenciamento automatico do Windows, do mesmo jeito que o programa de referencia.',
+      'Tema escuro voltou ao catalogo. Ele e um ajuste legitimo do programa de referencia e havia sido removido por engano.',
+      'Removido o indicador de DLSS na tela: nao existe no programa de referencia.',
+    ],
+    novo: [],
+  },
   '1.4.31': {
     corrigido: [
       'Removido o ajuste de resolução de tela (720p). Ele escrevia os dados de vídeo no formato errado e podia deixar a tela preta em notebooks.',
