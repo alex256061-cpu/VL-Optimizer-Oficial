@@ -6,6 +6,19 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
+// A fotografia do estado do Windows (8 tipos de item, como o GDZ).
+//
+// Fica em arquivo separado de propósito: o script PowerShell embutido tem cifrão e
+// barra invertida que brigam com o template literal do JavaScript. Separado, cada
+// lado é validado com a sua própria ferramenta e não há como um quebrar o outro.
+//
+// A função recebe o `ps` por parâmetro para não criar ciclo de require.
+const { fotoSistema } = require('./foto-sistema');
+// O caminho de volta do fotoSistema: os 8 tipos que o lerAnterior/restoreBackup
+// não cobrem (svc, scheme, pwr, bcd, tcp, dns, drs). Mesmo padrão: o `ps` entra
+// por parâmetro para não criar ciclo de require.
+const { desfazerFoto } = require('./restaurar-sistema');
+
 // Pasta de dados (backups, sessoes, configuracoes).
 //
 // Antes caia em %TEMP%, que o Storage Sense do Windows apaga sozinho — o usuario
@@ -402,6 +415,9 @@ const TWEAKS = [
     desc: 'Desliga a tela que o Steam abre por cima do jogo com o Shift+Tab. Ela injeta código em todo jogo do Steam e é causa conhecida de queda de FPS, travadinhas e conflito com outros programas de captura.',
     reg: [{ path: HKCU + '\\Software\\Valve\\Steam', name: 'EnableGameOverlay', type: 'DWord', on: 0, off: 1 }],
     note: 'O Steam fecha e abre de novo para a alteração valer. Sem a sobreposição você perde o chat, o navegador e as conquistas por cima do jogo (e o Steam Input de alguns controles).',
+    // GDZ: `caps.steamPath ? null : "O Steam não está instalado neste PC."`. O caminho
+    // vem de HKCU\Software\Valve\Steam\SteamPath e só vale se steam.exe estiver lá.
+    block: (caps) => caps.steamPath ? null : 'O Steam não está instalado neste PC.',
   }),
   T('bg-apps', {
     cat: 'desempenho', title: 'Sem apps da Loja rodando escondidos', tags: ['PC fraco'],
@@ -426,6 +442,14 @@ T('dlss-rec', {
     cat: 'desempenho', title: 'DLSS no modelo recomendado pela NVIDIA', cap: 'rtx', tags: ['Imagem', 'Mais FPS'],
     desc: 'Os jogos com DLSS passam a usar a versao mais nova que o driver tem, com o modelo que a NVIDIA recomenda para cada modo: o DLSS 4.5 nos modos Desempenho e Ultra Desempenho e o DLSS 4 nos outros. E o botao Recomendado de Substituicao do DLSS na NVIDIA App. A imagem dos modos mais leves melhora, entao da para trocar Qualidade por Desempenho dentro do jogo e ganhar FPS.',
     note: 'O preset fica na NVIDIA App (Sobreposicao/Substituicao do DLSS).',
+    // GDZ: `!rtx ? "Só para placas de vídeo NVIDIA RTX..." : !nvapi ? "O driver da
+    // NVIDIA não está instalado neste PC." : null`. Duas causas, não uma: ter a placa
+    // não basta, o driver precisa estar instalado — sem ele o DLSS nem existe.
+    block: (caps) => !caps.rtx
+      ? 'Só para placas de vídeo NVIDIA RTX, que são as que têm DLSS.'
+      : !caps.nvapi
+        ? 'O driver da NVIDIA não está instalado neste PC.'
+        : null,
   }),
   T('gpu-msi', {
     cat: 'desempenho', title: 'Placa de vídeo com interrupção MSI e prioridade alta', tags: ['Menos atraso'],
@@ -464,6 +488,10 @@ if ($gpus.Count -eq 0) { Write-Output '0' } else {
   if ($tem -gt 0 -and $ok -eq $tem) { Write-Output '1' } else { Write-Output '0' }
 }`,
     restart: 'reboot',
+    // GDZ: `caps.gpuIrq ? null : "Não encontrei uma placa de vídeo dedicada NVIDIA ou AMD
+    // neste PC."` — `gpuIrq` só existe quando há dGPU NVIDIA/AMD com PNP PCI válido, que
+    // é justamente o que o script acima precisa achar para ter onde gravar.
+    block: (caps) => caps.gpuIrq ? null : 'Não encontrei uma placa de vídeo dedicada NVIDIA ou AMD neste PC.',
   }),
   T('mpo', {
     cat: 'desempenho', title: 'Correção de tela piscando (MPO)', tags: ['Estabilidade'],
@@ -527,6 +555,8 @@ if ($gpus.Count -eq 0) { Write-Output '0' } else {
     on: `Get-NetAdapter | Disable-NetAdapterLso -ErrorAction SilentlyContinue; Write-Output 'ok'`,
     off: `Get-NetAdapter | Enable-NetAdapterLso -ErrorAction SilentlyContinue; Write-Output 'ok'`,
     probe: `$l = @(Get-NetAdapterLso -ErrorAction SilentlyContinue | Where-Object { $_.Enabled }); if ($l.Count -eq 0) { Write-Output '1' } else { Write-Output '0' }`,
+    // GDZ: `caps.nicLso.length ? null : "Nenhuma placa de rede deste PC tem LSO para desligar."`
+    block: (caps) => caps.nicLso.length ? null : 'Nenhuma placa de rede deste PC tem LSO para desligar.',
   }),
   T('eee', {
     cat: 'live', title: 'Economia de energia da placa de rede desligada (EEE)', tags: ['Rede'],
@@ -576,6 +606,11 @@ foreach ($x in $kw) {
 if ($tem -eq 0) { Write-Output '1' }
 elseif ($tudoOff) { Write-Output '1' }
 else { Write-Output '0' }`,
+    // GDZ (`nicOptOf(caps, NIC_EEE)`): as palavras-chave de EEE que o driver desta
+    // placa realmente declara. Sem nenhuma, o script acima não tem o que desligar.
+    block: (caps) => caps.nicOpt.filter((x) => NIC_EEE.includes(x.n)).length
+      ? null
+      : 'Nenhuma placa de rede com cabo deste PC tem EEE ou Green Ethernet para desligar.',
   }),
   T('nic-intmod', {
     cat: 'live', title: 'Placa de rede sem moderação de interrupção', tags: ['Ping'],
@@ -597,6 +632,11 @@ if ($p.Count -eq 0) { Write-Output '1' }
 # [int] num String[] lança exceção e derrubava TODOS os probes do app.
 # Comparar como texto funciona para os dois formatos.
 else { $off = @($p | Where-Object { (@($_.RegistryValue) -join '') -eq '0' }); if ($off.Count -eq $p.Count) { Write-Output '1' } else { Write-Output '0' } }`,
+    // GDZ (`nicOptOf(caps, NIC_INTMOD)`): sem a palavra-chave na placa, o ajuste não tem
+    // onde agir.
+    block: (caps) => caps.nicOpt.filter((x) => NIC_INTMOD.includes(x.n)).length
+      ? null
+      : 'Nenhuma placa de rede deste PC tem moderação de interrupção para desligar.',
   }),  T('hibernate', { padrao: 1, rec: true,
     cat: 'limpeza', title: 'Desligar de verdade (sem hibernação)', tags: ['Espaço em disco'],
     desc: 'Desativa a hibernação e a Inicialização Rápida. O "Desligar" passa a zerar o Windows (drivers e memória limpos a cada boot) e o arquivo hiberfil.sys some, liberando alguns GB no disco C:.',
@@ -652,6 +692,10 @@ else { $off = @($p | Where-Object { (@($_.RegistryValue) -join '') -eq '0' }); i
     cat: 'tweaks', title: 'Finalizar tarefa pela barra de tarefas', tags: ['Praticidade'],
     desc: 'Botão direito num programa na barra de tarefas → "Finalizar tarefa". Fecha na hora um jogo travado, sem abrir o Gerenciador de Tarefas.',
     reg: [{ path: ADV, name: 'TaskbarEndTask', type: 'DWord', on: 1, off: 0 }],
+    // GDZ: `caps.build && caps.build < 22631 ? "Requer Windows 11 23H2 ou mais novo." : null`.
+    // O `build &&` é do GDZ e é o que importa: sem leitura (build 0) NÃO bloqueia — um
+    // ajuste de barra de tarefas não pode virar refém de uma falha de leitura do Windows.
+    block: (caps) => caps.build && caps.build < 22631 ? 'Requer Windows 11 23H2 ou mais novo.' : null,
   }),
   T('file-ext', { rec: true,
     cat: 'tweaks', title: 'Mostrar a extensão dos arquivos', tags: ['Praticidade'],
@@ -675,6 +719,8 @@ else { $off = @($p | Where-Object { (@($_.RegistryValue) -join '') -eq '0' }); i
     on: `New-Key '${HKCU}\\Software\\Classes\\CLSID\\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\\InprocServer32'; Set-ItemProperty -LiteralPath '${HKCU}\\Software\\Classes\\CLSID\\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\\InprocServer32' -Name '(default)' -Value '' -Force; Write-Output 'ok'`,
     off: `Remove-Item -Path '${HKCU}\\Software\\Classes\\CLSID\\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}' -Recurse -Force -ErrorAction SilentlyContinue; Write-Output 'ok'`,
     probe: `if (Test-Path '${HKCU}\\Software\\Classes\\CLSID\\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}') { Write-Output '1' } else { Write-Output '0' }`,
+    // GDZ: `WIN11` = `caps.build && caps.build < 22000 ? "Só existe no Windows 11." : null`
+    block: (caps) => caps.build && caps.build < 22000 ? 'Só existe no Windows 11.' : null,
   }),
   T('dark', {
     cat: 'tweaks', title: 'Tema escuro', tags: ['Visual'],
@@ -699,6 +745,8 @@ else { $off = @($p | Where-Object { (@($_.RegistryValue) -join '') -eq '0' }); i
     note: 'Só existe no Windows 11.',
     cap: 'win11',
     reg: [{ path: ADV, name: 'TaskbarAl', type: 'DWord', on: 0, off: 1 }],
+    // GDZ: `WIN11` — mesma trava do classic-menu, com o texto dele.
+    block: (caps) => caps.build && caps.build < 22000 ? 'Só existe no Windows 11.' : null,
   }),
   T('search-icon', {
     cat: 'tweaks', title: 'Pesquisa da barra só como ícone', tags: ['Aparência'],
@@ -1104,27 +1152,134 @@ async function setDns(provider) {
 }
 
 // ── Capacidades do PC ──
+//
+// A ficha do PC que o motor consulta para DECIDIR o que pode ser aplicado. É o
+// `buildCaps` do GDZ (extraído de gdz-SEM-MANGLE.js, ver TIME/i2-bloqueios-FEITO.md),
+// copiado literalmente: as regras de vendor/integrada/RTX/x3dDual/paths são as
+// mesmas, porque é delas que as travas dependem.
+//
+// O que mudou em relação ao getCaps anterior:
+//   - `obsExe` era um BOOLEANO (Test-Path de "C:\Program Files\obs-studio\...");
+//     agora é o caminho ou null, achado pelo registro do OBS (HKLM\SOFTWARE\OBS
+//     Studio). Antes, um OBS instalado em outro disco respondia "não encontrado".
+//   - `steamPath`, `gpuIrq`, `nicLso`, `nicOpt`, `nvapi`, `rtxOld`, `gpuName` não
+//     existiam — e sem eles as travas de steam-overlay, gpu-msi, lso, eee,
+//     nic-intmod e dlss-rec não teriam o que consultar.
+//   - `gpus` agora traz `{name, vendor, integrated}`, com o vendor vindo do
+//     PNPDeviceID (VEN_10DE/VEN_1002/VEN_8086) e a integrada separada da dedicada.
+//   - `x3dDual` usa a regex do GDZ `\b(7900X3D|7950X3D|9900X3D|9950X3D|7945HX3D)\b`,
+//     que inclui o 7945HX3D de notebook.
+const NIC_EEE = ['*EEE', 'EEE', 'AdvancedEEE', 'EEELinkAdvertisement', 'EnableGreenEthernet'];
+const NIC_INTMOD = ['*InterruptModeration'];
+const NIC_KW = [...NIC_EEE, ...NIC_INTMOD];
+const NIC_CLASS = 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Class\\{4d36e972-e325-11ce-bfc1-08002be10318}';
+
+const capsQuote = (x) => "'" + String(x).replace(/'/g, "''") + "'";
+
+// CAPS_PS do GDZ, copiado. Devolve o JSON bruto; quem tipa e sanitiza é o buildCaps.
+const CAPS_PS = `
+$ProgressPreference = 'SilentlyContinue'
+$c = Get-CimInstance Win32_Processor | Select-Object -First 1
+$g = @(Get-CimInstance Win32_VideoController | ForEach-Object { [ordered]@{ name = [string]$_.Name; pnp = [string]$_.PNPDeviceID } })
+$cv = Get-ItemProperty 'HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion'
+$obsDir = (Get-ItemProperty 'HKLM:\\SOFTWARE\\OBS Studio' -ErrorAction SilentlyContinue).'(default)'
+$obs = $null
+if ($obsDir) { $obs = Join-Path $obsDir 'bin\\64bit\\obs64.exe'; if (-not (Test-Path -LiteralPath $obs)) { $obs = $null } }
+# O Steam grava o caminho com barras ao contrário ("c:/program files (x86)/steam").
+$steam = $null
+$sp = [string](Get-ItemProperty 'HKCU:\\Software\\Valve\\Steam' -ErrorAction SilentlyContinue).SteamPath
+if ($sp) { $sp = ($sp -replace '/', '\\').TrimEnd('\\'); if (Test-Path -LiteralPath (Join-Path $sp 'steam.exe')) { $steam = $sp } }
+# Placas de rede físicas que têm LSO: a opção existe quando o driver declara a palavra-chave em
+# Ndi\\Params (o valor em si só aparece depois que alguém muda no Gerenciador de Dispositivos).
+$lso = @()
+# Economia de energia (EEE) e moderação de interrupção: guarda também o padrão de fábrica do
+# driver (Ndi\\Params\\<nome>\\default), que é para onde o ajuste volta ao ser desligado.
+$nicOpt = @()
+$nicIds = @(Get-NetAdapter -Physical -ErrorAction SilentlyContinue | ForEach-Object { [string]$_.InterfaceGuid })
+foreach ($nk in @(Get-ChildItem -LiteralPath 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Class\\{4d36e972-e325-11ce-bfc1-08002be10318}' -ErrorAction SilentlyContinue)) {
+  $np = Get-ItemProperty -LiteralPath $nk.PSPath -Name NetCfgInstanceId -ErrorAction SilentlyContinue
+  if (-not $np -or ($nicIds -notcontains [string]$np.NetCfgInstanceId)) { continue }
+  if (Test-Path -LiteralPath "$($nk.PSPath)\\Ndi\\Params\\*LsoV2IPv4") {
+    $lso += [ordered]@{ k = $nk.PSChildName; v6 = (Test-Path -LiteralPath "$($nk.PSPath)\\Ndi\\Params\\*LsoV2IPv6") }
+  }
+  foreach ($kw in @(${NIC_KW.map(capsQuote).join(',')})) {
+    $kp = "$($nk.PSPath)\\Ndi\\Params\\$kw"
+    if (Test-Path -LiteralPath $kp) {
+      $nicOpt += [ordered]@{ k = $nk.PSChildName; n = $kw; d = [string](Get-ItemProperty -LiteralPath $kp -Name default -ErrorAction SilentlyContinue).default }
+    }
+  }
+}
+$o = [ordered]@{
+  cpuName = [string]$c.Name; cpuVendor = [string]$c.Manufacturer
+  gpus = $g; laptop = (@(Get-CimInstance Win32_Battery -ErrorAction SilentlyContinue).Count -gt 0)
+  build = [int]$cv.CurrentBuildNumber; ubr = [int]$cv.UBR; obsExe = $obs; steamPath = $steam
+  discord = [bool]((Test-Path (Join-Path $env:LOCALAPPDATA 'Discord')) -or (Test-Path (Join-Path $env:APPDATA 'discord')))
+  nicLso = @($lso); nicOpt = @($nicOpt)
+  nvapi = (Test-Path -LiteralPath (Join-Path $env:SystemRoot 'System32\\nvapi64.dll'))
+}
+Write-Output (Json $o)`;
+
+// buildCaps do GDZ, copiado. Os nomes _0x foram trocados por nomes legíveis; a
+// lógica é a mesma linha por linha.
+function buildCaps(entrada) {
+  const s = (x) => (typeof x === 'string' ? x.trim() : '');
+  const d = entrada || {};
+  const cpuName = s(d.cpuName);
+  const gpus = (Array.isArray(d.gpus) ? d.gpus : d.gpus ? [d.gpus] : [])
+    .map((g) => {
+      const pnp = s(g && g.pnp).toUpperCase();
+      const vendor = pnp.includes('VEN_10DE') ? 'nvidia' : pnp.includes('VEN_1002') ? 'amd' : pnp.includes('VEN_8086') ? 'intel' : 'other';
+      const name = s(g && g.name);
+      const integrated = (vendor === 'intel' && !/\bArc\b/i.test(name)) ||
+        (vendor === 'amd' && /Radeon\(TM\) Graphics|Radeon Graphics|Vega \d+|Radeon \d{3}M\b/i.test(name));
+      return { name, vendor, integrated, pnp };
+    })
+    .filter((g) => g.name && /^PCI\\/i.test(g.pnp));
+  const temDiscreta = (v) => gpus.some((g) => g.vendor === v && !g.integrated);
+  const dgpu = gpus.find((g) => !g.integrated && (g.vendor === 'nvidia' || g.vendor === 'amd')) || null;
+  const pnpOk = dgpu && /^PCI\\VEN_[0-9A-F]{4}&DEV_[0-9A-F]{4}[^\\"'<>|?*]*\\[^\\"'<>|?*]+$/i.test(dgpu.pnp) ? dgpu.pnp : null;
+  const steam = s(d.steamPath).replace(/\//g, '\\').replace(/\\+$/, '');
+  const cpuVendorBruto = s(d.cpuVendor);
+  const ehAmd = /AuthenticAMD/i.test(cpuVendorBruto) || /\bAMD\b|Ryzen/i.test(cpuName);
+  const ehIntel = !ehAmd && (/GenuineIntel/i.test(cpuVendorBruto) || /Intel/i.test(cpuName));
+  const obsBruto = s(d.obsExe);
+  return {
+    cpuName,
+    cpuVendor: ehAmd ? 'amd' : ehIntel ? 'intel' : 'other',
+    x3d: ehAmd && /X3D/i.test(cpuName),
+    x3dDual: ehAmd && /\b(7900X3D|7950X3D|9900X3D|9950X3D|7945HX3D)\b/i.test(cpuName),
+    intelHybrid: ehIntel && (/\b1[2-4]th Gen\b/i.test(cpuName) || /Core\(TM\) Ultra|Core Ultra/i.test(cpuName)),
+    gpus: gpus.map(({ pnp, ...resto }) => resto),
+    gpuIrq: pnpOk ? 'HKLM:\\SYSTEM\\CurrentControlSet\\Enum\\' + pnpOk + '\\Device Parameters\\Interrupt Management' : null,
+    gpuName: dgpu ? dgpu.name : null,
+    steamPath: /^[A-Za-z]:\\[^"'<>|?*]{1,200}$/.test(steam) ? steam : null,
+    nicLso: (Array.isArray(d.nicLso) ? d.nicLso : d.nicLso ? [d.nicLso] : [])
+      .filter((x) => x && /^\d{4}$/.test(s(x.k)))
+      .map((x) => ({ k: s(x.k), v6: x.v6 === true })),
+    nicOpt: (Array.isArray(d.nicOpt) ? d.nicOpt : d.nicOpt ? [d.nicOpt] : [])
+      .filter((x) => x && /^\d{4}$/.test(s(x.k)) && NIC_KW.includes(s(x.n)) && /^[01]?$/.test(s(x.d)))
+      .map((x) => ({ k: s(x.k), n: s(x.n), d: s(x.d) || '1' })),
+    discord: d.discord === true,
+    nvidia: temDiscreta('nvidia'),
+    rtx: gpus.some((g) => g.vendor === 'nvidia' && !g.integrated && /\bRTX\b/i.test(g.name)),
+    rtxOld: gpus.some((g) => g.vendor === 'nvidia' && !g.integrated && /\bRTX\s*[23]0\d{2}\b/i.test(g.name)),
+    nvapi: d.nvapi === true,
+    amdGpu: temDiscreta('amd'),
+    laptop: d.laptop === true,
+    build: Number.isInteger(d.build) ? d.build : 0,
+    ubr: Number.isInteger(d.ubr) ? d.ubr : 0,
+    obsExe: /^[A-Za-z]:\\[^"<>|?*]+\\obs64\.exe$/i.test(obsBruto) ? obsBruto : null,
+  };
+}
+
 async function getCaps() {
-  const script = `
-    $cv = Get-ItemProperty 'HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion'
-    $cpu = (Get-ItemProperty 'HKLM:\\HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0').ProcessorNameString
-    $n = [string]$cpu
-    $vendor = if ($n -match 'AMD') { 'amd' } elseif ($n -match 'Intel') { 'intel' } else { 'other' }
-    $x3d = ($n -match 'X3D')
-    $x3dDual = ($n -match '79(0|5)0X3D' -or $n -match '99(0|5)0X3D' -or $n -match '79[05]0X3D')
-    $hybrid = ($n -match 'Core Ultra' -or $n -match '1[2-4][0-9]00' -or $n -match 'i[3579]-1[2-4]')
-    $gpus = @(Get-CimInstance Win32_VideoController | ForEach-Object { @{ name = $_.Name; integrated = ($_.Name -match 'Intel|AMD Radeon\\(TM\\)|Vega|UHD'); nvidia = ($_.Name -match 'NVIDIA'); amd = ($_.Name -match 'Radeon') } })
-    $nv = @($gpus | Where-Object { $_.nvidia }).Count -gt 0
-    $amdGpu = @($gpus | Where-Object { $_.amd -and -not $_.integrated }).Count -gt 0
-    $rtx = @($gpus | Where-Object { $_.nvidia -and $_.name -match 'RTX' }).Count -gt 0
-    $bat = Get-CimInstance Win32_Battery -ErrorAction SilentlyContinue
-    $obs = "$env:ProgramFiles\\obs-studio\\bin\\64bit\\obs64.exe"
-    $o = [ordered]@{ cpuName = $n; cpuVendor = $vendor; x3d = $x3d; x3dDual = $x3dDual; intelHybrid = $hybrid; nvidia = $nv; amdGpu = $amdGpu; rtx = $rtx; laptop = [bool]$bat; gpus = $gpus; obsExe = (Test-Path $obs); build = [int]$cv.CurrentBuildNumber; ubr = [int]$cv.UBR }
-    Write-Output (Json $o)`;
-  const r = await ps(script, 60000);
-  let caps = { cpuVendor: 'other', nvidia: false, amdGpu: false, rtx: false, laptop: false, gpus: [], x3d: false, x3dDual: false, intelHybrid: false, obsExe: false };
-  if (r.ok && r.out) { try { Object.assign(caps, JSON.parse(r.out)); } catch (e) {} }
-  return caps;
+  const r = await ps(CAPS_PS, 60000);
+  let bruto = null;
+  if (r.ok && r.out) { try { bruto = JSON.parse(r.out); } catch (e) { bruto = null; } }
+  // Sem leitura, `buildCaps({})` dá a ficha vazia (build 0, sem GPU) — é o que o
+  // GDZ faz (`let CAPS = buildCaps({})`), e é o estado mais seguro: as travas
+  // que dependem de recurso passam a bloquear em vez de liberar.
+  return buildCaps(bruto || {});
 }
 
 // ── Status dos ajustes ──
@@ -1288,7 +1443,7 @@ async function mensagemDeFalhaTweak(t, extra) {
 // o backup fica exatamente no formato que o restoreBackup() sabe consumir.
 // (Antes desta função existir, o backup era gravado ANTES de aplicar e ficava órfão
 // quando a aplicação falhava — e o "desfazer" travava para sempre.)
-async function backupDoAnterior(key, regs, svcs, anteriores) {
+async function backupDoAnterior(key, regs, svcs, anteriores, fotoExtra) {
   const b = loadBackups();
   if (b[key]) return;
   const st = { at: Date.now(), reg: [], svc: [] };
@@ -1313,6 +1468,10 @@ async function backupDoAnterior(key, regs, svcs, anteriores) {
       } catch (e) {}
     }
   }
+  // A foto dos outros 7 tipos vai junto: é dela que o desfazer se serve.
+  // Sem esta linha, o fotoSistema lia o estado antes de aplicar e o backup não
+  // guardava nada — o ajuste de serviço/plano de energia ficava sem caminho de volta.
+  if (Array.isArray(fotoExtra) && fotoExtra.length) st.fotoExtra = fotoExtra;
   b[key] = st;
   saveBackups();
 }
@@ -1755,22 +1914,92 @@ async function confereScript(name, script) {
 //
 // Aqui a mesma regra: se o ajuste exige um recurso que esta máquina não tem, o
 // motor responde `success:false` e não toca em nada.
+//
+// ── O QUE O GDZ FAZ (extraído de gdz-SEM-MANGLE.js) ──
+//
+//   function blockedActions(caps) {
+//     const blocked = {};
+//     if (caps.x3dDual) { ...4 ações com o texto do CCD duplo... }
+//     else { blocked["Modo X3D Correto"] = "Só para Ryzen 7900X3D, ..."; }
+//     if (caps.build && caps.build < 22000) blocked["Jogos em Janela Otimizados"] = "Requer Windows 11.";
+//     if (!caps.obsExe) blocked["OBS Prioritário"] = "OBS Studio não encontrado neste PC.";
+//     Object.assign(blocked, tweakBlocks(caps));
+//     return blocked;
+//   }
+//
+// O mapa é `nomeDaAção → motivo`. É consumido em dois lugares no GDZ:
+//   - run-action:  `if (hasOwn(blockedActions(caps), nome)) return { success:false, error: motivo }`
+//   - tweak-set:   `const why = tweakBlocks(caps)[tweakAction(t)]; if (why) return { success:false, error: why }`
+//   - get-caps:    devolve `{ ...caps, blocked }` — é o que a tela usa para apagar o botão.
+//
+// ── O QUE MUDOU AQUI ──
+//
+// Antes, o VL tinha só um `blockedActions(t)` que olhava a etiqueta `cap:` de UM
+// ajuste e conhecia 3 recursos (win11/rtx/x3dDual). Faltavam: as 4 ações que
+// brigam com X3D de dois CCDs, o X3D Dual liberando as outras, o `obs` virando
+// `obsExe`, e o `tweakBlocks` inteiro (7 travas por hardware).
+//
+// `cap: 'win11'` também estava QUEBRADO: `getCaps()` nunca devolvia um campo
+// `win11` — a trava `!caps.win11` era sempre verdadeira, então taskbar-left
+// recusava em qualquer Windows, inclusive no 11.
 // ══════════════════════════════════════════════════════════════════════════
-async function blockedActions(t) {
-  const cap = t && t.cap;
-  if (!cap) return null;
-  let caps = null;
-  try { caps = await getCaps(); } catch (e) { return null; }  // sem caps, nao bloqueia
-  if (!caps) return null;
-  if (cap === "win11" && !caps.win11) {
-    return "Este ajuste só existe no Windows 11.";
+
+// GDZ: `tweakAction = t => "Tweak: " + t.id`
+const tweakAction = (t) => 'Tweak: ' + t.id;
+
+// GDZ `tweakBlocks`: chama o `block(caps)` de cada TWEAK e guarda o motivo.
+// `block` que devolve null/'' não entra.
+function tweakBlocks(caps) {
+  const blocked = {};
+  for (const t of TWEAKS) {
+    const motivo = typeof t.block === 'function' ? t.block(caps) : null;
+    if (motivo) blocked[tweakAction(t)] = motivo;
   }
-  if (cap === "rtx" && !caps.rtx) {
-    return "Este ajuste precisa de uma placa NVIDIA RTX.";
+  return blocked;
+}
+
+// GDZ `blockedActions`. Mesmas regras, mesmos textos, mesma ordem (os dois
+// `assign` no fim: X3D primeiro, depois os tweaks por cima).
+function blockedActions(caps) {
+  const blocked = {};
+  if (caps.x3dDual) {
+    const msg = 'Não use em Ryzen X3D de dois CCDs: o driver da AMD precisa do plano Equilibrado e da Game Bar para pôr o jogo nos núcleos com cache. Use o Modo X3D Correto.';
+    for (const a of ['Plano de Alta Performance', 'Modo Máximo Desempenho', 'Game Bar Desativado', 'Game Bar Removido']) {
+      blocked[a] = msg;
+    }
+  } else {
+    blocked['Modo X3D Correto'] = 'Só para Ryzen 7900X3D, 7950X3D, 9900X3D e 9950X3D.';
   }
-  if (cap === "x3dDual" && !caps.x3dDual) {
-    return "Este ajuste é para Ryzen X3D de dois CCDs (7900X3D, 7950X3D, 9900X3D, 9950X3D).";
-  }
+  // `build &&` é do GDZ: build 0 (leitura falhou) NÃO bloqueia.
+  if (caps.build && caps.build < 22000) blocked['Jogos em Janela Otimizados'] = 'Requer Windows 11.';
+  if (!caps.obsExe) blocked['OBS Prioritário'] = 'OBS Studio não encontrado neste PC.';
+  Object.assign(blocked, tweakBlocks(caps));
+  return blocked;
+}
+
+// O mapa inteiro, pronto para a tela (`get-caps` devolve `{...caps, blocked}`).
+async function getBlocked() {
+  let caps;
+  try { caps = await getCaps(); } catch (e) { return {}; }
+  return blockedActions(caps);
+}
+
+// A trava de UM ajuste, para o motor recusar antes de tocar em qualquer coisa.
+// No GDZ a consulta é `tweakBlocks(caps)["Tweak: " + id]` dentro do `tweak-set`;
+// aqui é o mesmo, com o `caps` que já foi lido uma vez nesta chamada.
+function bloqueioDoTweak(caps, t) {
+  const why = tweakBlocks(caps)[tweakAction(t)];
+  if (why) return why;
+  // O `cap:` continua valendo como atalho de fabricação do nosso catálogo, mas
+  // agora lendo campos que o getCaps REALMENTE devolve (antes `caps.win11` nunca
+  // existia). O motivo vem do mapa do GDZ, não de texto novo.
+  if (!t.cap) return null;
+  const nomes = { win11: 'Só existe no Windows 11.', rtx: null, x3dDual: null, obs: 'OBS Studio não encontrado neste PC.' };
+  const doMapa = blockedActions(caps);
+  if (t.cap === 'win11' && !(caps.build && caps.build >= 22000)) return nomes.win11;
+  if (t.cap === 'rtx' && !caps.rtx) return 'Só para placas de vídeo NVIDIA RTX, que são as que têm DLSS.';
+  if (t.cap === 'x3dDual' && !caps.x3dDual) return doMapa['Modo X3D Correto'];
+  if (t.cap === 'obs' && !caps.obsExe) return nomes.obs;
   return null;
 }
 
@@ -1789,8 +2018,16 @@ async function applyTweak(id, want) {
   if (!t) return { success: false, error: 'ajuste desconhecido' };
   const key = 'tweak:' + id;
   // Trava no backend: recurso que esta máquina não tem não é aplicado.
-  const vlBloqueio = await blockedActions(t);
-  if (vlBloqueio) return { success: false, on: false, error: vlBloqueio };
+  //
+  // Mesmo caminho do GDZ `tweak-set`: lê a ficha do PC UMA vez e consulta
+  // `tweakBlocks(caps)["Tweak: " + id]`. Sem a ficha, não bloqueia: um tropeço do
+  // PowerShell não pode impedir o cliente de aplicar um ajuste que ele já pagou.
+  let vlCaps = null;
+  try { vlCaps = await getCaps(); } catch (e) { vlCaps = null; }
+  if (vlCaps) {
+    const vlBloqueio = bloqueioDoTweak(vlCaps, t);
+    if (vlBloqueio) return { success: false, on: false, error: vlBloqueio };
+  }
   const regs = tweakRegs(t);
   const svcs = t.svc || [];
   zeraErro(t);
@@ -1815,6 +2052,31 @@ async function applyTweak(id, want) {
     }
     const antesLido = regs.length ? await lerAnterior(regs) : { reg: [], tipos: {} };
     const antes = antesLido.reg;
+    // 2. Foto dos tipos que o registro não cobre.
+    //
+    // O `lerAnterior` acima só lê chaves de registro. O GDZ fotografa mais sete
+    // tipos (svc, scheme, pwr, bcd, tcp, dns, drs) e, sem eles, um ajuste que mexe em
+    // serviço ou no plano de energia fica aplicado sem o valor original em lugar nenhum.
+    //
+    // Esta chamada é ADITIVA: devolve a lista extra e não interfere no `lerAnterior`.
+    // Se falhar (sem admin, por exemplo), volta vazia e o ajuste segue como antes.
+    let fotoExtra = [];
+    try {
+      const querSvc = svcs.length > 0;
+      const querPwr = t.pwr || null;
+      const querBcd = t.bcd || null;
+      const querTcp = t.tcp || null;
+      const querDns = !!t.dns;
+      if (querSvc || querPwr || querBcd || querTcp || querDns) {
+        fotoExtra = await fotoSistema({
+          svc: querSvc ? svcs : undefined,
+          pwr: querPwr,
+          bcd: querBcd,
+          tcp: querTcp,
+          dns: querDns,
+        }, ps);
+      }
+    } catch (e) { fotoExtra = []; }
     if (regs.length || svcs.length) {
       const lines = [];
       for (const r of regs) {
@@ -1877,7 +2139,14 @@ async function applyTweak(id, want) {
         return { success: false, on: true, error: MSG_JA_ESTAVA };
       }
       // Só agora o backup faz sentido: o valor anterior deixou de existir para sempre.
-      if (regs.length || svcs.length) await backupDoAnterior(key, regs, svcs, antes);
+      //
+      // `fotoExtra` entra aqui porque é o ÚNICO caminho que salva o backup depois de
+      // aplicar: sem ele a foto dos outros 7 tipos era lida e jogada fora. A condição
+      // também ganhou fotoExtra: um ajuste que só mexe em pwr/bcd/tcp/dns não tem reg
+      // nem svc, e antes não passava por aqui — então nem a foto extra era salva.
+      if (regs.length || svcs.length || (fotoExtra && fotoExtra.length)) {
+        await backupDoAnterior(key, regs, svcs, antes, fotoExtra);
+      }
       return { success: true, on: true };
     }
 
@@ -1939,6 +2208,28 @@ async function applyTweak(id, want) {
     const r = await ps(lines.join('\n'), 60000);
     if (!r.ok) return { success: false, on: true, error: await erroDePermissao(r.err || 'falha') };
   }
+  // Depois de restaurar o backup de registro, restaurar os tipos extras.
+  //
+  // O `restoreBackup` acima só sabe voltar reg e svc. Os outros 7 tipos (scheme, pwr,
+  // bcd, tcp, dns, drs) foram fotografados pelo fotoSistema e ficam em `st.fotoExtra`:
+  // sem esta chamada o ajuste que mexe no plano de energia ou no TCP ficava aplicado
+  // sem caminho de volta, e o cliente não tinha como reverter.
+  //
+  // Vem DEPOIS da cadeia de restore de propósito: o restore.ps1 reativa o plano de
+  // energia no fim (powercfg /setacvalueindex só vale depois de /setactive), então
+  // precisa rodar por último para não ser desfeito por uma troca de plano anterior.
+  //
+  // Falha aqui NÃO aborta o desfazer: o que é registro já voltou, e derrubar tudo por
+  // causa de um item de DNS deixaria o pior dos mundos (metade desfeito e dito falho).
+  const fotoExtra = (st && Array.isArray(st.fotoExtra)) ? st.fotoExtra : [];
+  if (fotoExtra.length) {
+    try {
+      const rf = await desfazerFoto(fotoExtra, ps);
+      // O desfazer só é "completo" se os extras também voltaram. Se algum falhou,
+      // o ajuste continua contando como não desfeito — mas o que voltou, voltou.
+      if (!rf.ok) { restaurado = false; }
+    } catch (e) {}
+  }
   // Mesma regra ao contrário: reler e só dizer que desfez se o estado real voltou.
   // Antes perguntava ao probeTweak, que responde "está ligado?" — e nos ajustes em que
   // "ligado" é o valor de fábrica (bing, bsod-detail) o desfazer dizia ter falhado com
@@ -1967,6 +2258,25 @@ function mesmaCoisa(a, b) {
 async function runAction(name) {
   const a = ACTIONS[name];
   if (!a) return { success: false, error: 'ação desconhecida' };
+  // TRAVA NO BACKEND — é o que o GDZ faz no `run-action`:
+  //   const blocked = blockedActions(caps);
+  //   if (hasOwn(blocked, nome)) return { success:false, error: blocked[nome] };
+  //
+  // Antes, o VL só travava o `applyTweak`. As 4 ações que brigam com Ryzen X3D de
+  // dois CCDs rodavam por aqui de qualquer jeito: elas mudam de plano de energia
+  // e desligam a Game Bar, que é exatamente o que o driver da AMD precisa para
+  // pôr o jogo nos núcleos com cache. Por canal direto, o cliente com 7950X3D
+  // derrubava a própria configuração.
+  //
+  // Fica ANTES do backup e de qualquer alteração: ação recusada não deixa lixo.
+  let vlCaps = null;
+  try { vlCaps = await getCaps(); } catch (e) { vlCaps = null; }
+  if (vlCaps) {
+    const vlBlocked = blockedActions(vlCaps);
+    if (Object.prototype.hasOwnProperty.call(vlBlocked, name)) {
+      return { success: false, error: vlBlocked[name] };
+    }
+  }
   const regs = a.regs || [];
   const svcs = a.svcs || [];
   if (regs.length || svcs.length) await psBackupState(name, regs, svcs);
@@ -2257,6 +2567,8 @@ module.exports = {
   ps, setDataDir, loadBackups, saveBackups, restoreBackup, getCaps,
   tweaksStatus, actionsStatus, applyTweak, runAction, revertAction, runOnce, runTool, runCheck,
   getDns, setDns, TWEAKS, ACTIONS, ONCES, TOOLS, tweakById, DATA_DIR: () => DATA_DIR,
+  // travas de segurança (GDZ: blockedActions / tweakBlocks)
+  getBlocked, blockedActions, tweakBlocks, tweakAction, buildCaps,
   // expostos para as medições (nao usados pelo app)
   servicosDoScript, confereServico, confereScript, resultadoPs, limpaSaida, mensagemDaFalha,
 };

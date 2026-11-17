@@ -5,6 +5,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { spawn, execFile } = require('child_process');
 const core = require('./engine');
+const disco = require('./engine-disco');
 const MARCA = require('./marca');
 
 const ex = {};
@@ -76,40 +77,80 @@ async function approvedStates() {
 }
 
 // ────────────────────────────── LIMPEZA ──────────────────────────────
+//
+// As 16 categorias do GDZ (CLEAN_CATS, gdz-SEM-MANGLE.js linha 4945), na mesma ordem,
+// com o mesmo grupo, a mesma idade, o mesmo `top` e o mesmo padrão de ligada/desligada
+// (só a Lixeira vem desmarcada). Os nomes e as descrições são as do GDZ.
+//
+// `t` é o PowerShell que lista os alvos, exatamente como no GDZ: ele é avaliado dentro
+// de `Alvos { ... }` no script, que joga fora o que está vazio e não existe. É assim que
+// o Opera GX, o Firefox (perfis), a Epic (webcache*) e a pasta de perfis do Chromium
+// entram sem o JavaScript precisar adivinhar caminhos.
+//
+// `procs` é a trava de app aberto: mesma regra de `-like` do GDZ (`FiveM*` casa
+// FiveM, FiveM_b3095_GTAProcess etc.).
+const CLEAN_WEB_DESC = 'Imagens e arquivos de sites guardados. Logins, senhas, histórico e favoritos ficam.';
+
 const CATS = [
-  { id: 'temp', group: 'win', name: 'Temporários do Windows', desc: 'Arquivos temporários com mais de 1 dia em %TEMP% e Windows\\Temp.', on: true, age: 1,
-    paths: [os.tmpdir(), 'C:\\Windows\\Temp'] },
-  { id: 'recycle', group: 'win', name: 'Lixeira', desc: 'Esvazia a Lixeira de todos os discos. Não dá para recuperar depois.', on: false, special: 'recycle' },
-  { id: 'crash', group: 'win', name: 'Relatórios e despejos de memória', desc: 'Arquivos de erro e minidumps que o Windows guarda.', on: true, age: 0,
-    paths: ['C:\\Windows\\Minidump', 'C:\\Windows\\LiveKernelReports', path.join(os.homedir(), 'AppData', 'Local', 'CrashDumps')] },
-  { id: 'chrome', group: 'web', name: 'Google Chrome', desc: 'Só o cache. Logins, senhas, histórico e favoritos ficam.', on: true, age: 0, app: 'o Chrome',
-    paths: [path.join(os.homedir(), 'AppData', 'Local', 'Google', 'Chrome', 'User Data', 'Default', 'Cache'),
-            path.join(os.homedir(), 'AppData', 'Local', 'Google', 'Chrome', 'User Data', 'Default', 'Code Cache'),
-            path.join(os.homedir(), 'AppData', 'Local', 'Google', 'Chrome', 'User Data', 'Default', 'GPUCache')], procs: ['chrome'] },
-  { id: 'edge', group: 'web', name: 'Microsoft Edge', desc: 'Só o cache. Logins, senhas, histórico e favoritos ficam.', on: true, age: 0, app: 'o Edge',
-    paths: [path.join(os.homedir(), 'AppData', 'Local', 'Microsoft', 'Edge', 'User Data', 'Default', 'Cache'),
-            path.join(os.homedir(), 'AppData', 'Local', 'Microsoft', 'Edge', 'User Data', 'Default', 'Code Cache')], procs: ['msedge'] },
-  { id: 'opera', group: 'web', name: 'Opera', desc: 'Só o cache. Logins, senhas, histórico e favoritos ficam.', on: true, age: 0, app: 'o Opera',
-    paths: [path.join(os.homedir(), 'AppData', 'Roaming', 'Opera Software', 'Opera Stable', 'Cache'),
-            path.join(os.homedir(), 'AppData', 'Local', 'Opera Software', 'Opera Stable', 'Cache')], procs: ['opera'] },
-  { id: 'brave', group: 'web', name: 'Brave', desc: 'Só o cache. Logins, senhas, histórico e favoritos ficam.', on: true, age: 0, app: 'o Brave',
-    paths: [path.join(os.homedir(), 'AppData', 'Local', 'BraveSoftware', 'Brave-Browser', 'User Data', 'Default', 'Cache')], procs: ['brave'] },
-  { id: 'discord', group: 'apps', name: 'Discord', desc: 'Cache, logs e dumps do Discord.', on: true, age: 0, app: 'o Discord',
-    paths: [path.join(os.homedir(), 'AppData', 'Roaming', 'discord', 'Cache'),
-            path.join(os.homedir(), 'AppData', 'Roaming', 'discord', 'Code Cache'),
-            path.join(os.homedir(), 'AppData', 'Roaming', 'discord', 'logs')], procs: ['discord', 'discordptb', 'discordcanary'] },
-  { id: 'steam', group: 'apps', name: 'Steam', desc: 'Cache de navegador, logs e dumps da Steam. Jogos ficam.', on: true, age: 0, app: 'a Steam', procs: ['steam'],
-    steam: true },
-  { id: 'epic', group: 'apps', name: 'Epic Games', desc: 'Logs do launcher da Epic.', on: true, age: 0, app: 'a Epic', procs: ['EpicGamesLauncher'],
-    paths: [path.join(os.homedir(), 'AppData', 'Local', 'EpicGamesLauncher', 'Saved', 'Logs')] },
-  { id: 'drivers', group: 'win', name: 'Instaladores de driver', desc: 'Pastas C:\\NVIDIA, C:\\AMD, C:\\Intel e o downloader da NVIDIA com instaladores antigos (mais de 7 dias).', on: false, age: 7,
-    paths: ['C:\\NVIDIA', 'C:\\AMD', 'C:\\Intel', 'C:\\ProgramData\\NVIDIA Corporation\\Downloader'] },
-  { id: 'shaders', group: 'apps', name: 'Cache de shaders', desc: 'NVIDIA, AMD e DirectX. Resolve travadas depois de atualizar o driver.', on: false, age: 0, special: 'shaders',
-    paths: [path.join(os.homedir(), 'AppData', 'Local', 'NVIDIA', 'DXCache'),
-            path.join(os.homedir(), 'AppData', 'Local', 'NVIDIA', 'GLCache'),
-            path.join(os.homedir(), 'AppData', 'Local', 'AMD', 'DxCache'),
-            path.join(os.homedir(), 'AppData', 'Local', 'AMD', 'DxcCache'),
-            path.join(os.homedir(), 'AppData', 'Local', 'D3DSCache')] },
+  { id: 'temp', group: 'win', on: true, age: 1, top: true,
+    name: 'Arquivos temporários',
+    desc: 'Do Windows e dos programas, com mais de 1 dia. O que está em uso fica.',
+    t: `@($env:TEMP, "$env:SystemRoot\\Temp") | Where-Object { $_ -match '\\\\(Temp|Tmp)(\\\\\\d+)?\\\\?$' }` },
+  { id: 'recycle', group: 'win', on: false, special: 'recycle',
+    name: 'Lixeira',
+    desc: 'Esvazia a Lixeira de todos os discos. Depois disso não dá para recuperar o que estava nela.' },
+  { id: 'crash', group: 'win', on: true, age: 0,
+    name: 'Relatórios de erro e despejos de memória',
+    desc: 'Relatórios de travamento que o Windows guarda depois de enviar e as cópias da memória feitas nas telas azuis.',
+    note: 'Investigando uma tela azul? Desmarque para não perder o arquivo dela.',
+    t: `"$env:ProgramData\\Microsoft\\Windows\\WER\\ReportArchive"; "$env:ProgramData\\Microsoft\\Windows\\WER\\ReportQueue"; "$env:ProgramData\\Microsoft\\Windows\\WER\\Temp"; "$L\\Microsoft\\Windows\\WER"; "$L\\CrashDumps"; "$env:SystemRoot\\Minidump"; "$env:SystemRoot\\MEMORY.DMP"; "$env:SystemRoot\\LiveKernelReports"` },
+  { id: 'logs', group: 'win', on: true, age: 7,
+    name: 'Logs antigos do Windows',
+    desc: 'Registros de instalação e de atualização com mais de 7 dias. O Windows cria outros quando precisa.',
+    t: `Sub "$env:SystemRoot\\Logs" @('CBS', 'DISM', 'MoSetup', 'WindowsUpdate', 'NetSetup', 'SIH', 'waasmedic', 'dosvc')` },
+  { id: 'delivery', group: 'win', on: true, special: 'delivery',
+    name: 'Cache de entrega de atualizações',
+    desc: 'Pedaços de atualizações do Windows e da Store guardados para repassar a outros PCs. O Windows baixa de novo o que precisar.',
+    t: `"$env:SystemRoot\\ServiceProfiles\\NetworkService\\AppData\\Local\\Microsoft\\Windows\\DeliveryOptimization\\Cache"` },
+  { id: 'drivers', group: 'win', on: true, age: 0,
+    name: 'Instaladores de driver já usados',
+    desc: 'As pastas C:\\AMD e C:\\NVIDIA, onde os instaladores de driver de vídeo e de chipset se descompactam. O driver instalado continua funcionando.',
+    t: `"$env:SystemDrive\\AMD"; "$env:SystemDrive\\NVIDIA"` },
+  { id: 'chrome', group: 'web', on: true, age: 0, procs: ['chrome'], app: 'o Chrome',
+    name: 'Google Chrome', desc: CLEAN_WEB_DESC,
+    t: `Chromium "$L\\Google\\Chrome\\User Data"` },
+  { id: 'edge', group: 'web', on: true, age: 0, procs: ['msedge'], app: 'o Edge',
+    name: 'Microsoft Edge', desc: CLEAN_WEB_DESC,
+    note: 'O Edge costuma ficar aberto escondido. Para fechar de vez, desligue "Edge em segundo plano" em Desempenho.',
+    t: `Chromium "$L\\Microsoft\\Edge\\User Data"` },
+  { id: 'brave', group: 'web', on: true, age: 0, procs: ['brave'], app: 'o Brave',
+    name: 'Brave', desc: CLEAN_WEB_DESC,
+    t: `Chromium "$L\\BraveSoftware\\Brave-Browser\\User Data"` },
+  { id: 'opera', group: 'web', on: true, age: 0, procs: ['opera'], app: 'o Opera',
+    name: 'Opera', desc: CLEAN_WEB_DESC,
+    t: `Chromium "$R\\Opera Software\\Opera Stable"; Chromium "$L\\Opera Software\\Opera Stable"` },
+  { id: 'operagx', group: 'web', on: true, age: 0, procs: ['opera'], app: 'o Opera GX',
+    name: 'Opera GX', desc: CLEAN_WEB_DESC,
+    t: `Chromium "$R\\Opera Software\\Opera GX Stable"; Chromium "$L\\Opera Software\\Opera GX Stable"` },
+  { id: 'firefox', group: 'web', on: true, age: 0, procs: ['firefox'], app: 'o Firefox',
+    name: 'Mozilla Firefox', desc: CLEAN_WEB_DESC,
+    t: `Get-ChildItem -LiteralPath "$L\\Mozilla\\Firefox\\Profiles" -Directory -Force | ForEach-Object { Sub $_.FullName @('cache2', 'startupCache', 'thumbnails', 'jumpListCache') }` },
+  { id: 'discord', group: 'apps', on: true, age: 0, procs: ['Discord', 'DiscordPTB', 'DiscordCanary'], app: 'o Discord',
+    name: 'Discord',
+    desc: 'Imagens, vídeos e GIFs que o Discord já baixou. Ele baixa de novo o que você abrir.',
+    t: `foreach ($d in 'discord', 'discordptb', 'discordcanary') { Sub "$R\\$d" $CR }` },
+  { id: 'steam', group: 'apps', on: true, age: 0, procs: ['steam', 'steamwebhelper'], app: 'a Steam',
+    name: 'Steam',
+    desc: 'Páginas da loja e da comunidade guardadas, logs e relatórios de erro. Jogos e saves não são tocados.',
+    t: `$sp = (Get-ItemProperty -LiteralPath 'HKCU:\\Software\\Valve\\Steam').SteamPath; if ($sp) { Sub ($sp -replace '/', '\\') @('appcache\\httpcache', 'logs', 'dumps') }; "$L\\Steam\\htmlcache"` },
+  { id: 'epic', group: 'apps', on: true, age: 0, procs: ['EpicGamesLauncher'], app: 'a Epic Games',
+    name: 'Epic Games Launcher',
+    desc: 'Páginas da loja guardadas e logs do launcher. Jogos não são tocados.',
+    t: `Get-ChildItem -LiteralPath "$L\\EpicGamesLauncher\\Saved" -Directory -Filter 'webcache*' -Force | ForEach-Object { $_.FullName }; "$L\\EpicGamesLauncher\\Saved\\Logs"` },
+  { id: 'fivem', group: 'apps', on: true, age: 0, procs: ['FiveM*'], app: 'o FiveM',
+    name: 'FiveM: logs e relatórios de crash',
+    desc: 'Logs e cópias da memória que o FiveM grava quando fecha com erro. O cache dos servidores fica (ele se limpa em Meus jogos).',
+    t: `"$L\\FiveM\\FiveM.app\\logs"; "$L\\FiveM\\FiveM.app\\crashes"` },
 ];
 
 const yieldNow = () => new Promise((r) => setImmediate(r));
@@ -180,61 +221,104 @@ async function anyRunning(names) {
 }
 
 // ── Medição da limpeza: segundo plano, sem corte de tempo, com progresso ──
-const cleanM = { at: 0, measuring: false, index: 0, total: 0, sizes: {} };
+const cleanM = { at: 0, measuring: false, index: 0, total: 0, sizes: {}, exists: {}, open: {} };
 
-function cleanDirsOf(c) {
-  if (c.steam) return steamRoot ? [path.join(steamRoot, 'appcache', 'httpcache'), path.join(steamRoot, 'logs'), path.join(steamRoot, 'dumps'), path.join(steamRoot, 'htmlcache')] : [];
-  return c.paths || [];
+// Cabeçalho PowerShell da limpeza — cópia fiel do CLEAN_PS_HEAD do GDZ (linha 4925).
+//
+// `Sub`, `Chromium`, `Aberto`, `Alvos`, `Medir` e `Lixeira` são as funções que o GDZ usa
+// em cada categoria. É aqui que mora metade do comportamento:
+//   - `Chromium` aplica o cache nos perfis (pasta com Preferences), não só no Default;
+//   - `Aberto` bloqueia quando o processo está rodando (`-like`, então 'FiveM*' funciona);
+//   - `Alvos` descarta o que está vazio e o que não existe;
+//   - `Medir`/`Clean` são chamados no motor C# (engine-disco.js).
+const CLEAN_PS_HEAD = [
+  "$ErrorActionPreference = 'SilentlyContinue'",
+  '$L = $env:LOCALAPPDATA; $R = $env:APPDATA',
+  'function Sub($p, $names) { foreach ($n in $names) { Join-Path $p $n } }',
+  "$CR = @('Cache', 'Code Cache', 'GPUCache', 'DawnCache', 'DawnGraphiteCache', 'DawnWebGPUCache')",
+  '# Navegador Chromium: o cache de cada perfil (pasta com Preferences) e o de shaders da raiz.',
+  'function Chromium($root) {',
+  '  if (-not (Test-Path -LiteralPath $root)) { return }',
+  "  $perfis = @($root) + @(Get-ChildItem -LiteralPath $root -Directory -Force | Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName 'Preferences') } | ForEach-Object { $_.FullName })",
+  '  foreach ($p in $perfis) { Sub $p $CR }',
+  "  Sub $root @('ShaderCache', 'GrShaderCache', 'GraphiteDawnCache')",
+  '}',
+  '$rodando = @(Get-Process | ForEach-Object { $_.Name })',
+  'function Aberto($nomes) { foreach ($n in $nomes) { if ($rodando | Where-Object { $_ -like $n }) { return $true } }; return $false }',
+  'function Alvos($bloco) { @(@(& $bloco) | Where-Object { $_ -and (Test-Path -LiteralPath $_) } | Select-Object -Unique) }',
+  'function Medir($t, $idade, $topo) { $b = 0; $n = 0; foreach ($p in $t) { $m = if ($topo) { [GDZ.Disk]::MeasureTop($p, $idade) } else { [GDZ.Disk]::Measure($p, $idade) }; $b += $m[0]; $n += $m[1] }; @($b, $n) }',
+  '$sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value',
+  "function Lixeira { @([IO.DriveInfo]::GetDrives() | Where-Object { $_.DriveType -eq 'Fixed' -and $_.IsReady } | ForEach-Object { Join-Path $_.RootDirectory.FullName ('$Recycle.Bin\\' + $sid) } | Where-Object { Test-Path -LiteralPath $_ }) }",
+].join(String.fromCharCode(10)) + String.fromCharCode(10);
+
+// PowerShell de uma lista de nomes: @('a','b')
+const psList = (nomes) => '@(' + (nomes || []).map((n) => "'" + String(n).replace(/'/g, "''") + "'").join(',') + ')';
+
+// Mede o que há para limpar em todas as 16 categorias, num script só (cleanScanScript).
+function cleanScanScript() {
+  const corpo = ['$res = @()'];
+  for (const c of CATS) {
+    if (c.special === 'recycle') {
+      corpo.push("$m = Medir (Lixeira) 0");
+      corpo.push("$res += [pscustomobject]@{ id = 'recycle'; existe = $true; bytes = $m[0]; arquivos = $m[1]; aberto = $false }");
+      continue;
+    }
+    corpo.push('$t = Alvos { ' + c.t + ' }');
+    corpo.push('$m = Medir $t ' + (c.age || 0) + ' ' + (c.top ? '$true' : '$false'));
+    corpo.push("$res += [pscustomobject]@{ id = '" + c.id + "'; existe = ($t.Count -gt 0); bytes = $m[0]; arquivos = $m[1]; aberto = (Aberto " + psList(c.procs) + ') }');
+  }
+  corpo.push("Write-Output ('VL_DISK:' + (ConvertTo-Json -InputObject @($res) -Compress))");
+  return motorDisco() + CLEAN_PS_HEAD + corpo.join(String.fromCharCode(10));
 }
 
-// Tamanho real da Lixeira.
-//
-// Antes usava Shell.Application: Items() devolve so os 164 itens de topo e o Size de
-// uma PASTA vale 0 — as pastas (a maior parte do lixo) contavam zero. Medido: 710 MB
-// exibidos com 3.074 MB reais, erro de 76,9%.
-//
-// O tamanho real fica no indice da Lixeira ($I<$R>): cada item tem um registro e o
-// tamanho em bytes esta no deslocamento 8 como Int64.
-async function recycleBytes() {
-  const r = await core.ps([
-    '$total = 0',
-    '$drives = @(Get-PSDrive -PSProvider FileSystem -ErrorAction SilentlyContinue)',
-    'foreach ($d in $drives) {',
-    '  $i = Join-Path ($d.Root) ' + "'$Recycle.Bin'",
-    '  if (-not (Test-Path -LiteralPath $i)) { continue }',
-    '  try {',
-    '    foreach ($sid in @(Get-ChildItem -LiteralPath $i -Directory -Force -ErrorAction SilentlyContinue)) {',
-    '      $idx = Join-Path $sid.FullName ' + "'$I'",
-    '      if (-not (Test-Path -LiteralPath $idx)) { continue }',
-    '      $attrs = [System.IO.File]::GetAttributes($idx)',
-    '      if (-not ($attrs -band [System.IO.FileAttributes]::Hidden)) { }',
-    '      $bytes = [System.IO.File]::ReadAllBytes($idx)',
-    '      $pos = 0',
-    '      while ($pos + 24 -le $bytes.Length) {',
-    '        $ver = [BitConverter]::ToInt64($bytes, $pos)',
-    '        $tam = [BitConverter]::ToInt64($bytes, $pos + 8)',
-    '        if ($tam -lt 0) { break }',
-    '        $total += $tam',
-    '        $pos += 24',
-    '        # pula o nome (UTF-16, terminador duplo) e alinha em 8',
-    '        while ($pos + 1 -lt $bytes.Length -and -not ($bytes[$pos] -eq 0 -and $bytes[$pos + 1] -eq 0)) { $pos += 2 }',
-    '        $pos += 2',
-    '        while ($pos % 8 -ne 0) { $pos += 1 }',
-    '      }',
-    '    }',
-    '  } catch { }',
-    '}',
-    'Write-Output ([int64]$total)',
-  ].join(String.fromCharCode(10)), 30000);
+// Apaga as categorias pedidas (cleanRunScript). A Lixeira e o cache de entrega têm
+// caminho próprio; o resto passa pela trava de app aberto e pelo motor C#.
+function cleanRunScript(cats) {
+  const corpo = ['$res = @()'];
+  for (const c of cats) {
+    if (c.special === 'recycle') {
+      corpo.push('$a = Medir (Lixeira) 0');
+      corpo.push('Clear-RecycleBin -Force');
+      corpo.push('$d = Medir (Lixeira) 0');
+      corpo.push("$res += [pscustomobject]@{ id = 'recycle'; aberto = $false; liberado = [math]::Max(0, $a[0] - $d[0]); arquivos = [math]::Max(0, $a[1] - $d[1]); falhas = 0 }");
+      continue;
+    }
+    if (c.special === 'delivery') {
+      corpo.push('$t = Alvos { ' + c.t + ' }');
+      corpo.push('$a = Medir $t 0');
+      corpo.push('if (Get-Command Delete-DeliveryOptimizationCache) { Delete-DeliveryOptimizationCache -Force } else { foreach ($p in $t) { [void][GDZ.Disk]::Clean($p, 0) } }');
+      corpo.push('$d = Medir $t 0');
+      corpo.push("$res += [pscustomobject]@{ id = 'delivery'; aberto = $false; liberado = [math]::Max(0, $a[0] - $d[0]); arquivos = [math]::Max(0, $a[1] - $d[1]); falhas = 0 }");
+      continue;
+    }
+    corpo.push('if (Aberto ' + psList(c.procs) + ') { $res += [pscustomobject]@{ id = ' + JSON.stringify(c.id) +
+      '; aberto = $true; liberado = 0; arquivos = 0; falhas = 0 } } else {');
+    corpo.push('  $f = 0; $n = 0; $x = 0');
+    corpo.push('  foreach ($p in (Alvos { ' + c.t + ' })) { $m = [GDZ.Disk]::' + (c.top ? 'CleanTop' : 'Clean') + '($p, ' + (c.age || 0) + '); $f += $m[0]; $n += $m[1]; $x += $m[2] }');
+    corpo.push('  $res += [pscustomobject]@{ id = ' + JSON.stringify(c.id) + '; aberto = $false; liberado = $f; arquivos = $n; falhas = $x }');
+    corpo.push('}');
+  }
+  corpo.push("Write-Output ('VL_DISK:' + (ConvertTo-Json -InputObject @($res) -Compress))");
+  return motorDisco() + CLEAN_PS_HEAD + corpo.join(String.fromCharCode(10));
+}
 
-  const viaIndice = parseInt(String(r.out || '0').trim(), 10) || 0;
-  if (viaIndice > 0) return viaIndice;
+// O bloco que carrega a clase C# na frente de tudo. Vai ANTES do CLEAN_PS_HEAD e do
+// corpo porque, dentro de um try de um .ps1, `Add-Type -TypeDefinition` falha com
+// TypeDefinitionError (ver o comentário de separaAddType no engine.js). O bloco começa
+// com "if", então o separaAddType do engine.js não o move.
+function motorDisco() {
+  return disco.diskPS(DATA_DIR_DISCO()) + String.fromCharCode(10);
+}
+function DATA_DIR_DISCO() {
+  try { return core.DATA_DIR(); } catch (e) { return APP_DATA(); }
+}
 
-  // fallback: o COM antigo (subestima, mas melhor que zero)
-  const r2 = await core.ps(
-    '$s = 0; try { $sh = New-Object -ComObject Shell.Application; $bin = $sh.NameSpace(10); if ($bin) { foreach ($i in $bin.Items()) { $s += $i.Size } } } catch {}; Write-Output ([int64]$s)',
-    30000);
-  return parseInt(r2.out, 10) || 0;
+// Lê a linha 'VL_DISK:<json>' da saída do PowerShell.
+function leJsonDisco(out) {
+  const m = /^VL_DISK:(.*)$/m.exec(String(out || ''));
+  if (!m) throw new Error('resposta vazia do PowerShell');
+  const j = JSON.parse(m[1]);
+  return Array.isArray(j) ? j : [j];
 }
 
 async function cleanCats() {
@@ -244,6 +328,8 @@ async function cleanCats() {
     out.push({
       id: c.id, group: c.group, name: c.name, desc: c.desc, on: !!c.on,
       bytes: m ? m.bytes : 0, files: m ? m.files : 0, measured: !!m,
+      // "existe": a categoria só aparece quando o alvo existe (regra do GDZ).
+      exists: c.special === 'recycle' ? true : (cleanM.exists[c.id] === undefined ? undefined : !!cleanM.exists[c.id]),
       open: c.procs ? await anyRunning(c.procs) : false,
       app: c.app, special: c.special, note: c.note,
     });
@@ -259,25 +345,29 @@ async function measureClean(force) {
     cleanM.measuring = true;
     cleanM.index = 0;
     cleanM.total = CATS.length;
-    if (force) cleanM.sizes = {};
-    // categorias em paralelo: o tempo total vira o da pasta mais lenta, não a soma
-    await Promise.all(CATS.map(async (c) => {
-      const t0 = Date.now();
-      try {
-        if (c.special === 'recycle') {
-          const bytes = await recycleBytes();
-          cleanM.sizes[c.id] = { bytes, files: bytes ? 1 : 0 };
-        } else {
-          // orçamento alto (30 s) só como trava de segurança; não corta o caso normal
-          const r = await dirSizes(cleanDirsOf(c), c.age || 0, 30000);
-          cleanM.sizes[c.id] = { bytes: r.bytes, files: r.files };
-        }
-      } catch (e) {
-        cleanM.sizes[c.id] = { bytes: 0, files: 0 };
+    if (force) { cleanM.sizes = {}; cleanM.exists = {}; }
+    try {
+      // Um script só: o motor C# é carregado uma vez e as 16 categorias são medidas em
+      // sequência, como no GDZ. Era uma Promise.all com uma varredura de Node por
+      // categoria — não tinha MeasureTop, não contava nuvem/reparse e media a Lixeira
+      // pelo índice, que é outra coisa.
+      const r = await core.ps(cleanScanScript(), 120000);
+      let lista = [];
+      try { lista = leJsonDisco(r.out); } catch (e) {
+        // Sem resposta: NÃO inventar números. Fica tudo sem medição e a tela mostra
+        // "medindo" em vez de "Nada para limpar" (que era mentira).
+        cleanM.measuring = false;
+        cleanM.at = 0;
+        cleanJob = null;
+        return;
       }
-      cleanM.index++;
-      void t0;
-    }));
+      for (const x of lista) {
+        if (!x || !x.id) continue;
+        cleanM.sizes[x.id] = { bytes: Number(x.bytes) || 0, files: Number(x.arquivos) || 0 };
+        cleanM.exists[x.id] = x.existe === undefined ? undefined : !!x.existe;
+        cleanM.index++;
+      }
+    } catch (e) { }
     cleanM.measuring = false;
     cleanM.at = Date.now();
     cleanJob = null;
@@ -311,52 +401,28 @@ ex.cleanTempSize = async () => {
 };
 
 ex.cleanRun = async (ids) => {
-  if (!steamRoot) await ex.initSteam();
-  const results = [];
-  let freed = 0;
-  for (const id of ids) {
-    const c = CATS.find((x) => x.id === id);
-    if (!c) continue;
-    const before = (cleanM.sizes[id] && cleanM.sizes[id].bytes) || (c.special === 'recycle' ? await recycleBytes() : (await dirSizes(cleanDirsOf(c), c.age || 0, 900000)).bytes);
-    let open = false;
-    if (c.special === 'recycle') {
-      const r = await core.ps(`try { Clear-RecycleBin -Force -ErrorAction Stop } catch {}; Write-Output 'ok'`);
-      open = !r.ok;
-    } else if (c.special === 'shaders') {
-      for (const d of c.paths) { try { fs.rmSync(d, { recursive: true, force: true }); } catch (e) {} }
-    } else {
-      if (c.procs && await anyRunning(c.procs)) { open = true; results.push({ id, freed: 0, failed: 0, open: true }); continue; }
-      const dirs = c.steam && steamRoot ? [path.join(steamRoot, 'appcache', 'httpcache'), path.join(steamRoot, 'logs'), path.join(steamRoot, 'dumps'), path.join(steamRoot, 'htmlcache')] : c.paths;
-      let failed = 0;
-      for (const d of dirs) {
-        if (!fs.existsSync(d)) continue;
-        // apaga o conteúdo, preserva a pasta (aplicativos recriam)
-        let ents = [];
-        try { ents = fs.readdirSync(d); } catch (e) { continue; }
-        for (const e of ents) {
-          const p = path.join(d, e);
-          try {
-            const st = fs.lstatSync(p);
-            if (c.age && st.isFile() && st.mtimeMs >= Date.now() - c.age * 86400000) continue;
-            fs.rmSync(p, { recursive: true, force: true });
-          } catch (err) { failed++; }
-        }
-      }
-      results.push({ id, freed: Math.max(0, before - (c.age ? (await dirSizes(c.paths, c.age)).bytes : 0)), failed, open });
-      freed += Math.max(0, before);
-      continue;
-    }
-    const after = c.special === 'recycle'
-      ? parseInt((await core.ps(`$s = 0; try { $sh = New-Object -ComObject Shell.Application; $bin = $sh.NameSpace(10); foreach ($i in $bin.Items()) { $s += $i.Size } } catch {}; Write-Output ([int64]$s)`)).out, 10) || 0
-      : (await dirSizes(c.paths || [], c.age || 0)).bytes;
-    const f = Math.max(0, before - after);
-    freed += f;
-    results.push({ id, freed: f, failed: 0, open });
+  const pedidas = (Array.isArray(ids) ? ids : []).filter((i) => typeof i === 'string');
+  const cats = CATS.filter((c) => pedidas.includes(c.id));
+  if (!cats.length) return { success: false, error: 'Nada selecionado.' };
+  let lista;
+  try {
+    const r = await core.ps(cleanRunScript(cats), 600000);
+    lista = leJsonDisco(r.out);
+  } catch (e) {
+    return { success: false, error: 'A limpeza não terminou. Tente de novo.' };
   }
-  for (const id of ids) delete cleanM.sizes[id];
+  const results = lista.map((x) => ({
+    id: x.id,
+    open: !!x.aberto,
+    freed: Number(x.liberado) || 0,
+    files: Number(x.arquivos) || 0,
+    failed: Number(x.falhas) || 0,
+  }));
+  const freed = results.reduce((t, x) => t + x.freed, 0);
+  for (const c of cats) delete cleanM.sizes[c.id];
   cleanM.at = 0;
   measureClean(true);
-  return { success: true, freed, results };
+  return { success: true, results, freed };
 };
 
 // ────────────────────────────── DISCO ──────────────────────────────
@@ -446,48 +512,219 @@ ex.diskOpen = (target) => {
 };
 
 // ────────────────────────────── PROGRAMAS ──────────────────────────────
+//
+// As 3 chaves Uninstall e os 5 filtros do GDZ (APPS_PS, gdz-SEM-MANGLE.js linha 5405).
+// O GDZ filtra em CASCATA e cada filtro descarta a chave na hora; os que faltavam no
+// nosso eram dois:
+//   - ReleaseType casando Update|Hotfix  (atualizações e correções que aparecem como
+//     se fossem programas instalados);
+//   - sem UninstallString E não sendo MSI-GUID  (chave órfã, sem como desinstalar).
+// O tamanho vem do Field EstimatedSize (KB do próprio app) × 1024, como o GDZ: antes o
+// nosso devolvia bytes:0 na listagem e só 33 dos 90 programas tinham tamanho, medido
+// pela varredura do disco em appsExtra. O EstimatedSize existe em 60 dos 90.
+const TIPO_UID = /^\{[0-9A-Fa-f-]{36}\}$/;
 let appsCache = null;
 ex.appsList = async (force) => {
   if (appsCache && !force) return { success: true, apps: appsCache };
   const r = await core.ps(`
-    $src = @('HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*','HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*','HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*')
-    $o = @()
-    foreach ($k in @(Get-ItemProperty $src -ErrorAction SilentlyContinue)) {
-      if (-not $k.DisplayName) { continue }
-      if ($k.SystemComponent -eq 1 -or $k.ParentKeyName) { continue }
-      $o += @{ name=[string]$k.DisplayName; pub=[string]$k.Publisher; ver=[string]$k.DisplayVersion; date=[string]$k.InstallDate; un=[string]$k.UninstallString; loc=[string]$k.InstallLocation; key=[string]$k.PSChildName; icon=[string]$k.DisplayIcon; noRemove=($k.NoRemove -eq 1 -or -not $k.UninstallString) }
+    $fontes = @('HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall', 'HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall', 'HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall')
+    $out = New-Object System.Collections.ArrayList
+    foreach ($f in $fontes) {
+      foreach ($k in @(Get-ChildItem -LiteralPath $f -ErrorAction SilentlyContinue)) {
+        $nome = ([string]$k.GetValue('DisplayName')).Trim()
+        if (-not $nome) { continue }
+        if ($k.GetValue('SystemComponent') -eq 1) { continue }
+        if ($k.GetValue('ParentKeyName')) { continue }
+        if ([string]$k.GetValue('ReleaseType') -match 'Update|Hotfix') { continue }
+        $un = [string]$k.GetValue('UninstallString')
+        $msi = $k.GetValue('WindowsInstaller') -eq 1
+        if (-not $un -and -not ($msi -and $k.PSChildName -match '^\\{[0-9A-Fa-f-]{36}\\}$')) { continue }
+        [void]$out.Add([pscustomobject]@{
+          key = $k.Name; name = $nome; pub = ([string]$k.GetValue('Publisher')).Trim(); ver = [string]$k.GetValue('DisplayVersion')
+          kb = $k.GetValue('EstimatedSize'); date = [string]$k.GetValue('InstallDate'); loc = [string]$k.GetValue('InstallLocation')
+          icon = [string]$k.GetValue('DisplayIcon'); un = $un; msi = $msi; guid = $k.PSChildName
+          noRemove = ($k.GetValue('NoRemove') -eq 1) })
+      }
     }
-    Write-Output (Json $o)`, 120000);
+    Write-Output (Json $out)`, 120000);
   let list = [];
   try { list = JSON.parse(r.out); } catch (e) {}
   if (!Array.isArray(list)) list = list ? [list] : [];
-  appsCache = list.filter((a) => a && a.name).map((a, i) => ({ key: a.key || ('app' + i), name: a.name, pub: a.pub || '', ver: a.ver || '', date: (a.date || '').replace(/^(\d{4})(\d{2})(\d{2})$/, '$1-$2-$3'), un: a.un || '', loc: a.loc || '', icon: a.icon || '', noRemove: !!a.noRemove, bytes: 0 }));
+
+  // dedup por name|ver em minúsculas, o primeiro ganha (regra do GDZ).
+  const vistos = new Set();
+  const final = [];
+  for (const a of list) {
+    if (!a || !a.name) continue;
+    // A chave vem como HKEY_LOCAL_MACHINE\... — só as 3 Uninstall valem.
+    const k = String(a.key || '');
+    if (!/^HKEY_(LOCAL_MACHINE|CURRENT_USER)\\SOFTWARE\\(WOW6432Node\\)?Microsoft\\Windows\\CurrentVersion\\Uninstall\\[^\\]+$/i.test(k)) continue;
+    const chaveDedup = (String(a.name) + '|' + String(a.ver || '')).toLowerCase();
+    if (vistos.has(chaveDedup)) continue;
+    vistos.add(chaveDedup);
+    const mData = /^(\d{4})(\d{2})(\d{2})$/.exec(String(a.date || '').trim());
+    final.push({
+      key: k,
+      name: a.name,
+      pub: a.pub || '',
+      ver: a.ver || '',
+      date: mData ? mData[1] + '-' + mData[2] + '-' + mData[3] : null,
+      // EstimatedSize é KB e vem do próprio programa; × 1024 vira bytes. Não é medido
+      // no disco — a tela mostra "—" quando o programa não informa o tamanho.
+      bytes: Number(a.kb) > 0 ? Number(a.kb) * 1024 : null,
+      loc: vmaCleanDir(a.loc),
+      icon: String(a.icon || ''),
+      un: a.un || '',
+      msi: !!a.msi,
+      guid: a.guid || '',
+      noRemove: !!a.noRemove,
+    });
+  }
+  appsCache = final;
   return { success: true, apps: appsCache };
+};
+
+// %VAR% -> valor do ambiente, tira aspas das pontas e a barra final; vazio é 'vazio'.
+const vmaEnvPath = (s) => String(s || '').replace(/%([^%]+)%/g, (m, nome) => process.env[nome] || m);
+function vmaCleanDir(s) {
+  const p = vmaEnvPath(String(s || '').trim().replace(/^"+|"+$/g, '')).replace(/[\\/]+$/, '');
+  return p ? path.resolve(p) : '';
+}
+
+// Separa "como desinstalar" do UninstallString — os 5 casos do parseUninstall do GDZ
+// (linha 5431). É o que permite desinstalar caminhos COM ESPAÇO: o nosso anterior
+// cortava no primeiro espaço, então "C:\Program Files\App\unins000.exe" virava
+// "C:\Program" e o spawn falhava.
+function vmaParseUninstall(un, app) {
+  const s = vmaEnvPath(String(un || '').trim());
+  // caso 1: MSI sem UninstallString -> usa o GUID
+  if (!s && app && app.msi) return { file: 'msiexec.exe', args: '/X' + app.guid };
+  // caso 2: msiexec ... /I {GUID} -> /X (instalador não desinstala)
+  const mMsi = /^"?(?:[a-z]:\\[^"]*\\)?msiexec(?:\.exe)?"?\s+(.*)$/i.exec(s);
+  if (mMsi) return { file: 'msiexec.exe', args: mMsi[1].replace(/\/I\s*(\{)/i, '/X$1') };
+  // caso 3: começa com aspas
+  if (s.startsWith('"')) {
+    const fim = s.indexOf('"', 1);
+    if (fim > 1) return { file: s.slice(1, fim), args: s.slice(fim + 1).trim() };
+  }
+  // caso 4: cresce a fatia até achar um .exe que exista (ou seja só o nome)
+  const pedacos = s.split(' ');
+  for (let i = 1; i <= pedacos.length; i++) {
+    const cand = pedacos.slice(0, i).join(' ');
+    if (/\.exe$/i.test(cand) && (!/[\\/]/.test(cand) || fs.existsSync(cand))) {
+      return { file: cand, args: pedacos.slice(i).join(' ') };
+    }
+  }
+  // caso 5: nada casou — devolve o texto inteiro
+  return { file: s, args: '' };
+}
+
+// O executável do desinstalador, quando é um caminho de verdade.
+function vmaUninstallExe(app) {
+  const p = vmaParseUninstall(app.un, app);
+  if (/[\\/]/.test(p.file) && !/\\(msiexec|rundll32)\.exe$/i.test(p.file)) return path.resolve(p.file);
+  return '';
+}
+
+// "a" é igual a "b" ou está dentro de "b" (case-insensitive, sem barra final).
+const vmaSameOrInside = (a, b) => {
+  const x = String(a || '').toLowerCase();
+  const y = String(b || '').toLowerCase().replace(/\\+$/, '');
+  return x === y || x.startsWith(y + '\\');
+};
+
+// Pastas que NUNCA podem ser tratadas como "sobra de um programa" (lista do GDZ,
+// protectedDirs, linha 5483). Sem esta lista, uma sobra calculada errada poderia
+// apontar para Program Files inteiro, para a área de trabalho ou para a pasta do app.
+function vmaProtectedDirs() {
+  const env = process.env;
+  const home = os.homedir();
+  const lista = [
+    env.SystemRoot, env.ProgramFiles, env['ProgramFiles(x86)'], env.ProgramW6432, env.ProgramData,
+    env.APPDATA, env.LOCALAPPDATA, env.PUBLIC,
+    env.LOCALAPPDATA && path.join(env.LOCALAPPDATA, 'Programs'),
+    env.LOCALAPPDATA && path.join(env.LOCALAPPDATA, 'Temp'),
+    home, env.OneDrive,
+    ...['Desktop', 'Documents', 'Downloads', 'Pictures', 'Music', 'Videos', 'Saved Games', 'AppData', 'AppData\\LocalLow'].map((d) => path.join(home, d)),
+    env.ProgramFiles && path.join(env.ProgramFiles, 'Common Files'),
+    env['ProgramFiles(x86)'] && path.join(env['ProgramFiles(x86)'], 'Common Files'),
+    env.ProgramData && path.join(env.ProgramData, 'Microsoft'),
+    env.ProgramData && path.join(env.ProgramData, 'Package Cache'),
+    path.dirname(process.execPath),
+    APP_DATA(),
+  ];
+  return lista.filter(Boolean).map((p) => path.resolve(p));
+}
+
+// Pastas do sistema em que nada pode ser apagado (systemDirs do GDZ, linha 5489).
+function vmaSystemDirs() {
+  const env = process.env;
+  return [
+    env.SystemRoot,
+    env.ProgramFiles && path.join(env.ProgramFiles, 'WindowsApps'),
+    env.ProgramData && path.join(env.ProgramData, 'Package Cache'),
+    env.LOCALAPPDATA && path.join(env.LOCALAPPDATA, 'Packages'),
+    env.ProgramFiles && path.join(env.ProgramFiles, 'Common Files'),
+    env['ProgramFiles(x86)'] && path.join(env['ProgramFiles(x86)'], 'Common Files'),
+  ].filter(Boolean).map((p) => path.resolve(p));
+}
+
+// Existe, é caminho absoluto de disco, tem 3+ segmentos, não é pasta protegida nem do
+// sistema, e não é a pasta do próprio app. Regra do safeAppDir do GDZ, linha 5493.
+ex.protectedDirs = vmaProtectedDirs;
+ex.safeAppDir = function (dir, outras) {
+  if (!dir || !path.isAbsolute(dir) || !/^[a-z]:\\/i.test(dir)) return false;
+  if (dir.split('\\').filter(Boolean).length < 3) return false;
+  if (vmaProtectedDirs().some((p) => vmaSameOrInside(p, dir))) return false;
+  if (vmaSystemDirs().some((p) => vmaSameOrInside(dir, p))) return false;
+  if (vmaSameOrInside(path.dirname(process.execPath), dir) || vmaSameOrInside(dir, path.dirname(process.execPath))) return false;
+  return !(outras || []).some((o) => o && (vmaSameOrInside(o, dir) || vmaSameOrInside(dir, o)));
 };
 
 const qq = (s) => String(s == null ? '' : s).replace(/'/g, "''");
 ex.appsExtra = async () => {
   const sizes = {}, icons = {};
   try { appsCache = appsCache || (await ex.appsList()).apps; } catch (e) {}
-  for (const a of appsCache || []) {
-    if (a.loc && fs.existsSync(a.loc)) {
-      try {
-        let total = 0;
-        const walk = async (d, depth) => { if (depth > 4) return; let es; try { es = fs.readdirSync(d, { withFileTypes: true }); } catch (e) { return; } for (const x of es) { if (x.isSymbolicLink()) continue; const p = path.join(d, x.name); if (x.isDirectory()) await walk(p, depth + 1); else if (x.isFile()) { try { total += fs.statSync(p).size; } catch (e) {} } await yieldNow(); } };
-        await walk(a.loc, 0);
-        sizes[a.key] = total;
-      } catch (e) {}
-    }
+
+  // Tamanho do disco, com as mesmas proteções que o GDZ aplica antes de medir
+  // (apps-extra, linha 5581): só pasta com 3+ segmentos, que existe, que não é uma
+  // pasta protegida do sistema e que não está DENTRO de outra pasta de programa
+  // (senão o mesmo disco seria contado duas vezes). A medição usa o motor C#.
+  const protegidas = ex.protectedDirs();
+  const todosLoc = (appsCache || []).map((a) => a.loc).filter(Boolean);
+  const paraMedir = (appsCache || []).filter((a) => {
+    if (!a.loc || a.loc.split('\\').filter(Boolean).length < 3) return false;
+    if (!fs.existsSync(a.loc)) return false;
+    if (protegidas.some((p) => vmaSameOrInside(p, a.loc))) return false;
+    if (todosLoc.some((o) => o.toLowerCase() !== a.loc.toLowerCase() && vmaSameOrInside(o, a.loc))) return false;
+    return true;
+  });
+  if (paraMedir.length) {
+    const linhas = ['$sw = [Diagnostics.Stopwatch]::StartNew()', '$r = @{}',
+      'foreach ($x in @(' + paraMedir.map((a) => '@(' + qq(a.key) + ',' + qq(a.loc) + ')').join(',') + ')) {',
+      '  if ($sw.Elapsed.TotalSeconds -gt 40) { break }',
+      '  $r[$x[0]] = [GDZ.Disk]::Measure($x[1], 0)[0]',
+      '}',
+      "Write-Output ('VL_DISK:' + (ConvertTo-Json -InputObject $r -Compress))"].join(String.fromCharCode(10));
+    try {
+      const r = await core.ps(motorDisco() + linhas, 60000);
+      const m = /^VL_DISK:(.*)$/m.exec(String(r.out || ''));
+      if (m) {
+        const j = JSON.parse(m[1]) || {};
+        for (const k of Object.keys(j)) if (Number(j[k]) > 0) sizes[k] = Number(j[k]);
+      }
+    } catch (e) {}
   }
-  // ícone real de cada programa (o mesmo do Explorador)
+
+  // ícone real de cada programa (o mesmo do Explorador).
+  // Ordem do GDZ (linha 5597): DisplayIcon sem o sufixo ",<índice>" -> o executável do
+  // desinstalador. Antes o nosso caía no "primeiro .exe da pasta InstallLocation", que
+  // pegava o programa errado quando a pasta tinha vários.
   const items = [];
   for (const a of appsCache || []) {
-    let p = String(a.icon || '').trim().replace(/^"|"$/g, '');
-    p = p.replace(/,\s*-?\d+\s*$/, '').trim();
-    if (!p && a.loc) {
-      try { const exes = fs.readdirSync(a.loc).filter((f) => /\.exe$/i.test(f)); if (exes.length) p = path.join(a.loc, exes[0]); } catch (e) {}
-    }
-    if (p && fs.existsSync(p) && /\.(exe|ico)$/i.test(p)) items.push({ k: a.key, p });
+    const cands = [vmaCleanDir(String(a.icon || '').replace(/,\s*-?\d+\s*$/, '')), vmaUninstallExe(a)];
+    const p = cands.find((x) => x && /\.(exe|ico)$/i.test(x) && fs.existsSync(x));
+    if (p) items.push({ k: a.key, p });
   }
   if (items.length) {
     const arr = items.slice(0, 120).map((i) => `@{k='${qq(i.k)}';p='${qq(i.p)}'}`).join(',');
@@ -516,23 +753,34 @@ ex.appsExists = async (key) => {
   appsCache = appsCache || [];
   const a = appsCache.find((x) => x.key === key);
   if (!a) return { exists: false };
-  const r = await core.ps(`$k = @(Get-ItemProperty 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${key}','HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${key}','HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${key}' -ErrorAction SilentlyContinue); Write-Output $k.Count`);
-  return { exists: (parseInt(r.out, 10) || 0) > 0 };
+  // A chave agora é o caminho completo do registro (HKEY_...), como no GDZ; o
+  // PowerShell espera o formato PS (HKLM:\...).
+  const ps = String(key)
+    .replace(/^HKEY_LOCAL_MACHINE\\/i, 'HKLM:\\')
+    .replace(/^HKEY_CURRENT_USER\\/i, 'HKCU:\\');
+  const r = await core.ps("$k = Get-Item -LiteralPath '" + qq(ps) + "' -ErrorAction SilentlyContinue; if ($k) { Write-Output '1' } else { Write-Output '0' }");
+  return { exists: String(r.out || '').trim() === '1' };
 };
 
 ex.appsUninstall = async ({ key }) => {
   const a = (appsCache || []).find((x) => x.key === key);
   if (!a) return { success: false, error: 'programa não encontrado' };
-  if (!a.un) return { success: false, broken: true, error: 'sem desinstalador' };
-  let file = a.un, args = '';
-  const m = /^"([^"]+)"\s*(.*)$/.exec(a.un);
-  if (m) { file = m[1]; args = m[2]; } else { const sp = a.un.indexOf(' '); if (sp > 0) { file = a.un.slice(0, sp); args = a.un.slice(sp + 1); } }
+  // NoRemove=1: o próprio programa proíbe a desinstalação (mensagem do GDZ).
+  if (a.noRemove) return { success: false, error: 'Este programa não permite ser desinstalado.' };
+  const p = vmaParseUninstall(a.un, a);
+  if (!p.file) return { success: false, broken: true, error: 'O desinstalador deste programa não existe mais.' };
+  // Caminho com barra que sumiu: desinstalador já foi apagado.
+  if (/[\\/]/.test(p.file) && !fs.existsSync(p.file)) {
+    return { success: false, broken: true, error: 'O desinstalador deste programa não existe mais.' };
+  }
   try {
-    const child = spawn(file, args ? [args] : [], { detached: true, stdio: 'ignore', windowsVerbatimArguments: true });
+    // GDZ: argv0 entre aspas + windowsVerbatimArguments, senão caminho com espaço
+    // quebra (o Node separaria "C:\Program Files\App" em dois argumentos).
+    const child = spawn(p.file, p.args ? [p.args] : [], { detached: true, stdio: 'ignore', windowsVerbatimArguments: true, argv0: '"' + p.file + '"' });
     child.unref();
     return { success: true };
   } catch (e) {
-    const r = await core.ps(`Start-Process -FilePath '${String(file).replace(/'/g, "''")}' -ArgumentList '${String(args).replace(/'/g, "''")}' -ErrorAction SilentlyContinue; Write-Output 'ok'`);
+    const r = await core.ps(`Start-Process -FilePath '${String(p.file).replace(/'/g, "''")}' -ArgumentList '${String(p.args).replace(/'/g, "''")}' -ErrorAction SilentlyContinue; Write-Output 'ok'`);
     return r.ok ? { success: true } : { success: false, broken: true, error: r.err || 'não foi possível abrir' };
   }
 };
@@ -1197,13 +1445,29 @@ ex.ramClean = async () => {
 };
 
 // ────────────────────────────── FPS (PresentMon) ──────────────────────────────
-const PM = path.join(__dirname, 'bin', 'PresentMon.exe');
+// O caminho do PresentMon é resolvido mais abaixo (troca app.asar por app.asar.unpacked).
 const fps = {
   proc: null, targetPid: null, targetName: '', frames: [], low: [], fps: 0, ft: 0, low1: 0,
   overlay: readJson('fps-overlay.json', { on: false, pos: 0, show: { frametime: true, low1: true, name: true } }),
   base: null, sessions: readJson('fps-sessions.json', { a: null, b: null }),
   recording: null, hotkey: 'Ctrl+Alt+B',
 };
+
+// ── Constantes do medidor, iguais às do GDZ (t4-medicao.md) ──
+const FPS_SESSION = 'LOPT_TARGET';   // nome da sessão ETW
+const FPS_IDLE_MS = 15000;           // sem ninguém pedir medição por 15 s -> para
+const FPS_WINDOW_MS = 10000;         // cada processo guarda os últimos 10 s de quadros
+const FPS_REC_SECS = [15, 30, 60];
+// Processos que nunca são "o jogo": a própria área de trabalho, navegadores e as
+// sobreposições dos outros programas também apresentam quadros e roubariam o alvo.
+const FPS_IGNORE = new Set(['dwm.exe', 'explorer.exe', 'chrome.exe', 'msedge.exe', 'firefox.exe',
+  'opera.exe', 'brave.exe', 'discord.exe', 'steamwebhelper.exe', 'epicgameslauncher.exe', 'code.exe',
+  'electron.exe', 'searchhost.exe', 'shellexperiencehost.exe', 'startmenuexperiencehost.exe',
+  'textinputhost.exe', 'applicationframehost.exe', 'nvidia overlay.exe', 'radeonsoftware.exe',
+  'gamebar.exe', 'obs64.exe', 'presentmon.exe']);
+// Carimbo da última vez que a tela, o overlay ou a base pediram uma medição. É o que o
+// vigia usa para não deixar o PresentMon coletando com o app parado.
+fps.lastUse = 0;
 
 // FPS médio do grupo dos piores frametimes.
 //
@@ -1220,87 +1484,294 @@ function lowFromFrametimes(lista, fracao) {
   //   0,1% com floor = 107,7 (alvo 107,71) exato
   // O 0,1% de 2541 quadros = 2,541; round dava 3 e incluia um quadro a mais.
   const qtd = Math.max(1, Math.floor(piores.length * fracao));
+  // slice(0, qtd): o PIOR quadro entra na média. O GDZ começava em 1 e jogava fora
+  // exatamente o pior de todos — é o defeito que o t4-medicao.md registra em fpsStats
+  // (Math.max(1, …) e depois slice(1, …)). Com n<100 sobrava média ZERO, o 1% low
+  // virava Infinity e ia NaN para a tela. Aqui é slice(0, …).
   const media = piores.slice(0, qtd).reduce((s, x) => s + x, 0) / qtd;
   return media > 0 ? Math.round((1000 / media) * 10) / 10 : 0;
 }
-function stopPM() {
-  if (fps.proc) { try { fps.proc.kill(); } catch (e) {} fps.proc = null; }
-  fps.frames = []; fps.fps = 0; fps.ft = 0; fps.low1 = 0;
+
+// Estatísticas de uma lista de frametimes em ms, com as contas e as casas decimais do
+// fpsStats do GDZ (t4-medicao.md), que é o que a tela daquele app mostra:
+//   fps       = round( (n * 1000 / soma) * 10 ) / 10
+//   frametime = round( soma / n * 100 ) / 100
+//   low1      = round( 1000 / médiaDos1%PioresMs * 10 ) / 10
+//   low01     = round( 1000 / médiaDos0,1%PioresMs * 10 ) / 10
+function fpsStats(lista) {
+  const arr = (Array.isArray(lista) ? lista : []).filter((x) => x > 0 && isFinite(x));
+  if (!arr.length) return null;
+  const soma = arr.reduce((s, x) => s + x, 0);
+  if (!(soma > 0)) return null;
+  return {
+    fps: Math.round(arr.length * 1000 / soma * 10) / 10,
+    low1: lowFromFrametimes(arr, 0.01),
+    low01: lowFromFrametimes(arr, 0.001),
+    frametime: Math.round(soma / arr.length * 100) / 100,
+    frames: arr.length,
+    // A soma dos frametimes é a duração real da amostra (é assim que o GDZ calcula
+    // os "segundos" da gravação em vez de usar a duração pedida).
+    secs: Math.round(soma / 1000),
+  };
 }
 
-function startPM(pid) {
-  stopPM();
-  fps.targetPid = pid;
-  try {
-    const p = spawn(PM, ['--process_id', String(pid), '--output_stdout', '--no_console_stats', '--terminate_on_proc_exit', '--stop_existing_session', '--session_name', 'LOPT_TARGET'], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
-    fps.proc = p;
-    fps.denied = false;
-    fps.pmError = null;
+// ── PresentMon ────────────────────────────────────────────────────────────────
+// O binário mora em bin/ e é desempacotado fora do asar (electron-builder.json:
+// "asarUnpack": ["bin/**"]). Dentro do app instalado, __dirname aponta para app.asar,
+// um caminho que NÃO existe no disco — spawn nele daria ENOENT e o medidor nunca subiria
+// na versão empacotada. O GDZ faz exatamente essa troca (getBinPath do gdz-SEM-MANGLE.js).
+const PM = (() => {
+  try { if (require('electron').app.isPackaged) return path.join(__dirname.replace('app.asar', 'app.asar.unpacked'), 'bin', 'PresentMon.exe'); } catch (e) {}
+  return path.join(__dirname, 'bin', 'PresentMon.exe');
+})();
+
+// Cada processo medido tem o seu registro no Map, igual ao fps.procs do GDZ:
+// pid -> { name, frames: [[quando, ms]], last, flip }
+//   flip = o jogo está em "Independent Flip"/"Hardware Composed" (tela cheia sem
+//          composição do Windows). É o critério de desempate do alvo no GDZ.
+const fpsProcs = new Map();
+// Gravação em andamento (slot a/b), igual ao fps.rec do GDZ.
+fps.rec = null;
+fps.pmError = null;
+fps.denied = false;
+fps.cols = null;
+fps.buf = '';
+
+// Uma linha do CSV do PresentMon. A PRIMEIRA linha vira o mapa de colunas
+// (nome -> índice); nada de índice fixo. Depois, só as colunas que o GDZ usa:
+// Application, ProcessID, MsBetweenPresents e PresentMode.
+function fpsHandleLine(linha) {
+  const cols = String(linha).split(',');
+  if (!fps.cols) {
+    fps.cols = Object.fromEntries(cols.map((c, i) => [c.trim(), i]));
+    return;
+  }
+  const c = fps.cols;
+  const nome = (cols[c.Application] || '').trim();
+  const pid = Number(cols[c.ProcessID]);
+  const ms = Number(cols[c.MsBetweenPresents]);
+  // janela ABERTA 0 < ms < 1000: quadro de mais de 1 s é propaganda/overlay/erro, não jogo
+  if (!nome || !pid || !(ms > 0) || !(ms < 1000)) return;
+  const baixo = nome.toLowerCase();
+  if (FPS_IGNORE.has(baixo) || baixo === String(path.basename(process.execPath)).toLowerCase()) return;
+  if (pid === process.pid) return;
+
+  const agora = Date.now();
+  let rec = fpsProcs.get(pid);
+  if (!rec) { rec = { name: nome, frames: [] }; fpsProcs.set(pid, rec); }
+  rec.last = agora;
+  rec.flip = /Independent Flip|Hardware Composed/i.test(cols[c.PresentMode] || '');
+  rec.frames.push([agora, ms]);
+  // janela deslizante de 10 s
+  const limite = agora - FPS_WINDOW_MS;
+  let corte = 0;
+  while (corte < rec.frames.length && rec.frames[corte][0] < limite) corte++;
+  if (corte) rec.frames.splice(0, corte);
+
+  // gravação em curso: guarda o ms cru, o mesmo que o GDZ faz em fpsHandleLine
+  if (fps.rec && fps.rec.pid === pid && agora <= fps.rec.until) fps.rec.frames.push(ms);
+}
+
+// Tira do Map quem parou de apresentar quadros há mais de 3 s.
+function fpsPrune() {
+  const limite = Date.now() - 3000;
+  for (const [pid, rec] of fpsProcs) if (rec.last < limite) fpsProcs.delete(pid);
+}
+
+// Para a sessão. Duas garantias, como no GDZ: kill() no processo e o próprio
+// PresentMon com --terminate_existing_session (timeout 5 s), senão a sessão ETW fica
+// aberta e a próxima subida falha com "error code 1450" (ERROR_NO_SYSTEM_RESOURCES).
+function stopPM() {
+  const p = fps.proc;
+  fps.proc = null;
+  fps.starting = null;
+  fpsProcs.clear();
+  fps.cols = null;
+  fps.buf = '';
+  fps.frames = []; fps.fps = 0; fps.ft = 0; fps.low1 = 0;
+  if (p) { try { p.kill(); } catch (e) {} }
+  try { execFile(PM, ['--terminate_existing_session', '--session_name', FPS_SESSION], { windowsHide: true, timeout: 5000 }, () => {}); } catch (e) {}
+}
+
+// Sobe o PresentMon em fluxo contínuo, com os argumentos do GDZ (t4-medicao.md):
+//   --output_stdout --no_console_stats --stop_existing_session --session_name <sessão>
+//   --no_track_input --no_track_gpu --exclude dwm.exe
+// Sem --process_id e sem --terminate_on_proc_exit: mede TODOS os processos e o alvo é
+// escolhido na leitura (fpsAlvo). Se o jogo trocar de processo (salva e recarrega), a
+// medição continua em vez de parar.
+function startPM() {
+  fps.lastUse = Date.now();
+  if (fps.proc) return Promise.resolve(true);
+  if (fps.starting) return fps.starting;
+  if (!fs.existsSync(PM)) {
+    fps.pmError = 'PresentMon não encontrado na pasta do app.';
+    return Promise.resolve(false);
+  }
+  fps.starting = new Promise((resolve) => {
+    let erroStderr = '';
     try {
+      const p = spawn(PM, ['--output_stdout', '--no_console_stats', '--stop_existing_session', '--session_name', FPS_SESSION, '--no_track_input', '--no_track_gpu', '--exclude', 'dwm.exe'], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+      fps.proc = p;
+      fps.buf = '';
+      fps.cols = null;
+      fps.pmError = null;
+      fps.denied = false;
+      p.stdout.on('data', (d) => {
+        // remove BOM e quebra por linha guardando a linha parcial no buffer
+        fps.buf += String(d).replace(/^\uFEFF/, '');
+        const linhas = fps.buf.split(/\r?\n/);
+        fps.buf = linhas.pop();
+        for (const l of linhas) if (l) fpsHandleLine(l);
+      });
       p.stderr.on('data', (d) => {
         const t = String(d);
-        if (/access denied|elevated privilege|administrative/i.test(t)) fps.denied = true;
+        erroStderr += t;
+        if (/access denied|elevated privilege|administrador|administrative/i.test(t)) fps.denied = true;
         const m = /error:\s*([^\r\n]+)/i.exec(t);
         if (m) fps.pmError = m[1].trim();
       });
-    } catch (e) {}
-    let buf = '';
-    let header = null, ftIdx = -1;
-    const pushFrame = (ft) => {
-      if (!isFinite(ft) || ft <= 0) return;
-      const t = Date.now();
-      fps.frames.push({ t, ft });
-      // janela de 10 s para o 1% low (o resto serve só para a média curta)
-      while (fps.frames.length && t - fps.frames[0].t > 10000) fps.frames.shift();
-      if (fps.frames.length > 2400) fps.frames.shift();
-      const recent = fps.frames.slice(-120);
-      fps.ft = recent.reduce((a, b) => a + b.ft, 0) / (recent.length || 1);
-      fps.fps = Math.round(1000 / fps.ft);
-      // 1% low = média dos 1% piores frametimes, não um único quadro.
-      // Pegar um quadro só dava +24% de erro contra a referência (168 em vez de 136).
-      fps.low1 = lowFromFrametimes(fps.frames.map((f) => f.ft), 0.01);
-      fps.low01 = lowFromFrametimes(fps.frames.map((f) => f.ft), 0.001);
-    };
-    p.stdout.on('data', (d) => {
-      buf += d.toString();
-      const lines = buf.split(/\r?\n/);
-      buf = lines.pop();
-      for (const line of lines) {
-        if (!header) {
-          if (/Application|ProcessID/i.test(line)) {
-            header = line.split(',');
-            ftIdx = header.findIndex((h) => /MsBetweenPresents|MsBetweenDisplayChange/i.test(h));
-            fps.cols = header;
+      p.on('error', (e) => { fps.pmError = e && e.message ? e.message : String(e); });
+      p.on('exit', (codigo) => {
+        if (fps.proc === p) {
+          fps.proc = null;
+          fps.cols = null;
+          fps.buf = '';
+          if (codigo && !fps.pmError) {
+            fps.pmError = /access|privilege|administrador|administrative/i.test(erroStderr)
+              ? 'Precisa rodar o VL Optimizer como administrador.'
+              : 'O medidor parou (código ' + codigo + ').';
+            if (/access|privilege|administrador|administrative/i.test(erroStderr)) fps.denied = true;
           }
-          continue;
         }
-        const cols = line.split(',');
-        if (cols.length < 3) continue;
-        if (!fps.targetName && cols[0]) fps.targetName = cols[0].replace(/\.exe$/i, '') + '.exe';
-        pushFrame(parseFloat(cols[ftIdx >= 0 ? ftIdx : cols.length - 1]));
-      }
-    });
-    p.on('exit', () => { if (fps.proc === p) { fps.proc = null; } });
-  } catch (e) { fps.proc = null; }
+      });
+    } catch (e) {
+      fps.proc = null;
+      fps.pmError = e && e.message ? e.message : String(e);
+    }
+    // 400 ms para o PresentMon abrir a sessão: resolve true se ele ainda está de pé
+    setTimeout(() => { fps.starting = null; resolve(!!fps.proc); }, 400);
+  });
+  return fps.starting;
 }
 
+// Vigia: a cada 5 s, se o PresentMon está de pé e ninguém pediu medição por 15 s
+// (overlay desligado, sem gravação, tela fechada), para a sessão. É o setInterval do
+// GDZ (FPS_IDLE_MS = 15000 ms, conferido a cada 5000 ms), com a diferença de que aqui o
+// overlay LIGADO conta como uso: no GDZ a condição é "!fps.overlay", porque lá o overlay
+// é o único motivo de ele estar de pé; aqui a tela do medidor também usa a sessão.
+let pmWatchdog = null;
+function pmWatchdogStart() {
+  if (pmWatchdog) return;
+  pmWatchdog = setInterval(() => {
+    try {
+      if (fps.proc && !fps.rec && !(fps.overlay && fps.overlay.on) && Date.now() - fps.lastUse > FPS_IDLE_MS) stopPM();
+    } catch (e) {}
+  }, 5000);
+  if (pmWatchdog.unref) pmWatchdog.unref();
+}
+
+// Alvo da medição, com a prioridade do fpsTarget do GDZ:
+//   pinned (escolhido na tela e ainda vivo) > conhecido × 1.000.000 + flip × 100.000 + nº de quadros
+function fpsAlvo() {
+  fpsPrune();
+  if (fps.targetPid && fpsProcs.has(fps.targetPid)) return fps.targetPid;
+  const conhecidos = listCap.conhecidos || [];
+  let melhor = null, nota = -1;
+  for (const [pid, rec] of fpsProcs) {
+    const nome = String(rec.name || '').toLowerCase();
+    const n = (conhecidos.some((r) => r.test(nome)) ? 1000000 : 0) + (rec.flip ? 100000 : 0) + rec.frames.length;
+    if (n > nota) { melhor = pid; nota = n; }
+  }
+  return melhor;
+}
+
+// Números de um PID para a tela e para o overlay, com as janelas do fpsLive do GDZ:
+//   fps e frametime = últimos 1000 ms (se houver 2 quadros ou mais; senão os 10 s)
+//   low1            = os 10 s inteiros
+// Sem quadro novo há mais de 3 s o PID não é "ao vivo" e devolve null (é a poda de 3 s).
+// A base compara com os últimos 3000 ms.
+function fpsLive(pid) {
+  const rec = pid && fpsProcs.get(pid);
+  const agora = Date.now();
+  // dados velhos não são "ao vivo": sem quadro novo há mais de 3 s, o processo não aparece.
+  if (!rec || !rec.frames.length || agora - rec.frames[rec.frames.length - 1][0] > 3000) return null;
+  const recentes = rec.frames.filter((f) => f[0] >= agora - 1000).map((f) => f[1]);
+  const todos = rec.frames.map((f) => f[1]);
+  const stTodos = fpsStats(todos);
+  const stLive = fpsStats(recentes.length >= 2 ? recentes : todos);
+  if (!stTodos) return null;
+  const out = {
+    pid,
+    name: rec.name,
+    fps: stLive ? Math.round(stLive.fps) : 0,
+    frametime: stLive ? stLive.frametime : 0,
+    low1: Math.round(stTodos.low1),
+    raw: stTodos,   // sem arredondar, para a base e o overlay desenharem como antes
+    base: null,
+  };
+  const b = fps.base;
+  if (b && b.name && String(b.name).toLowerCase() === String(rec.name).toLowerCase()) {
+    const st = fpsStats(rec.frames.filter((f) => f[0] >= agora - 3000).map((f) => f[1]));
+    out.base = {
+      fps: b.fps,
+      low1: b.low1,
+      label: b.label || 'Base',
+      fresh: !!b.at && agora - b.at < 2500,
+      now: st ? Math.round(st.fps) : 0,
+      gain: st && b.fps ? Math.round((st.fps - b.fps) / b.fps * 1000) / 10 : null,
+    };
+  }
+  return out;
+}
+
+// Ganho ao vivo contra a base, para o overlay: a mesma conta que o fpsLive do GDZ faz
+// para a base (agora = média dos últimos 3000 ms do mesmo jogo, ganho em %).
 function baseLive() {
   if (!fps.base) return null;
-  const now = fps.fps || 0;
-  if (fps.base.name && fps.targetName && fps.base.name !== fps.targetName) return null;
-  return { fps: fps.base.fps, now, gain: fps.base.fps ? (now - fps.base.fps) / fps.base.fps * 100 : null, fresh: now === 0 };
+  const pid = fpsAlvo();
+  const rec = pid && fpsProcs.get(pid);
+  if (!rec) return null;
+  if (fps.base.name && String(fps.base.name).toLowerCase() !== String(rec.name).toLowerCase()) return null;
+  const agora = Date.now();
+  const st = fpsStats(rec.frames.filter((f) => f[0] >= agora - 3000).map((f) => f[1]));
+  const now = st ? Math.round(st.fps) : 0;
+  return {
+    fps: fps.base.fps,
+    low1: fps.base.low1,
+    label: fps.base.label || 'Base',
+    fresh: !!fps.base.at && agora - fps.base.at < 2500,
+    now,
+    gain: st && fps.base.fps ? Math.round((st.fps - fps.base.fps) / fps.base.fps * 1000) / 10 : null,
+  };
+}
+
+// Quadro "ao vivo" para o overlay: o alvo automático, com a mesma janela de antes
+// (10 s do processo, que é o FPS_WINDOW_MS do GDZ) e a comparação com a base.
+function liveAtual() {
+  const pid = fpsAlvo();
+  const rec = pid && fpsProcs.get(pid);
+  if (!rec) return null;
+  const st = fpsStats(rec.frames.map((f) => f[1]));
+  if (!st) return null;
+  return {
+    fps: st.fps,
+    frametime: st.frametime,
+    low1: st.low1,
+    name: rec.name,
+    base: baseLive(),
+  };
 }
 
 function overlayPayload() {
   const ov = fps.overlay || {};
   return {
-    live: fps.proc && fps.fps ? { fps: fps.fps, frametime: fps.ft, low1: fps.low1, name: fps.targetName, base: baseLive() } : (fps.fps ? { fps: fps.fps, frametime: fps.ft, low1: fps.low1, name: fps.targetName, base: baseLive() } : null),
+    live: liveAtual(),
     show: ov.show || {}, right: ov.pos === 1 || ov.pos === 3, bottom: ov.pos === 2 || ov.pos === 3,
     sys: lastSys,
   };
 }
 
-let lastSys = { cpu: null, cpuTemp: null, gpu: null, gpuTemp: null, ramUsed: null, ramTotal: null };
+let lastSys = { cpu: null, cpuTemp: null, gpu: null, gpuTemp: null, ramUsed: null, ramTotal: null, gpuAt: 0 };
 async function sysSample() {
   // CPU e RAM vem do proprio Node: neste Windows os contadores de performance respondem
   // "nenhum contador valido" para \Processor(_Total).
@@ -1324,11 +1795,18 @@ async function sysSample() {
   } catch (e) { }
 
   // GPU pelo nvidia-smi (~120 ms).
+  // O intervalo do overlay é 500 ms (o overlayTimer do GDZ), mas o sensor dele roda a
+  // 1 s (startNvidiaSmi usa -lms 1000). Sem esta trava, o nvidia-smi seria chamado 2x
+  // por segundo: são ~2 processos por segundo só para desenhar um número. Aqui ele é
+  // chamado no máximo 1x/s e o valor é reaproveitado no tick seguinte.
   try {
-    const g = await nvQuery();
-    if (g && g.length) {
-      lastSys.gpu = Math.round(g[0].usage || 0);
-      if (g[0].temp != null) lastSys.gpuTemp = g[0].temp;
+    if (Date.now() - (lastSys.gpuAt || 0) >= 1000) {
+      const g = await nvQuery();
+      lastSys.gpuAt = Date.now();
+      if (g && g.length) {
+        lastSys.gpu = Math.round(g[0].usage || 0);
+        if (g[0].temp != null) lastSys.gpuTemp = g[0].temp;
+      }
     }
   } catch (e) { }
 
@@ -1336,139 +1814,186 @@ async function sysSample() {
 }
 // FPS por aplicativo, para a lista do medidor mostrar o número ao lado de cada jogo.
 //
-// startListCapture() e listCap nunca existiram: fpsStatus() explodia com ReferenceError
-// logo no começo e a tela do medidor ficava sem nenhum dado. Aqui está a peça que faltava.
-//
-// O medidor principal continua sendo o PresentMon (startPM/fps.frames), preso ao jogo alvo.
-// Esta captura é leve: reaproveita as amostras do alvo e guarda por nome de processo.
+// Aqui existia uma "captura por nome" (listCap.apps) que copiava os quadros do alvo para um
+// mapa por nome — sempre com um único destino e sempre o mesmo número. O GDZ guarda quadros
+// por PID (fps.procs, aqui fpsProcs) e monta a lista a partir dele; é o que fpsStatus() faz
+// agora. listCap sobrou só com as marcas que o resto do arquivo usa.
 const listCap = {
-  apps: new Map(),      // nome normalizado do processo -> { frames: [{t, ft}], fps }
-  started: false,
   denied: false,
   lastPoll: 0,
-  timer: null,
+  // Regex dos processos de jogo conhecido (o `proc` do GDZ). Ver carregarConhecidos().
+  conhecidos: [],
+  // De onde veio a lista: 'catálogo do jogo' ou 'lista de processos do app'.
+  origem: '',
 };
 
-// Liga a captura. Idempotente: chamar várias vezes não empilha timers.
-function startListCapture() {
-  if (listCap.started) return;
-  listCap.started = true;
-  listCap.timer = setInterval(() => {
-    try {
-      // Copia as amostras recentes do alvo atual para o registro por aplicativo.
-      // fps.frames já é alimentado pelo PresentMon; só replicamos.
-      // Sem jogo alvo, não inventar o nome "jogo": a cobertura por processo nunca casaria
-      // e todos os jogos apareceriam com FPS 0.
-      const nomeAlvo = String(fps.targetName || '').replace(/\.exe$/i, '').toLowerCase();
-      if (!nomeAlvo) return;
-      const alvo = nomeAlvo;
-      if (!fps.frames.length) return;
-      let rec = listCap.apps.get(alvo);
-      if (!rec) { rec = { frames: [] }; listCap.apps.set(alvo, rec); }
-      rec.frames = fps.frames.slice(-600);
+let sysAmostra = null;
 
-      // FPS = quadros / duração real da amostra.
-      // Antes filtrava por "agora - última amostra" e dividia a contagem pela soma dos
-      // frametimes, o que dava 216 fps onde a média real era 226,7.
-      const agora = Date.now();
-      const janela = rec.frames.filter((fr) => agora - fr.t <= 3000 && fr.ft > 0);
-      if (janela.length > 2) {
-        const duracaoMs = janela[janela.length - 1].t - janela[0].t;
-        rec.fps = duracaoMs > 0 ? Math.round((janela.length - 1) / (duracaoMs / 1000)) : 0;
-      } else {
-        rec.fps = 0;
-      }
-      // solta apps sem quadro há mais de 15 s
-      for (const [nome, r] of listCap.apps) {
-        if (r.frames.length && agora - r.frames[r.frames.length - 1].t > 15000) listCap.apps.delete(nome);
-      }
-    } catch (e) { }
-  }, 1000);
-  if (listCap.timer.unref) listCap.timer.unref();
+// Os processos de um jogo, no formato `proc` do GDZ, e o procMatchers dele (linha 2696):
+//
+//   const procMatchers = (jogo) => jogo.proc.map((p) =>
+//     new RegExp('^' + p.toLowerCase().replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$'));
+//
+// O GDZ guarda no catálogo os .exe de cada jogo (`proc: ["cs2.exe"]`,
+// `proc: ["Minecraft.Windows.exe","javaw.exe"]`). O NOSSO catálogo (gamesScan) não tem
+// esse campo: ele descobre UM `exe` por instalação varrendo a pasta do jogo. Por isso a
+// lista sai de duas fontes, nesta ordem:
+//
+//   1. o `proc` do catálogo, se um dia ele existir (fica igual ao GDZ);
+//   2. a tabela de processos do features.js — o mesmo `proc` do GDZ já portado para cá
+//      pelo modo automático (nomes exatos de processo por jogo, com "*" -> ".*").
+//      É dela que sai a lista hoje. Ela NÃO é exportada: o features.js expõe
+//      runningProcs() + runningGameIds(), que é o `runningGame` do GDZ — então pergunto
+//      pelos games que estão rodando AGORA e tiro os padrões de lá;
+//   3. por último, o `exe` que o gamesScan achou de cada jogo instalado.
+//
+// Reaproveitar o features.js evita ter uma SEGUNDA lista de jogos que envelhece separada.
+function regexDeProc(pat) {
+  return new RegExp('^' + String(pat).toLowerCase().replace(/[.+${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$');
 }
 
-let sysAmostra = null;
-ex.fpsStatus = async () => {
-  if (!fps.proc && !fps.targetPid) {
-    // auto-alvo: só um jogo conhecido, nunca o primeiro processo que aparecer
-    try {
-      const games = (await ex.gamesStatus()).games || [];
-      const names = new Set(games.map((g) => String(g.name || '').toLowerCase()));
-      const r = await core.ps(`$o = @(Get-Process | Where-Object { $_.MainWindowHandle -ne 0 -and $_.Id -ne ${process.pid} } | ForEach-Object { @{ id=$_.Id; name=$_.ProcessName } }); Write-Output (Json $o)`);
-      let procs = [];
-      try { procs = JSON.parse(r.out); } catch (e) {}
-      if (!Array.isArray(procs)) procs = procs ? [procs] : [];
-      const game = procs.find((p) => names.has(String(p.name || '').toLowerCase()) || /fivem|gta|cs2|valorant|fortnite|warzone|apex|rust|pubg|league|rocket|overwatch|minecraft/i.test(p.name || ''));
-      if (game) { startPM(Number(game.id)); fps.targetName = game.name + '.exe'; }
-    } catch (e) {}
-  }
-  startListCapture();
-  listCap.lastPoll = Date.now();
-  const procs = await ex.getProcesses();
-  const base = fps.base ? { fps: fps.base.fps, name: fps.base.name } : null;
-  const byApp = {};
-  for (const [app, rec] of listCap.apps) {
-    // só o que teve quadros recentes
-    if (rec.frames.length && Date.now() - rec.frames[rec.frames.length - 1].t < 3000 && rec.fps) {
-      byApp[app.replace(/\.exe$/i, '').toLowerCase()] = rec.fps;
+async function carregarConhecidos() {
+  if (listCap.conhecidos.length) return;
+  // 1) o `proc` do catálogo do app, no formato do GDZ
+  try {
+    const games = (await ex.gamesStatus()).games || [];
+    for (const g of games) {
+      for (const p of (Array.isArray(g.proc) ? g.proc : [])) {
+        if (p) listCap.conhecidos.push(regexDeProc(p));
+      }
     }
+  } catch (e) {}
+  if (listCap.conhecidos.length) { listCap.origem = 'catálogo do jogo (campo proc)'; return; }
+
+  // 2) a tabela de processos do features.js — o mesmo `proc` do GDZ já portado para cá
+  //    pelo modo automático (nomes exatos de processo por jogo, com "*" -> ".*").
+  //    É dela que sai a lista hoje. Tem de ser a tabela ESTÁTICA: runningGameIds() só
+  //    devolve o que está rodando AGORA, e aí o peso de "jogo conhecido" ligaria e
+  //    desligaria conforme o usuário abre e fecha programas.
+  try {
+    const feat = require('./features');
+    const lista = feat.AUTO_GAME_PROCS;
+    if (Array.isArray(lista)) {
+      for (const item of lista) {
+        const p = Array.isArray(item) ? item[0] : item;
+        if (p) listCap.conhecidos.push(regexDeProc(p));
+      }
+    }
+  } catch (e) {}
+  if (listCap.conhecidos.length) { listCap.origem = 'AUTO_GAME_PROCS (features.js)'; return; }
+
+  // 3) o exe que o gamesScan achou de cada jogo instalado
+  try {
+    const games = (await ex.gamesStatus()).games || [];
+    for (const g of games) {
+      const n = g.exe ? path.basename(g.exe) : '';
+      if (n) listCap.conhecidos.push(regexDeProc(n));
+    }
+    if (listCap.conhecidos.length) listCap.origem = 'exe do gamesScan';
+  } catch (e) {}
+}
+
+ex.fpsStatus = async () => {
+  // Toda consulta da tela conta como "alguém está usando o medidor": é o fps.lastUse do GDZ.
+  fps.lastUse = Date.now();
+  pmWatchdogStart();
+  await startPM();
+  await carregarConhecidos();
+  fpsPrune();
+  const alvo = fpsAlvo();
+  const live = fpsLive(alvo);
+  // Na lista entram os processos que apresentaram quadros nos últimos 3 s, do maior
+  // FPS para o menor, no máximo 8 — igual ao fps-status do GDZ.
+  const processos = [];
+  for (const pid of fpsProcs.keys()) {
+    const l = fpsLive(pid);
+    if (l) processos.push(l);
   }
+  processos.sort((a, b) => b.fps - a.fps);
+  if (fps.recording) fps.recording.left = Math.max(0, Math.ceil((fps.recording.until - Date.now()) / 1000));
   return {
-    success: true,
-    live: fps.fps ? { fps: fps.fps, frametime: fps.ft, low1: fps.low1, name: fps.targetName, base: baseLive() } : null,
-    processes: (procs.processes || []).map((p) => {
-      const key = String(p.name).replace(/\.exe$/i, '').toLowerCase();
-      return { pid: p.pid, name: p.name, fps: byApp[key] || 0 };
-    }),
-    pinned: fps.targetPid, overlay: fps.overlay, recording: fps.recording,
-    sessions: { a: fps.sessions.a, b: fps.sessions.b }, base, hotkey: fps.hotkey,
-    needsAdmin: !!(fps.denied || listCap.denied) && !fps.fps,
-    success: !(fps.pmError && !fps.fps),
-    error: fps.pmError && !fps.fps ? 'Medidor: ' + fps.pmError : undefined,
+    success: !!fps.proc,
+    error: fps.proc ? null : (fps.pmError || null),
+    live: live ? {
+      pid: live.pid, name: live.name, fps: live.fps, frametime: live.frametime, low1: live.low1,
+      base: live.base ? { fps: live.base.fps, now: live.base.now, gain: live.base.gain, fresh: live.base.fresh } : null,
+    } : null,
+    // nome usado pelo vigia de alvo automático do GDZ (pinned de fato é o fps.targetPid)
+    processes: processos.slice(0, 8).map((l) => ({ pid: l.pid, name: l.name, fps: l.fps })),
+    pinned: fps.targetPid && fpsProcs.has(fps.targetPid) ? fps.targetPid : null,
+    overlay: fps.overlay,
+    recording: fps.recording ? { slot: fps.recording.slot, name: fps.recording.name, left: fps.recording.left, secs: fps.recording.secs } : null,
+    sessions: { a: fps.sessions.a, b: fps.sessions.b },
+    base: fps.base ? { fps: fps.base.fps, low1: fps.base.low1, name: fps.base.name, pid: fps.base.pid } : null,
+    hotkey: fps.hotkey,
+    needsAdmin: !!(fps.denied || listCap.denied) && !(fps.proc && live),
   };
 };
 
+// Escolher o processo na tela. O GDZ só aceita o PID que tem quadro medido (pinned) e
+// não reinicia o medidor: como ele mede TODOS os processos de uma vez, trocar o alvo é só
+// trocar quem aparece. Aqui é igual; pid vazio/zera volta para o automático.
 ex.fpsSetTarget = async (pid) => {
-  if (!pid) { fps.targetPid = null; stopPM(); return { success: true }; }
-  const r = await core.ps(`$p = Get-Process -Id ${parseInt(pid, 10)} -ErrorAction SilentlyContinue; if ($p) { Write-Output ($p.ProcessName + '.exe') }`);
-  fps.targetName = r.out.split('\n')[0].trim();
-  startPM(pid);
-  return { success: true };
+  const n = parseInt(pid, 10) || 0;
+  fps.lastUse = Date.now();
+  if (!n) { fps.targetPid = null; fps.targetName = ''; return { success: true, pinned: null }; }
+  fps.targetPid = fpsProcs.has(n) ? n : null;
+  if (fps.targetPid) fps.targetName = String(fpsProcs.get(n).name || '');
+  else {
+    const r = await core.ps(`$p = Get-Process -Id ${n} -ErrorAction SilentlyContinue; if ($p) { Write-Output ($p.ProcessName + '.exe') }`);
+    fps.targetName = String(r.out || '').split(/\r?\n/)[0].trim();
+  }
+  return { success: true, pinned: fps.targetPid };
 };
 
-ex.fpsRecord = async ({ slot, secs, label }) => {
-  if (!fps.fps) return { success: false, error: 'Abra o jogo antes de gravar.' };
-  secs = [15, 30, 60].includes(secs) ? secs : 30;
-  fps.recording = { slot, secs, left: secs, name: fps.targetName };
-  const t0 = Date.now();
-  const samples = [];
-  while (Date.now() - t0 < secs * 1000) {
-    await new Promise((r) => setTimeout(r, 100));
-    fps.recording.left = Math.max(0, secs - Math.round((Date.now() - t0) / 1000));
-    // Guardar os frametimes BRUTOS do último 100 ms. Antes empilhava fps.ft, que já é
-    // a média dos 120 quadros anteriores: o pior quadro desaparecia e o 1% low saía
-    // 24% melhor que a realidade (168 em vez de 136).
-    const desde = (fps.frames.length ? fps.frames[fps.frames.length - 1].t : Date.now()) - 100;
-    for (let i = fps.frames.length - 1; i >= 0; i--) {
-      const fr = fps.frames[i];
-      if (!fr || fr.t < desde) break;
-      if (fr.ft > 0) samples.push(fr.ft);
-    }
-    if (!samples.length && fps.ft) samples.push(fps.ft);
-  }
+// Gravação do "antes/depois", com o caminho do GDZ (fps-record):
+//   o alvo precisa existir, os quadros brutos são empilhados enquanto a janela está
+//   aberta, e no fim fpsStats() sobre o que juntou.
+ex.fpsRecord = async ({ slot, secs, label } = {}) => {
+  fps.lastUse = Date.now();
+  await startPM();
+  if (!FPS_REC_SECS.includes(secs)) secs = 30;
+  if (fps.rec) return { success: false, error: 'Já existe uma gravação em andamento.' };
+  if (!fps.proc) return { success: false, error: fps.pmError || 'Não foi possível iniciar o medidor.' };
+  const alvo = fpsAlvo();
+  const rec0 = alvo && fpsProcs.get(alvo);
+  if (!rec0) return { success: false, error: 'Nenhum jogo rodando. Abra o jogo e tente de novo.' };
+  const nome = rec0.name;
+  const r = { slot, pid: alvo, name: nome, secs, until: Date.now() + secs * 1000, frames: [] };
+  fps.rec = r;
+  fps.recording = { slot, secs, left: secs, name: nome, until: r.until };
+  // espera a janela fechar (o mesmo laço de 250 ms do GDZ), mantendo lastUse vivo
+  await new Promise((pronto) => {
+    const t = setInterval(() => {
+      fps.lastUse = Date.now();
+      fps.recording.left = Math.max(0, Math.ceil((r.until - Date.now()) / 1000));
+      if (Date.now() >= r.until || !fps.proc || !fpsProcs.has(alvo)) { clearInterval(t); pronto(); }
+    }, 250);
+    if (t.unref) t.unref();
+  });
+  fps.rec = null;
   fps.recording = null;
-  if (!samples.length) return { success: false, error: 'sem quadros medidos' };
-  const avg = samples.reduce((a, b) => a + b, 0) / samples.length;
-  const sorted = [...samples].sort((a, b) => b - a);
-  // Percentil = média do pior grupo (1%), não o pior elemento isolado.
-  const pct = (p) => lowFromFrametimes(samples, p);
-  const ses = { label: String(label || '').slice(0, 40) || ('Gravação ' + new Date().toLocaleTimeString('pt-BR')), fps: Math.round(1000 / avg * 10) / 10, low1: Math.round(pct(0.01) * 10) / 10, low01: Math.round(pct(0.001) * 10) / 10, frametime: Math.round(avg * 100) / 100, secs, frames: samples.length, name: fps.targetName, at: Date.now() };
+  const st = fpsStats(r.frames);
+  if (!st || r.frames.length < 30) return { success: false, error: 'Poucos frames gravados. Deixe o jogo aberto e em primeiro plano durante a gravação.' };
+  // Só remove CHARACTERES de controle e < >; aspas/asteriscos ficam como o usuário digitou.
+  const rotulo = typeof label === 'string' ? label.replace(/[\x00-\x1f<>]/g, '').trim().slice(0, 40) : '';
+  const ses = {
+    fps: st.fps, low1: st.low1, low01: st.low01, frametime: st.frametime, frames: st.frames,
+    name: nome,
+    label: rotulo || (slot === 'a' ? 'Antes' : 'Depois'),
+    secs: st.secs,
+    at: Date.now(),
+  };
   fps.sessions[slot] = ses;
   writeJson('fps-sessions.json', fps.sessions);
   return { success: true, session: ses };
 };
 
-ex.fpsClear = (slot) => { fps.sessions[slot] = null; writeJson('fps-sessions.json', fps.sessions); return { success: true }; };
+ex.fpsClear = (slot) => {
+  fps.sessions[slot] = null;
+  writeJson('fps-sessions.json', fps.sessions);
+  return { success: true };
+};
 // Chaves que o overlay sabe mostrar. Serve para não aceitar lixo do renderer e para
 // reconstruir um `show` vazio quando o arquivo salvo veio estragado.
 const OVERLAY_CHAVES = ['fps', 'frametime', 'low1', 'cpu', 'gpu', 'ram', 'temp', 'grafico', 'name'];
@@ -1506,9 +2031,18 @@ ex.fpsOverlaySet = (patch) => {
   writeJson('fps-overlay.json', fps.overlay);
   return { success: true, overlay: fps.overlay };
 };
-ex.fpsBaseMark = () => {
-  if (!fps.fps) return { success: false, error: 'sem jogo medido' };
-  fps.base = { fps: fps.fps, name: fps.targetName, at: Date.now() };
+// Marcar a base = o ponto de comparação "sem DLSS". O GDZ (fpsMarkBase) usa os quadros
+// dos últimos 5000 ms do jogo alvo e exige pelo menos 30 quadros; aqui é igual.
+ex.fpsBaseMark = async () => {
+  fps.lastUse = Date.now();
+  await startPM();
+  const alvo = fpsAlvo();
+  const rec = alvo && fpsProcs.get(alvo);
+  if (!rec) return { success: false, error: 'Nenhum jogo aberto para medir.' };
+  const desde = Date.now() - 5000;
+  const st = fpsStats(rec.frames.filter((f) => f[0] >= desde).map((f) => f[1]));
+  if (!st || st.frames < 30) return { success: false, error: 'Poucos frames ainda. Jogue alguns segundos e marque de novo.' };
+  fps.base = { pid: alvo, name: rec.name, fps: Math.round(st.fps * 10) / 10, low1: Math.round(st.low1), label: 'Base', at: Date.now() };
   writeJson('fps-base.json', fps.base);
   return { success: true, base: fps.base };
 };
@@ -1518,8 +2052,21 @@ ex.fpsRestore = () => {
   fps.overlay = readJson('fps-overlay.json', fps.overlay);
   fps.sessions = readJson('fps-sessions.json', { a: null, b: null });
 };
-ex.fpsTick = async () => { await sysSample(); return overlayPayload(); };
+// Primeira carga do arquivo (o mesmo que o fpsRestore faz, chamado no carregamento).
+try { ex.fpsRestore(); } catch (e) {}
+
+// Tick do overlay (a cada ~1,5 s pelo main.js). Conta como uso — é o overlayTimer do GDZ,
+// que também chama o start do medidor a cada volta — e devolve os números na hora.
+ex.fpsTick = async () => {
+  fps.lastUse = Date.now();
+  pmWatchdogStart();
+  try { await startPM(); } catch (e) {}
+  await sysSample();
+  return overlayPayload();
+};
 ex.fpsOverlayPayload = overlayPayload;
+// Fecha o PresentMon quando o app vai fechar (o "app.on will-quit" do GDZ chama fpsStop).
+ex.fpsStop = () => { try { stopPM(); } catch (e) {} return { success: true }; };
 
 // ────────────────────────────── GARGALO ──────────────────────────────
 // Lista os processos com janela aberta, para a tela escolher qual é o jogo.
@@ -2389,6 +2936,78 @@ ex.startupList = async () => {
   itens.sort((a, b) => String(a.name).localeCompare(String(b.name)));
   return { success: true, items: itens, total: itens.length, ligados: itens.filter((x) => x.enabled).length };
 };
+// Liga ou desliga um app da inicialização — o que o botão da aba Inicialização chama.
+//
+// ESTA FUNÇÃO NÃO EXISTIA. O main.js registrava o canal 'startup-set' apontando para
+// ex.startupSet (linha 639) e a tela invocava o canal (dashboard.html, linha 3486), mas
+// nada era implementado: o clique caía no catch, a tela mostrava "não foi possível
+// alterar" e o app NUNCA mudava de estado.
+//
+// O mecanismo é o do GDZ (startup-set, gdz-SEM-MANGLE.js linha 4636) e o do próprio
+// Gerenciador de Tarefas do Windows: o ligado/desligado MORA em
+// Explorer\StartupApproved, NÃO no Run.
+//
+// Regra do GDZ, ponto por ponto:
+//   - desativar grava o valor de 12 bytes [3,0,0,0,0,0,0,0,0,0,0,0]
+//   - ativar    grava o valor de 12 bytes [2,0,0,0,0,0,0,0,0,0,0,0]
+//   - cria a chave StartupApproved se ela não existir (New-Item -Force)
+//   - o valor do Run NUNCA é apagado nem alterado — é o próprio app que decide se
+//     executa, lendo o StartupApproved. Apagar o Run tirava a linha da lista de vez e
+//     não tinha desfazer.
+//   - recusa quando o nome não está mais no Run (o app foi desinstalado entre a
+//     listagem e o clique)
+//
+// Os bytes vão como [byte[]] de verdade. Montar a string "2,0,0,..." e deixar o
+// Set-ItemProperty converter grava os CARACTERES como bytes (33 no lugar de 12) — é
+// exatamente o defeito que o comentário do Set-Val em engine.js descreve: todos os
+// programas de boot passam a parecer alterados e o cliente perde a inicialização.
+ex.startupSet = async ({ name, scope, enabled } = {}) => {
+  const k = RUN_KEYS.find((x) => x.scope === scope);
+  if (!k) return { success: false, error: 'Pedido inválido.' };
+  if (typeof name !== 'string' || !name || name.length > 260 || /[\x00-\x1f]/.test(name)) {
+    return { success: false, error: 'Pedido inválido.' };
+  }
+  if (typeof enabled !== 'boolean') return { success: false, error: 'Pedido inválido.' };
+  const aprovado = STORE_BY_SCOPE[k.scope];
+  if (!aprovado) return { success: false, error: 'Pedido inválido.' };
+
+  // Nome e caminhos por parâmetro (-Name), nunca interpolados no corpo do script.
+  const qq1 = (s) => "'" + String(s).replace(/'/g, "''") + "'";
+  const script = [
+    '$n = ' + qq1(name),
+    '$k = Get-Item -LiteralPath ' + qq1(k.root) + ' -ErrorAction SilentlyContinue',
+    "if (-not $k -or -not (@($k.GetValueNames()) -contains $n)) { Write-Output 'VL_ERRO: este app não está mais na inicialização.'; return }",
+    'if (-not (Test-Path -LiteralPath ' + qq1(aprovado) + ')) { New-Item -Path ' + qq1(aprovado) + ' -Force | Out-Null }',
+    'Set-ItemProperty -LiteralPath ' + qq1(aprovado) + ' -Name $n -Value ([byte[]](' + (enabled ? 2 : 3) + ',0,0,0,0,0,0,0,0,0,0,0)) -Type Binary -Force -ErrorAction Stop',
+    // Confere o que ficou gravado: o GDZ não confere, mas sem conferir o app pode
+    // devolver "ok" com o valor antigo no lugar (ex.: negativa de acesso do HKLM).
+    'try { $b = (Get-ItemProperty -LiteralPath ' + qq1(aprovado) + ' -Name $n -ErrorAction Stop).$n } catch { $b = $null }',
+    "if (-not ($b -is [byte[]]) -or $b.Length -lt 1) { Write-Output 'VL_ERRO: Falha ao gravar no registro.'; return }",
+    "if (($b[0] % 2) -ne " + (enabled ? 0 : 1) + ") { Write-Output 'VL_ERRO: Falha ao gravar no registro.'; return }",
+    "Write-Output 'OK'",
+  ].join(String.fromCharCode(10));
+
+  const r = await core.ps(script, 30000);
+  // O `return` de dentro do script é transformado em exceção pelo trap do engine.js: o
+  // texto chega no campo `err` SEM o prefixo 'VL_ERRO:' e com o acento estragado pelo
+  // console OEM (vem "n�o est..." no lugar de "não est..."). Por isso a mensagem que a
+  // tela mostra é escrita aqui, com acento certo, e não copiada da saída.
+  const temErro = /VL_ERRO:/.test(String(r.out || '')) || (!r.ok && !/\bOK\b/.test(String(r.out || '')));
+  if (temErro) {
+    const bruto = String(r.out || '') + '\n' + String(r.err || '');
+    const msg = 'este app não está mais na inicialização';
+    // O console estraga o acento; procura pelo começo sem acento mesmo.
+    if (/mais na inicializa/i.test(bruto)) return { success: false, error: msg + '.' };
+    return { success: false, error: k.scope === 'user-run' ? 'Falha ao gravar no registro.' : 'Precisa rodar como administrador.' };
+  }
+  if (!/\bOK\b/.test(String(r.out || ''))) {
+    // Mensagens do GDZ para a falha genérica: HKCU escrita pelo usuário; HKLM exige
+    // administrador. Texto fixo, sem acento, porque o console OEM estraga a saída.
+    return { success: false, error: k.scope === 'user-run' ? 'Falha ao gravar no registro.' : 'Precisa rodar como administrador.' };
+  }
+  return { success: true, enabled };
+};
+
 ex.recommendations = async () => {
   const st = await ex.startupList();
   let on = 0;

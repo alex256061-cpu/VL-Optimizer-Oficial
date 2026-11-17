@@ -56,7 +56,7 @@
       $('fps').className = 'fps' + (live ? ' ' + (live.fps >= 100 ? 'good' : live.fps >= 50 ? 'mid' : 'bad') : '');
 
       const ft = [];
-      if (live && s.frametime) ft.push(`<span class="k">MS</span>${live.frametime.toFixed(1)}`);
+      if (live && s.frametime) ft.push(`<span class="k">MS</span>${(Number(live.frametime) || 0).toFixed(1)}`);
       if (live && s.low1) ft.push(`<span class="k">1%</span>${live.low1}`);
       line($('ft'), ft.join('&nbsp;&nbsp;'));
 

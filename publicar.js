@@ -43,6 +43,8 @@ const arquivos = [
   'main.js', 'preload.js', 'engine.js', 'engine-extras.js', 'engine-scaler.js',
   'engine-bridge.js', 'updater.js', 'supabase.js', 'hwid.js', 'lossless-official.js',
   'escrever-settings.js', 'gdz-launch.js', 'features.js', 'elevacao.js', 'notas-versao.js',
+  // Os novos: a fotografia do estado e o desfazer dos 8 tipos.
+  'foto-sistema.js', 'restaurar-sistema.js',
 ];
 let erros = 0;
 for (const f of arquivos) {

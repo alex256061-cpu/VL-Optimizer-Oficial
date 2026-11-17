@@ -10,6 +10,35 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.34': {
+    corrigido: [
+      'A versao 1.4.33 podia nao abrir no PC do cliente: dois arquivos novos do motor de limpeza e do desfazer nao entraram no pacote, e o programa procurava por eles ao iniciar. Agora entram.',
+    ],
+    novo: [],
+  },
+  '1.4.33': {
+    corrigido: [
+      'O medidor de FPS nao media nada. A lista de programas era montada de uma variavel que nunca existia, e a tela ficava sem dado. Agora le a saida do PresentMon como o programa de referencia.',
+      'O medidor de FPS nunca subiria no app instalado: o caminho do PresentMon apontava para dentro do arquivo do app (.asar), que nao existe no disco. Funcionava so no modo de desenvolvimento.',
+      'O botao de ligar e desligar da aba Inicializacao nao fazia nada: a funcao que ele chama nunca foi escrita. Agora desativa e ativa pelo StartupApproved, sem nunca apagar a entrada do registro.',
+      'As travas de hardware eram so etiqueta de tela: o motor aplicava de qualquer jeito. Agora o motor recusa de verdade, com a mensagem do programa de referencia, e a tela pinta o botao bloqueado.',
+      'A trava de Windows 11 recusava em qualquer Windows, inclusive no 11.',
+      'O aviso de Ryzen X3D de dois CCDs nao existia no caminho das acoes: as 4 acoes que brigam com ele rodavam livres e derrubavam a configuracao do 7950X3D.',
+      'As acoes agora sao recusadas pelo mesmo mapa de bloqueio que os ajustes.',
+      'Modo automatico: OneDrive, Dropbox e Google Drive eram fechados e nunca mais abriam.',
+      'Modo automatico: a prioridade dos programas ficava rebaixada para sempre depois que o jogo fechava.',
+      'Modo automatico: desligar a chave com o jogo aberto nao desfazia nada.',
+      'Modo automatico: o plano de energia salvo podia ser o errado.',
+      'A limpeza de disco tinha 11 categorias, duas delas que o programa de referencia nao tem. Agora sao as 16 dele, na mesma ordem.',
+      'A trava de programa aberto da limpeza nunca funcionava para Discord e Steam (comparava o nome em minusculas num conjunto que tinha maiusculas).',
+      'A lista de programas nao achava o desinstalador quando o caminho tinha espaco (C:\\Program Files\\... virava C:\\Program). O tamanho tambem estava errado em dois tercos.',
+      'O desfazer agora guarda e devolve tambem servico, plano de energia, configuracao do plano, item do boot, ajuste de TCP e DNS de cada placa. Antes so guardava chave de registro: um ajuste de servico ou de energia ficava aplicado sem caminho de volta.',
+      'O overlay de FPS inteiro caia quando o frametime vinha como numero inteiro.',
+    ],
+    novo: [
+      'Salva e restaura o estado do Windows em 8 tipos de item antes de aplicar qualquer ajuste, do mesmo jeito que o programa de referencia.',
+    ],
+  },
   '1.4.32': {
     corrigido: [
       'Ajuste de memoria virtual: ele gravava um valor invalido na chave PagingFiles e o Windows deixava de criar o arquivo de paginacao. Sem ele o PC trava e programas fecham sozinhos. Agora o ajuste liga o gerenciamento automatico do Windows, do mesmo jeito que o programa de referencia.',
