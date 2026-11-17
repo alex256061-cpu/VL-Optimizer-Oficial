@@ -2534,10 +2534,38 @@ ex.bnFindGame = async (opts) => {
 };
 
 ex.measureBottleneck = async ({ seconds, pid }) => {
-  const secs = Math.max(5, Math.min(60, seconds || 15));
+  // Faixa e pausa iguais ao programa de referência:
+  //   - 10 a 120 s (padrão 30)
+  //   - se a janela do jogo perde o foco (alt-tab), a amostra NÃO conta
+  //   - teto de tempo = seconds * 4 (o GDZ usa o mesmo)
+  // Antes a medição rodava por tempo fixo e anotava valores de quando o jogo estava
+  // minimizado — o que "puxa" a média para baixo e faz o veredito errar.
+  const secs = Math.max(10, Math.min(120, seconds || 30));
+  const temPid = !!(pid && Number(pid) > 4);
   const r = await core.ps(`
+    $want = ${secs}
+    $gamePid = ${temPid ? parseInt(pid, 10) : 0}
+    $end = (Get-Date).AddSeconds($want * 4)
+    $away = 0; $inGame = 0.0
+    if ($gamePid) {
+      try {
+        Add-Type -Namespace VL -Name Fg -MemberDefinition '[DllImport("user32.dll")] public static extern System.IntPtr GetForegroundWindow(); [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(System.IntPtr h, out uint p);' -ErrorAction SilentlyContinue
+      } catch { }
+    }
+    $null = Get-CimInstance Win32_PerfFormattedData_PerfOS_Processor
     $samples = @()
-    for ($i = 0; $i -lt ${secs}; $i++) {
+    $last = Get-Date
+    for ($i = 0; $i -lt 500; $i++) {
+      if ((Get-Date) -ge $end -or $inGame -ge $want) { break }
+      Start-Sleep -Milliseconds 1000
+      $now = Get-Date; $dt = ($now - $last).TotalSeconds; $last = $now
+      if ($gamePid) {
+        if (-not (Get-Process -Id $gamePid -ErrorAction SilentlyContinue)) { break }
+        $fgPid = [uint32]0
+        try { $h = [VL.Fg]::GetForegroundWindow(); [void][VL.Fg]::GetWindowThreadProcessId($h, [ref]$fgPid) } catch { }
+        if ($fgPid -ne [uint32]$gamePid) { $away += $dt; continue }
+      }
+      $inGame += $dt
       $cpu = (Get-CimInstance Win32_PerfFormattedData_PerfOS_Processor -Filter "Name='_Total'").PercentProcessorTime
       # Array com o uso de CADA thread. O 'core' de antes (máximo entre as 16 threads)
       # fazia uma thread SMT a 100% virar coreMax=100 e o veredito "cpu" com a GPU ociosa.
@@ -2561,9 +2589,8 @@ ex.measureBottleneck = async ({ seconds, pid }) => {
       $ramPct = [math]::Round((($os.TotalVisibleMemorySize - $os.FreePhysicalMemory) / $os.TotalVisibleMemorySize) * 100)
       $ramTotal = [math]::Round($os.TotalVisibleMemorySize / 1MB)
       $samples += @{ cpu=[int]$cpu; core=[int]$core; cores=@($threads); gpu=[int][math]::Min(100, $g); ram=[int]$ramPct; ramGb=$ramTotal }
-      Start-Sleep -Seconds 1
     }
-    Write-Output (Json $samples)`, (secs * 3 + 60) * 1000);
+    Write-Output (Json $samples)`, (secs * 4 + 60) * 1000);
   let samples = [];
   try { const j = JSON.parse(r.out); samples = Array.isArray(j) ? j : [j]; } catch (e) {}
   if (!samples.length) return { success: false, error: 'não foi possível medir' };
@@ -3231,7 +3258,33 @@ ex.offers = async () => ({
     { id: 'vitalicio', nome: 'Vitalicio', price: 99, priceCents: 9900, periodo: 'pagamento unico', dias: null, destaque: true },
   ],
 });
-ex.telemetryConsent = () => ({ consented: true });
+// Consentimento de telemetria.
+//
+// Antes era uma constante que devolvia { consented: true }: a tela nunca perguntava
+// nada e o cliente não tinha como recusar. O renderer (src/plano.js) espera o campo
+// `consent` com três estados: true (aceitou), false (recusou) e null (ainda não
+// perguntamos — é o que faz o modal aparecer).
+//
+// Fica em telemetry-consent.json na pasta de dados. O padrão é null: perguntar uma
+// vez, nunca assumir aceito.
+const TEL_CONSENT_FILE = 'telemetry-consent.json';
+let telConsentCache = undefined;
+function lerConsentTelemetria() {
+  if (telConsentCache !== undefined) return telConsentCache;
+  try {
+    const j = readJson(TEL_CONSENT_FILE, { consent: null });
+    const v = j && typeof j === 'object' ? j.consent : null;
+    telConsentCache = (v === true || v === false) ? v : null;
+  } catch (e) { telConsentCache = null; }
+  return telConsentCache;
+}
+ex.telemetryConsent = () => ({ consent: lerConsentTelemetria() });
+ex.telemetryConsentSet = (arg) => {
+  const on = !!(arg && arg.on === true);
+  telConsentCache = on;
+  writeJson(TEL_CONSENT_FILE, { consent: on });
+  return { success: true, consent: on };
+};
 // Resgate de chave: a validação fica no banco (chave inexistente, já usada ou cancelada).
 // O supabase.js é carregado sob demanda para não travar o motor quando não há login.
 ex.resgatarChave = async (codigo) => {

@@ -1108,7 +1108,24 @@ const TOOLS = {
   'net-reset': { title: 'Resetar a rede', btn: 'Resetar', desc: 'Refaz as configurações de rede do Windows (Winsock e TCP/IP). Use quando a internet funciona no celular mas não no PC.', note: 'Apaga IP fixo e pode desconfigurar VPNs. Reinicie o PC depois.', confirm: true, run: `netsh winsock reset 2>&1 | Out-Null; netsh int ip reset 2>&1 | Out-Null; Write-Output 'ok'` },
   'update-cleanup': { title: 'Limpar sobras do Windows Update', btn: 'Limpar', time: 'Leva de 5 a 20 minutos', desc: 'Apaga versões antigas de arquivos do sistema que as atualizações deixam para trás. Costuma liberar alguns GB no disco C:', run: `Dism /Online /Cleanup-Image /StartComponentCleanup 2>&1 | Select-Object -Last 2 | Out-String`, long: true },
   'repair': { title: 'Reparar arquivos do Windows', btn: 'Reparar', time: 'Leva de 15 a 40 minutos', desc: 'Roda o DISM e o SFC: verificam e consertam arquivos do Windows corrompidos.', confirm: true, run: `Dism /Online /Cleanup-Image /RestoreHealth 2>&1 | Select-Object -Last 2 | Out-String; sfc /scannow 2>&1 | Select-Object -Last 2 | Out-String`, long: true },
-  'restore-point': { title: 'Criar ponto de restauração', btn: 'Criar ponto', desc: 'Todo ajuste do VL já tem volta. O ponto de restauração é uma garantia extra do próprio Windows.', run: `Enable-ComputerRestore -Drive 'C:\\' -ErrorAction SilentlyContinue; Checkpoint-Computer -Description 'VL Optimizer' -RestorePointType 'MODIFY_SETTINGS' 2>&1 | Out-Null; Write-Output 'ok'`, long: true },
+  'restore-point': { title: 'Criar ponto de restauração', btn: 'Criar ponto', desc: 'Todo ajuste do VL já tem volta. O ponto de restauração é uma garantia extra do próprio Windows.', long: true, run: `
+      $k = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\SystemRestore'
+      $old = (Get-ItemProperty -LiteralPath $k -Name SystemRestorePointCreationFrequency -ErrorAction SilentlyContinue).SystemRestorePointCreationFrequency
+      # O Windows aceita só um ponto a cada 24h. Sem esta liberação, o segundo
+      # pedido do dia falha e o app respondia 'ok' do mesmo jeito — o cliente
+      # achava que tinha ponto de restauração e não tinha.
+      Set-ItemProperty -LiteralPath $k -Name SystemRestorePointCreationFrequency -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
+      try {
+        Enable-ComputerRestore -Drive "$env:SystemDrive\" -ErrorAction Stop
+        Checkpoint-Computer -Description 'VL Optimizer' -RestorePointType MODIFY_SETTINGS -ErrorAction Stop
+        Write-Output ('Ponto de restauração criado em ' + (Get-Date -Format 'dd/MM HH:mm') + '. Se algo der errado, use Restauração do Sistema no Windows.')
+      } catch {
+        throw ('O Windows não criou o ponto de restauração (' + $_.Exception.Message + '). Verifique se a Proteção do Sistema está ligada para o disco C:.')
+      } finally {
+        if ($null -eq $old) { Remove-ItemProperty -LiteralPath $k -Name SystemRestorePointCreationFrequency -ErrorAction SilentlyContinue }
+        else { Set-ItemProperty -LiteralPath $k -Name SystemRestorePointCreationFrequency -Value $old -Type DWord -Force -ErrorAction SilentlyContinue }
+      }`,
+},
 };
 
 // ── DNS ──
@@ -2487,48 +2504,118 @@ async function runTool(id) {
 const CHECKS = {
   gpu: {
     title: 'Placa de vídeo',
+    // O check anterior pegava a PRIMEIRA placa de vídeo do sistema. Num notebook
+    // ou num Ryzen com gráfico integrado essa é a iGPU, então o aviso de driver
+    // velho podia sair para a placa errada. Este é o do GDZ: filtra por fabricante
+    // real (NVIDIA/AMD/Intel), ignora a integrada, e confere o Resizable BAR pelo
+    // nvidia-smi.
     run: `
-      $hags = Get-Val 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\GraphicsDrivers' 'HwSchMode'
-      $lines = @()
-      $drv = Get-CimInstance Win32_VideoController | Select-Object -First 1
-      $age = if ($drv.DriverDate) { [math]::Round(((Get-Date) - $drv.DriverDate).TotalDays) } else { $null }
-      if ($age) { $lines += "Driver de $age dias atras ($($drv.DriverVersion))." ; if ($age -gt 180) { $level = 'warn' } }
-      if ($hags -eq 2) { $lines += 'HAGS ligado.' } else { $lines += 'HAGS desligado: ligue para usar DLSS Frame Generation.'; $level = 'warn' }
-      $o = @{ level = $(if ($level) { $level } else { 'ok' }); title = 'Placa de video'; lines = $lines }
-      Write-Output (Json $o)`,
+      $level = 'ok'; $title = 'Placa de vídeo em ordem'; $lines = New-Object System.Collections.ArrayList
+      foreach ($v in @(Get-CimInstance Win32_VideoController | Where-Object { $_.PNPDeviceID -match 'VEN_(10DE|1002|8086)' })) {
+        $age = if ($v.DriverDate) { [int]((Get-Date) - $v.DriverDate).TotalDays } else { 0 }
+        [void]$lines.Add("$($v.Name): driver $($v.DriverVersion)" + $(if ($v.DriverDate) { ' de ' + $v.DriverDate.ToString('dd/MM/yyyy') } else { '' }))
+        $integrada = $v.Name -match 'Radeon\(TM\) Graphics|Radeon Graphics|Vega \d+|Radeon \d{3}M\b'
+        if ($v.PNPDeviceID -match 'VEN_(10DE|1002)' -and -not $integrada -and $age -gt 180) { $level = 'warn'; $title = 'Driver de vídeo desatualizado'; [void]$lines.Add("O driver tem $age dias. Drivers novos trazem correções e ganho de desempenho em jogos recentes.") }
+      }
+      $hags = (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\GraphicsDrivers' -Name HwSchMode -ErrorAction SilentlyContinue).HwSchMode
+      [void]$lines.Add('Agendamento de GPU acelerado (HAGS): ' + $(if ($hags -eq 2) { 'ligado' } else { 'desligado. Ligue para usar o DLSS Frame Generation.' }))
+      if ($hags -ne 2 -and $title -eq 'Placa de vídeo em ordem') { $level = 'warn'; $title = 'HAGS desligado' }
+      $smi = @("$env:SystemRoot\System32\nvidia-smi.exe", "$env:ProgramFiles\NVIDIA Corporation\NVSMI\nvidia-smi.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
+      if ($smi) {
+        $q = & $smi -q -d MEMORY 2>$null | Out-String
+        $m = [regex]::Match($q, '(?s)BAR1 Memory Usage\s+Total\s*:\s*(\d+)\s*MiB')
+        if ($m.Success) {
+          if ([int]$m.Groups[1].Value -gt 256) { [void]$lines.Add('Resizable BAR: ligado.') }
+          else { $level = 'warn'; if ($title -eq 'Placa de vídeo em ordem') { $title = 'Resizable BAR desligado' }; [void]$lines.Add('Resizable BAR desligado: ative "Above 4G Decoding" e "Re-Size BAR" na BIOS (dá ganho em vários jogos).') }
+        }
+      }
+      $o = @{ level = $level; title = $title; lines = $lines }; Write-Output (Json $o)`,
   },
   ram: {
     title: 'Memória',
+    // O check anterior comparava com $m.Speed (o que o pente DECLARA) e calculava
+    // $ch (BankLabel) sem nunca usar — então dual channel nunca era detectado. Este
+    // é o do GDZ: geração DDR, velocidade do kit pelo PartNumber, canal único e 16 GB.
     run: `
-      $m = @(Get-CimInstance Win32_PhysicalMemory)
-      $lines = @(); $level = 'ok'
-      $rates = @($m | ForEach-Object { $_.ConfiguredClockSpeed } | Where-Object { $_ })
-      $xmp = @($m | ForEach-Object { $_.Speed } | Where-Object { $_ } | Sort-Object -Descending | Select-Object -First 1)
-      $best = if ($rates.Count) { ($rates | Sort-Object -Descending)[0] } else { 0 }
-      $lines += "Velocidade atual: $best MT/s."
-      if ($xmp.Count -and $best -lt $xmp[0]) { $lines += "O kit suporta $($xmp[0]) MT/s: XMP/EXPO desligado na BIOS."; $level = 'warn' }
-      $ch = @($m | Select-Object -ExpandProperty BankLabel -Unique)
-      $lines += ($m.Count.ToString() + ' pente(s) instalado(s).')
-      $o = @{ level = $level; title = 'Memoria (XMP/EXPO)'; lines = $lines }
-      Write-Output (Json $o)`,
+      $lines = New-Object System.Collections.ArrayList
+      $mods = @(Get-CimInstance Win32_PhysicalMemory)
+      if (-not $mods.Count) { $o = @{ level = 'info'; title = 'Não foi possível ler a memória'; lines = @() }; Write-Output (Json $o); return }
+      $cfg = [int](($mods | Measure-Object ConfiguredClockSpeed -Maximum).Maximum)
+      $t = [int]$mods[0].SMBIOSMemoryType
+      $gen = if ($t -eq 34) { 'DDR5' } elseif ($t -eq 26) { 'DDR4' } else { 'DDR' }
+      $gb = [math]::Round((($mods | Measure-Object Capacity -Sum).Sum) / 1GB)
+      $kit = 0
+      foreach ($m in $mods) { foreach ($x in [regex]::Matches([string]$m.PartNumber, '(?<!\d)(\d{4})(?!\d)')) { $v = [int]$x.Groups[1].Value; if ($v -ge 2400 -and $v -le 9000 -and $v -gt $kit) { $kit = $v } } }
+      [void]$lines.Add("$($mods.Count) pente(s) $gen, $gb GB no total, rodando a $cfg MT/s.")
+      $level = 'ok'; $title = 'A memória está numa velocidade boa'
+      if ($kit -gt $cfg + 100) {
+        $level = 'warn'; $title = 'A RAM está abaixo da velocidade do kit'
+        [void]$lines.Add("O modelo ($(([string]$mods[0].PartNumber).Trim())) indica $kit MT/s. Ative o XMP (Intel) ou EXPO (AMD) na BIOS.")
+      } elseif (($gen -eq 'DDR4' -and $cfg -le 2666) -or ($gen -eq 'DDR5' -and $cfg -le 4800)) {
+        $level = 'warn'; $title = 'A RAM está na velocidade básica'
+        [void]$lines.Add('Se o seu kit for mais rápido, ative XMP/EXPO na BIOS. É o maior ganho de FPS em jogos limitados pelo processador.')
+      }
+      if ($mods.Count -eq 1) {
+        $level = 'warn'; if ($title -like 'A memória*') { $title = 'Só um pente de memória' }
+        [void]$lines.Add('Com um pente só a memória roda em canal único, o que custa FPS. Dois pentes iguais rodam em dual channel.')
+      }
+      if ($gb -lt 16) { [void]$lines.Add('Menos de 16 GB: jogos atuais e navegador aberto juntos podem faltar memória.') }
+      $o = @{ level = $level; title = $title; lines = $lines }; Write-Output (Json $o)`,
   },
   amd: {
     title: 'Processador AMD',
     cap: 'amd',
+    // O check anterior só olhava o serviço amd3dvcacheSvc — o que dava falso aviso
+    // em TODO Ryzen que não é X3D. Este é o do GDZ: procura o driver de chipset
+    // pelos dispositivos, e só cobra a configuração especial nos X3D de dois CCDs.
     run: `
-      $lines = @(); $level = 'ok'
-      $s = Get-Service -Name 'amd3dvcacheSvc' -ErrorAction SilentlyContinue
-      if (-not $s) { $lines += 'Servico de cache 3D V-Cache ausente: instale o driver de chipset AMD.'; $level = 'warn' } else { $lines += 'Driver de chipset AMD presente.' }
-      $o = @{ level = $level; title = 'Ryzen'; lines = $lines }; Write-Output (Json $o)`,
+      $lines = New-Object System.Collections.ArrayList
+      $cpu = ([string](Get-CimInstance Win32_Processor | Select-Object -First 1).Name).Trim()
+      [void]$lines.Add("Processador: $cpu")
+      $dev = @(Get-PnpDevice -PresentOnly -ErrorAction SilentlyContinue | Where-Object { $_.FriendlyName -match 'AMD (3D V-Cache|PPM Provisioning|GPIO|PSP|SMBus|I2C)' } | ForEach-Object { $_.FriendlyName } | Sort-Object -Unique)
+      $level = 'ok'; $title = 'Driver de chipset AMD instalado'
+      if ($dev.Count) { [void]$lines.Add('Encontrado: ' + ($dev -join ', ') + '.') }
+      else { $level = 'warn'; $title = 'Driver de chipset AMD não encontrado'; [void]$lines.Add('Instale o driver de chipset em amd.com/support. Sem ele o Windows não usa direito os núcleos e os estados de energia do Ryzen.') }
+      if ($cpu -match '7900X3D|7950X3D|9900X3D|9950X3D|7945HX3D') {
+        if (-not (Get-Service amd3dvcacheSvc -ErrorAction SilentlyContinue)) { $level = 'warn'; [void]$lines.Add('Falta o serviço 3D V-Cache Optimizer (vem no driver de chipset). Sem ele o jogo pode rodar nos núcleos sem cache.') }
+        if (-not (Get-AppxPackage -Name Microsoft.XboxGamingOverlay -ErrorAction SilentlyContinue)) { $level = 'warn'; [void]$lines.Add('O Xbox Game Bar não está instalado. Nos X3D de dois CCDs ele é usado para detectar o jogo.') }
+        if ((Get-ItemProperty 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\GameDVR' -Name AllowGameDVR -ErrorAction SilentlyContinue).AllowGameDVR -eq 0) { $level = 'warn'; [void]$lines.Add('Uma política está desligando a Game Bar.') }
+        if ((powercfg /getactivescheme | Out-String) -notmatch '381b4222-f694-41f0-9685-ff5bb260df2e') { $level = 'warn'; [void]$lines.Add('O plano de energia não é o Equilibrado, que é o que o driver usa para estacionar o CCD sem cache.') }
+        if ($level -eq 'warn') { $title = 'Seu Ryzen X3D não está configurado do jeito certo'; [void]$lines.Add('Use o card "Modo X3D Correto" para arrumar.') }
+        else { [void]$lines.Add('Configuração X3D correta: Game Bar, plano Equilibrado e driver presentes.') }
+      } else {
+        [void]$lines.Add('Na BIOS: ative o EXPO (ou DOCP/XMP) da memória. PBO e Curve Optimizer dão mais desempenho se você souber ajustar.')
+      }
+      $o = @{ level = $level; title = $title; lines = $lines }; Write-Output (Json $o)`,
   },
   intel: {
     title: 'Processador Intel',
     cap: 'intel',
+    // O check anterior só imprimia o microcode e devolvia 'ok' sempre — o cliente
+    // lia "tudo certo" sem nada ter sido verificado. Este é o do GDZ: decodifica
+    // o microcode, compara com o mínimo de cada geração e olha o Modo de Jogo.
     run: `
-      $lines = @(); $level = 'ok'
-      $rev = (Get-ItemProperty 'HKLM:\\HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0').'Update Revision'
-      $lines += "Microcode: $([string]$rev)"
-      $o = @{ level = 'ok'; title = 'Core / Core Ultra'; lines = $lines }; Write-Output (Json $o)`,
+      $cpu = ([string](Get-CimInstance Win32_Processor | Select-Object -First 1).Name).Trim()
+      $lines = New-Object System.Collections.ArrayList; [void]$lines.Add("Processador: $cpu")
+      $rev = (Get-ItemProperty 'HKLM:\HARDWARE\DESCRIPTION\System\CentralProcessor\0' -Name 'Update Revision' -ErrorAction SilentlyContinue).'Update Revision'
+      $mc = 0; if ($rev -and $rev.Length -ge 8) { $mc = [BitConverter]::ToUInt32([byte[]]$rev, 4) }
+      if ($mc) { [void]$lines.Add(('Microcode: 0x{0:X}' -f $mc)) }
+      $cv = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion'
+      $level = 'ok'; $title = 'Nada a corrigir no processador'
+      if ($cpu -match 'i[579]-1[34]\d{3}(K|KF|KS|F|T)?\b' -and $cpu -notmatch '\d{4,5}(H|HX|U|P)\b') {
+        if ($mc -and $mc -lt 0x12B) { $level = 'warn'; $title = 'Atualize a BIOS: microcode com risco de degradação'; [void]$lines.Add('Os Core 13ª/14ª geração precisam do microcode 0x12B ou mais novo para evitar a degradação do chip. Baixe a BIOS mais recente no site da sua placa-mãe.') }
+        else { [void]$lines.Add('Microcode com a correção de degradação da Intel (0x12B ou mais novo).') }
+      }
+      if ($cpu -match 'Core\(TM\) Ultra [579] 2\d\d') {
+        if ([int]$cv.CurrentBuildNumber -lt 26100 -or ([int]$cv.CurrentBuildNumber -eq 26100 -and [int]$cv.UBR -lt 2314)) { $level = 'warn'; $title = 'Atualize o Windows para o Core Ultra 200S'; [void]$lines.Add('A Intel exige o Windows 11 24H2 (build 26100.2314 ou mais novo) para o desempenho correto.') }
+        if ($mc -and $mc -lt 0x114) { $level = 'warn'; $title = 'Atualize a BIOS do Core Ultra 200S'; [void]$lines.Add('A Intel corrigiu o desempenho em jogos no microcode 0x114. Atualize a BIOS.') }
+      }
+      if ($cpu -match '1[2-4]th Gen|Core\(TM\) Ultra') {
+        $gm = (Get-ItemProperty 'HKCU:\SOFTWARE\Microsoft\GameBar' -Name AutoGameModeEnabled -ErrorAction SilentlyContinue).AutoGameModeEnabled
+        if ($gm -eq 0) { $level = 'warn'; [void]$lines.Add('O Modo de Jogo está desligado. Nos Intel híbridos (P-cores e E-cores) ele ajuda o Windows a pôr o jogo nos núcleos rápidos.') }
+        else { [void]$lines.Add('Processador híbrido: deixe o Windows escolher os núcleos. Desligar E-cores ou forçar afinidade não traz ganho.') }
+      }
+      $o = @{ level = $level; title = $title; lines = $lines }; Write-Output (Json $o)`,
   },
   encoder: {
     title: 'Configuração do OBS',

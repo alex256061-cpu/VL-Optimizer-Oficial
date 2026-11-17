@@ -73,17 +73,33 @@ function createWindow() {
       contextIsolation: true, nodeIntegration: false, sandbox: false, spellcheck: false,
     },
   });
-  // Com o login configurado, quem nao tem sessao valida passa pela tela de entrada.
-  // Sem as chaves do Supabase o app abre direto, para nao travar quem ja usa.
+  // Quem nao tem sessao valida passa pela tela de entrada — igual ao programa de
+  // referencia (requireAuth). Antes, sem as chaves do Supabase o app abria direto:
+  // se o servico falhasse ou fosse desconfigurado, tudo ficava liberado. Agora ele
+  // falha FECHADO: sem chaves ou sem resposta do servidor, entra pela tela de login
+  // e mostra o motivo.
   (async () => {
     let logado = false;
-    if (conta.configurado()) {
-      try { const s = await conta.sessao(); logado = !!(s && s.valid); if (logado) setTimeout(() => conta.enviarHardware().catch(() => {}), 3000); } catch (e) { }
+    let motivo = null;
+    if (!conta.configurado()) {
+      logado = false;
+      motivo = 'sem-config';
     } else {
-      logado = true;
+      try {
+        const s = await conta.sessao();
+        logado = !!(s && s.valid);
+        if (logado) setTimeout(() => conta.enviarHardware().catch(() => {}), 3000);
+        else motivo = (s && (s.motivo || s.reason)) || 'sem-sessao';
+      } catch (e) {
+        logado = false;
+        motivo = 'rede';
+      }
     }
+    // O motivo vai na query string: a tela de login usa isso para explicar o que
+    // houve em vez de aparecer em branco.
+    const query = process.argv.includes('--shots') ? { shot: '1', motivo: motivo || '' } : (motivo ? { motivo } : undefined);
     const pagina = logado ? 'dashboard.html' : 'login.html';
-    win.loadFile(path.join(__dirname, 'src', pagina), process.argv.includes('--shots') ? { query: { shot: '1' } } : undefined);
+    win.loadFile(path.join(__dirname, 'src', pagina), query ? { query } : undefined);
   })();
   // Mostra a janela. O ready-to-show é o caminho normal; o prazo de 3 s é a rede de
   // segurança para quando ele não chega (renderer pesado ou script travado) — sem ela
@@ -592,7 +608,7 @@ H('update-open-page', () => {
 });
 H('claim-key', (a) => ex.claimKey(a && a.codigo));
 H('telemetry-consent', () => ex.telemetryConsent());
-H('telemetry-consent-set', () => ({ success: true }));
+H('telemetry-consent-set', (e, a) => ex.telemetryConsentSet(a));
 H('offers', () => ex.offers());
 H('plan-event', () => ({ success: true }));
 H('get-hardware', () => ex.getHardware());
