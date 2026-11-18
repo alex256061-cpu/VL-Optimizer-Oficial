@@ -10,6 +10,19 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.52': {
+    corrigido: [
+      'Os quatro botoes "Religar" da aba Reparos nao faziam nada: clicavam e respondiam "acao desconhecida". Agora religam o Windows Defender, o Windows Update, a Restauracao do Sistema e consertam a escala da tela.',
+      '"Restaurar tudo" dizia ter restaurado quando nao havia nada guardado, e apagava os botoes de desfazer da tela. Agora avisa que nao ha nada para desfazer.',
+      'As janelas de acessibilidade (Teclas de Aderencia, Alternar Teclas, Filtro de Teclas) voltam a funcionar: o ajuste apagava o recurso em vez de so desligar o atalho.',
+      'A "Correcao de tela piscando (MPO)" nao fazia efeito: gravava no lugar errado do registro. Corrigida.',
+      'A "Placa de video com interrupcao MSI" aplicava so metade do que devia: agora tambem poe a prioridade alta de interrupcao.',
+      'Telemetria, sugestoes, Num Lock, historico de atividades, widgets, Edge em segundo plano e apps da Loja: ajustes completados para realmente fazerem o que o texto promete.',
+      'A "Sobreposicao do Steam" nao funcionava: agora fecha o Steam, altera a configuracao de cada conta e reabre.',
+      'A "Pesquisa do Iniciar sem Bing" e o "Sem upload de atualizacoes para outros PCs" usavam chaves que o Windows ignora. Trocadas pelas que funcionam.',
+    ],
+    novo: [],
+  },
   '1.4.51': {
     corrigido: [
       'Correcao de acentuacao nos textos internos do projeto. Nao muda nada no que voce ve.',

@@ -81,6 +81,25 @@ try {
   parar('Há card na tela sem ação no motor, ou uma opção removida voltou. Nada foi publicado.');
 }
 
+// ── 1c. o pacote tem tudo que o código pede? ─────────────────────────────
+//
+// O QUE ESTE PASSO IMPEDE
+//   A 1.4.47 foi publicada QUEBRADA: o gerar-build restaurou uma cópia antiga do
+//   projeto e 9 arquivos exigidos por require() saíram do files[] do
+//   electron-builder.json. O app não abria (require('./foto-sistema') sem try/catch).
+//
+//   O verificar-packaging já existia, mas saía com exit 1 por falsos positivos
+//   (arquivos de build e arquivos que o app apenas GRAVA) e por isso nunca foi
+//   ligado. Agora ele distingue leitura de escrita e conhece as exceções — passa
+//   limpo — e vira trava de build.
+passo('1c', 'Conferindo se o pacote tem todos os arquivos que o código pede');
+try {
+  execFileSync(process.execPath, [path.join(RAIZ, 'verificar-packaging.js')], { stdio: 'inherit' });
+  ok('pacote conferido');
+} catch (e) {
+  parar('O pacote não tem algum arquivo que o código carrega. Nada foi publicado.');
+}
+
 // ── 2. versão ─────────────────────────────────────────────────────────────
 passo(2, 'Atualizando a versao para ' + versao);
 const pkgPath = path.join(RAIZ, 'package.json');

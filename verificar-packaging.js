@@ -68,6 +68,14 @@ const ok = [];
 
 for (const rel of jsRaiz) {
   if (!rel.endsWith('.js')) continue;
+
+  // Só interessa o require de um arquivo que VAI para o pacote.
+  // Ferramentas de build (textos-marca.js, native/scaler/build.js, gerar-build.js,
+  // publicar.js...) não entram no asar: os requires delas nunca rodam no app do
+  // cliente. Verificá-las gerava "FALTA NO BUILD" falso e impedia ligar esta
+  // ferramenta no publicar.js — furo que o auditor s1 apontou.
+  if (!coberto(rel)) continue;
+
   const full = path.join(RAIZ, rel);
   let src;
   try { src = fs.readFileSync(full, 'utf8'); } catch (e) { continue; }
@@ -83,8 +91,44 @@ for (const rel of jsRaiz) {
     else problemas.push({ de: rel, arquivo: alvo, tipo: "require('./" + r + "')" });
   }
 
-  // readFileSync(path.join(__dirname, 'x'))  e  path.join(__dirname, 'x')
-  const dirnameRefs = [...src.matchAll(/path\.join\(\s*__dirname\s*,\s*['"]([^'"]+)['"]/g)].map((m) => m[1]);
+  // Só caminhos usados em LEITURA: os de escrita (writeFileSync, appendFileSync,
+  // mkdirSync) são arquivos que o app CRIA em runtime e não precisam ir no pacote.
+  //
+  // Antes o regex pegava tudo e o verificador acusava "FALTA NO BUILD: smoke.png",
+  // "uitest.log" e "site" — todos falsos, e por isso ele não podia ser ligado no
+  // publicar.js.
+  const RE_LEITURA = /(?:readFileSync|readFile|readdirSync|existsSync|createReadStream|statSync|openSync|loadFile|readJson|readFileAsync)\(\s*(?:path\.join\()?\s*__dirname\s*,\s*['"]([^'"]+)['"]/g;
+  const dirnameRefs = [...src.matchAll(RE_LEITURA)].map((m) => m[1]);
+  // Exceções: caminhos que só existem em MODOS DE DESENVOLVIMENTO, nunca no app
+  // do cliente. Cada uma precisa do motivo escrito — sem isso, a exceção vira
+  // desculpa e o verificador perde a utilidade.
+  const EXCECOES = new Map([
+    // "site": só usado no modo --siteshot (tirar print do site). O asar não tem a
+    // pasta e o app do cliente nunca entra nesse ramo do código.
+    ['site'],
+  ]);
+  for (const [k] of EXCECOES) {
+    const i = dirnameRefs.indexOf(k);
+    if (i >= 0) dirnameRefs.splice(i, 1);
+  }
+  // Também vale a forma em duas etapas: const p = path.join(__dirname, 'x') seguido
+  // de um readFileSync(p). Nesse caso o arquivo é exigido (é o padrão do main.js
+  // para os .ps1). Mantemos a captura antiga, mas só quando o caminho aparece perto
+  // de uma leitura.
+  for (const m of src.matchAll(/path\.join\(\s*__dirname\s*,\s*['"]([^'"]+)['"]/g)) {
+    const alvo = m[1];
+    if (dirnameRefs.includes(alvo)) continue;
+    // procura a variável que recebeu esse caminho e vê se ela é lida
+    const antes = src.slice(Math.max(0, m.index - 200), m.index);
+    const varM = /(?:const|let|var)\s+(\w+)\s*=\s*$/.exec(antes);
+    if (varM) {
+      const nome = varM[1];
+      const depois = src.slice(m.index, m.index + 400);
+      if (new RegExp('(?:readFileSync|readFile|readdirSync|existsSync|createReadStream|statSync|openSync|loadFile)\\(\\s*' + nome + '\\b').test(depois)) {
+        dirnameRefs.push(alvo);
+      }
+    }
+  }
   for (const r of dirnameRefs) {
     if (r.includes('..')) continue;
     const alvo = path.posix.join(path.posix.dirname(rel.replace(/\\/g, '/')), r.replace(/\\/g, '/'));

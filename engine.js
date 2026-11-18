@@ -401,7 +401,15 @@ const TWEAKS = [
   T('game-mode', { padrao: 1,
     cat: 'desempenho', title: 'Modo de Jogo do Windows', rec: true, tags: ['FPS mais estável'],
     desc: 'Quando um jogo abre, o Windows segura atualizações e tarefas de fundo e dá prioridade de processador e placa de vídeo para ele.',
-    reg: [{ path: HKCU + '\\Software\\Microsoft\\GameBar', name: 'AutoGameModeEnabled', type: 'DWord', on: 1, off: 0 }],
+    // Duas chaves, como no GDZ: a primeira autoriza o Windows a usar o Modo de Jogo
+    // automaticamente, a segunda liga o Modo de Jogo em si.
+    //
+    // O nosso perfil de jogo (specDoJogo) já gravava AllowAutoGameMode — mas este
+    // tweak não. Era a mesma chave com dois comportamentos no mesmo programa.
+    reg: [
+      { path: HKCU + '\\Software\\Microsoft\\GameBar', name: 'AllowAutoGameMode', type: 'DWord', on: 1, off: 0 },
+      { path: HKCU + '\\Software\\Microsoft\\GameBar', name: 'AutoGameModeEnabled', type: 'DWord', on: 1, off: 0 },
+    ],
     // O Windows assume Modo de Jogo LIGADO quando o valor NÃO existe (padrao: 1).
     //
     // O probe testava só `-eq 1`: com o valor ausente respondia 0 = desligado, a tela
@@ -410,26 +418,156 @@ const TWEAKS = [
     // desligado) — mesma semântica aplicada aqui.
     probe: `$v = Get-Val '${HKCU}\\Software\\Microsoft\\GameBar' 'AutoGameModeEnabled'; if ($null -eq $v) { $v = 1 }; if ($v -eq 1) { Write-Output '1' } else { Write-Output '0' }`,
   }),
-  T('steam-overlay', {
+  T('steam-overlay', { padrao: 1,
     cat: 'desempenho', title: 'Sobreposição do Steam (Shift+Tab) desligada', tags: ['Mais FPS'],
     desc: 'Desliga a tela que o Steam abre por cima do jogo com o Shift+Tab. Ela injeta código em todo jogo do Steam e é causa conhecida de queda de FPS, travadinhas e conflito com outros programas de captura.',
-    reg: [{ path: HKCU + '\\Software\\Valve\\Steam', name: 'EnableGameOverlay', type: 'DWord', on: 0, off: 1 }],
     note: 'O Steam fecha e abre de novo para a alteração valer. Sem a sobreposição você perde o chat, o navegador e as conquistas por cima do jogo (e o Steam Input de alguns controles).',
-    // GDZ: `caps.steamPath ? null : "O Steam não está instalado neste PC."`. O caminho
-    // vem de HKCU\Software\Valve\Steam\SteamPath e só vale se steam.exe estiver lá.
+    // A chave de registro que usávamos NÃO funciona.
+    //
+    // O verificador u1 varreu os binários do Steam (ASCII e UTF-16) e não achou
+    // "EnableGameOverlay" em nenhum deles: o Steam guarda a sobreposição no
+    // localconfig.vdf de cada conta, não no registro. A nossa chave em
+    // HKCU\Software\Valve\Steam era inerte.
+    //
+    // Aqui vai o mecanismo do GDZ: reescrever a seção "system" do VDF.
+    // O caminho do Steam é descoberto em runtime (HKCU e depois HKLM\WOW6432Node),
+    // porque este motor não passa a ficha do PC para os scripts on/off.
+    on: `
+      function VLOverlayWrite($f, $val) {
+        $q = [char]34; $tab = [char]9
+        $lines = New-Object System.Collections.Generic.List[string]
+        foreach ($l in [IO.File]::ReadAllLines($f)) { [void]$lines.Add($l) }
+        $depth = 0; $pending = $false; $inSystem = $false; $open = -1; $key = -1
+        for ($i = 0; $i -lt $lines.Count; $i++) {
+          $line = $lines[$i].Trim()
+          if ($line -eq '{') { $depth++; if ($pending) { $inSystem = $true; $open = $i; $pending = $false }; continue }
+          if ($line -eq '}') { $depth--; if ($inSystem -and $depth -le 1) { $inSystem = $false }; continue }
+          if (($depth -eq 1) -and ($line -eq ($q + 'system' + $q))) { $pending = $true; continue }
+          if ($inSystem -and $line.StartsWith($q + 'EnableGameOverlay' + $q)) { $key = $i }
+        }
+        $entry = $tab + $tab + $q + 'EnableGameOverlay' + $q + $tab + $tab + $q + $val + $q
+        if ($key -ge 0) { $lines[$key] = $entry }
+        elseif ($open -ge 0) { $lines.Insert($open + 1, $entry) }
+        else {
+          $first = -1
+          for ($i = 0; $i -lt $lines.Count; $i++) { if ($lines[$i].Trim() -eq '{') { $first = $i; break } }
+          if ($first -lt 0) { return $false }
+          $lines.Insert($first + 1, $tab + '}')
+          $lines.Insert($first + 1, $entry)
+          $lines.Insert($first + 1, $tab + '{')
+          $lines.Insert($first + 1, $tab + $q + 'system' + $q)
+        }
+        [IO.File]::WriteAllLines($f, $lines, (New-Object System.Text.UTF8Encoding($false)))
+        return $true
+      }
+      $sp = (Get-ItemProperty 'HKCU:\\Software\\Valve\\Steam' -ErrorAction SilentlyContinue).SteamPath
+      if (-not $sp) { $sp = (Get-ItemProperty 'HKLM:\\SOFTWARE\\WOW6432Node\\Valve\\Steam' -ErrorAction SilentlyContinue).InstallPath }
+      if (-not $sp -or -not (Test-Path -LiteralPath $sp)) { Write-Output 'VL_ERRO: o Steam nao esta instalado neste PC.'; exit }
+      $exe = Join-Path $sp 'steam.exe'
+      $ud = Join-Path $sp 'userdata'
+      $vdf = @(Get-ChildItem -LiteralPath $ud -Directory -ErrorAction SilentlyContinue | ForEach-Object { Join-Path $_.FullName 'config\\localconfig.vdf' } | Where-Object { Test-Path -LiteralPath $_ })
+      if (-not $vdf.Count) { Write-Output 'VL_ERRO: nenhuma conta do Steam foi encontrada neste PC. Entre no Steam uma vez e tente de novo.'; exit }
+      if ((Get-ItemProperty 'HKCU:\\Software\\Valve\\Steam' -ErrorAction SilentlyContinue).RunningAppID -gt 0) { Write-Output 'VL_ERRO: feche o jogo aberto pelo Steam antes de mudar a sobreposicao.'; exit }
+      $rodando = [bool](Get-Process -Name steam -ErrorAction SilentlyContinue)
+      if ($rodando) {
+        Start-Process -FilePath $exe -ArgumentList '-shutdown' -ErrorAction SilentlyContinue
+        $n = 0
+        while ((Get-Process -Name steam -ErrorAction SilentlyContinue) -and ($n -lt 40)) { Start-Sleep -Milliseconds 500; $n++ }
+        if (Get-Process -Name steam -ErrorAction SilentlyContinue) { Write-Output 'VL_ERRO: o Steam nao fechou. Feche o Steam pela bandeja do Windows e tente de novo.'; exit }
+        Start-Sleep -Milliseconds 800
+      }
+      $erros = 0
+      foreach ($f in $vdf) { try { if (-not (VLOverlayWrite $f '0')) { $erros++ } } catch { $erros++ } }
+      if ($rodando) { Start-Process -FilePath 'explorer.exe' -ArgumentList $exe -ErrorAction SilentlyContinue }
+      if ($erros) { Write-Output 'VL_ERRO: nao foi possivel gravar a configuracao do Steam.'; exit }
+      Write-Output 'ok'`,
+    off: `
+      function VLOverlayWrite($f, $val) {
+        $q = [char]34; $tab = [char]9
+        $lines = New-Object System.Collections.Generic.List[string]
+        foreach ($l in [IO.File]::ReadAllLines($f)) { [void]$lines.Add($l) }
+        $depth = 0; $pending = $false; $inSystem = $false; $open = -1; $key = -1
+        for ($i = 0; $i -lt $lines.Count; $i++) {
+          $line = $lines[$i].Trim()
+          if ($line -eq '{') { $depth++; if ($pending) { $inSystem = $true; $open = $i; $pending = $false }; continue }
+          if ($line -eq '}') { $depth--; if ($inSystem -and $depth -le 1) { $inSystem = $false }; continue }
+          if (($depth -eq 1) -and ($line -eq ($q + 'system' + $q))) { $pending = $true; continue }
+          if ($inSystem -and $line.StartsWith($q + 'EnableGameOverlay' + $q)) { $key = $i }
+        }
+        $entry = $tab + $tab + $q + 'EnableGameOverlay' + $q + $tab + $tab + $q + $val + $q
+        if ($key -ge 0) { $lines[$key] = $entry }
+        elseif ($open -ge 0) { $lines.Insert($open + 1, $entry) }
+        else {
+          $first = -1
+          for ($i = 0; $i -lt $lines.Count; $i++) { if ($lines[$i].Trim() -eq '{') { $first = $i; break } }
+          if ($first -lt 0) { return $false }
+          $lines.Insert($first + 1, $tab + '}')
+          $lines.Insert($first + 1, $entry)
+          $lines.Insert($first + 1, $tab + '{')
+          $lines.Insert($first + 1, $tab + $q + 'system' + $q)
+        }
+        [IO.File]::WriteAllLines($f, $lines, (New-Object System.Text.UTF8Encoding($false)))
+        return $true
+      }
+      $sp = (Get-ItemProperty 'HKCU:\\Software\\Valve\\Steam' -ErrorAction SilentlyContinue).SteamPath
+      if (-not $sp) { $sp = (Get-ItemProperty 'HKLM:\\SOFTWARE\\WOW6432Node\\Valve\\Steam' -ErrorAction SilentlyContinue).InstallPath }
+      if (-not $sp -or -not (Test-Path -LiteralPath $sp)) { Write-Output 'VL_ERRO: o Steam nao esta instalado neste PC.'; exit }
+      $exe = Join-Path $sp 'steam.exe'
+      $ud = Join-Path $sp 'userdata'
+      $vdf = @(Get-ChildItem -LiteralPath $ud -Directory -ErrorAction SilentlyContinue | ForEach-Object { Join-Path $_.FullName 'config\\localconfig.vdf' } | Where-Object { Test-Path -LiteralPath $_ })
+      if (-not $vdf.Count) { Write-Output 'VL_ERRO: nenhuma conta do Steam foi encontrada neste PC. Entre no Steam uma vez e tente de novo.'; exit }
+      if ((Get-ItemProperty 'HKCU:\\Software\\Valve\\Steam' -ErrorAction SilentlyContinue).RunningAppID -gt 0) { Write-Output 'VL_ERRO: feche o jogo aberto pelo Steam antes de mudar a sobreposicao.'; exit }
+      $rodando = [bool](Get-Process -Name steam -ErrorAction SilentlyContinue)
+      if ($rodando) {
+        Start-Process -FilePath $exe -ArgumentList '-shutdown' -ErrorAction SilentlyContinue
+        $n = 0
+        while ((Get-Process -Name steam -ErrorAction SilentlyContinue) -and ($n -lt 40)) { Start-Sleep -Milliseconds 500; $n++ }
+        if (Get-Process -Name steam -ErrorAction SilentlyContinue) { Write-Output 'VL_ERRO: o Steam nao fechou. Feche o Steam pela bandeja do Windows e tente de novo.'; exit }
+        Start-Sleep -Milliseconds 800
+      }
+      $erros = 0
+      foreach ($f in $vdf) { try { if (-not (VLOverlayWrite $f '1')) { $erros++ } } catch { $erros++ } }
+      if ($rodando) { Start-Process -FilePath 'explorer.exe' -ArgumentList $exe -ErrorAction SilentlyContinue }
+      if ($erros) { Write-Output 'VL_ERRO: nao foi possivel gravar a configuracao do Steam.'; exit }
+      Write-Output 'ok'`,
+    // Estado: está desligada quando TODAS as contas têm "EnableGameOverlay" "0".
+    probe: `$sp = (Get-ItemProperty 'HKCU:\\Software\\Valve\\Steam' -ErrorAction SilentlyContinue).SteamPath
+      if (-not $sp) { $sp = (Get-ItemProperty 'HKLM:\\SOFTWARE\\WOW6432Node\\Valve\\Steam' -ErrorAction SilentlyContinue).InstallPath }
+      if (-not $sp) { Write-Output '0'; exit }
+      $v = @(Get-ChildItem -LiteralPath (Join-Path $sp 'userdata') -Directory -ErrorAction SilentlyContinue | ForEach-Object { Join-Path $_.FullName 'config\\localconfig.vdf' } | Where-Object { Test-Path -LiteralPath $_ })
+      if (-not $v.Count) { Write-Output '0'; exit }
+      $falta = @($v | Where-Object { -not (Select-String -LiteralPath $_ -Pattern '"EnableGameOverlay"\\s+"0"' -Quiet) }).Count
+      if ($falta -eq 0) { Write-Output '1' } else { Write-Output '0' }`,
     block: (caps) => caps.steamPath ? null : 'O Steam não está instalado neste PC.',
   }),
   T('bg-apps', {
     cat: 'desempenho', title: 'Sem apps da Loja rodando escondidos', tags: ['PC fraco'],
     desc: 'Apps instalados pela Microsoft Store (Clima, Fotos, Xbox, Your Phone...) param de rodar em segundo plano quando estão fechados.',
     note: 'Apps da Loja, como o WhatsApp, deixam de mostrar notificações com a janela fechada.',
-    reg: [{ path: HKCU + '\\Software\\Microsoft\\Windows\\CurrentVersion\\BackgroundAccessApplications', name: 'GlobalUserDisabled', type: 'DWord', on: 1, off: 0 }],
+    reg: [
+      { path: HKCU + '\\Software\\Microsoft\\Windows\\CurrentVersion\\BackgroundAccessApplications', name: 'GlobalUserDisabled', type: 'DWord', on: 1, off: 0 },
+      // A segunda chave é a que a própria interface do Windows grava quando você
+      // desliga 'Apps em segundo plano'. Com só a primeira, alguns apps da Loja
+      // continuavam rodando e na máquina do dono as duas estavam em conflito
+      // (GlobalUserDisabled=0 e BackgroundAppGlobalToggle=0).
+      { path: HKCU + '\\Software\\Microsoft\\Windows\\CurrentVersion\\Search', name: 'BackgroundAppGlobalToggle', type: 'DWord', on: 0, off: 1 },
+    ],
   }),
   T('edge-bg', { rec: true,
     cat: 'desempenho', title: 'Edge fechado de verdade', tags: ['PC fraco'],
     desc: 'Impede o Edge de abrir escondido junto com o Windows e de continuar rodando depois que você fecha a janela. Devolve memória e deixa a inicialização mais leve.',
     note: 'Nas configurações do Edge vai aparecer "Gerenciado pela sua organização". É normal: é assim que o Windows marca essa regra.',
-    reg: [{ path: HKLM + '\\SOFTWARE\\Policies\\Microsoft\\Edge', name: 'BackgroundModeEnabled', type: 'DWord', on: 0, off: 1 }],
+    // Duas políticas do Edge, ambas documentadas pela Microsoft:
+    //   StartupBoostEnabled    = 0  -> o Edge não abre escondido junto com o Windows
+    //   BackgroundModeEnabled  = 0  -> o Edge não continua rodando depois de fechado
+    //
+    // O "off" agora é apagar o valor (o padrão das políticas é "não configurado").
+    // Antes o off era 1, que no desfazer FORÇAVA o background mode ligado — pior que
+    // não mexer.
+    reg: [
+      { path: HKLM + '\\SOFTWARE\\Policies\\Microsoft\\Edge', name: 'StartupBoostEnabled', type: 'DWord', on: 0, off: null },
+      { path: HKLM + '\\SOFTWARE\\Policies\\Microsoft\\Edge', name: 'BackgroundModeEnabled', type: 'DWord', on: 0, off: null },
+    ],
   }),
   // 'dlss-ind' REMOVIDO: não existe no GDZ.
   //
@@ -458,15 +596,24 @@ T('dlss-rec', {
     on: `
       $gpus = @(Get-CimInstance Win32_VideoController | Where-Object { $_.PNPDeviceID -match '^PCI\\\\' })
       foreach ($g in $gpus) {
-        $k = 'HKLM:\\SYSTEM\\CurrentControlSet\\Enum\\' + $g.PNPDeviceID + '\\Device Parameters\\Interrupt Management\\MessageSignaledInterruptProperties'
+        $base = 'HKLM:\\SYSTEM\\CurrentControlSet\\Enum\\' + $g.PNPDeviceID + '\\Device Parameters\\Interrupt Management'
+        $k = $base + '\\MessageSignaledInterruptProperties'
         if (Test-Path -LiteralPath $k) { Set-Val $k 'MSISupported' 1 'DWord' }
+        # Segunda chave do GDZ: prioridade alta de interrupção para a GPU.
+        # Sem ela o ajuste fica pela metade — o MSI muda COMO a placa avisa, e o
+        # DevicePriority muda a ORDEM em que o Windows atende esse aviso.
+        New-Key ($base + '\\Affinity Policy')
+        Set-Val ($base + '\\Affinity Policy') 'DevicePriority' 3 'DWord'
       }
       Write-Output 'ok'`,
     off: `
       $gpus = @(Get-CimInstance Win32_VideoController | Where-Object { $_.PNPDeviceID -match '^PCI\\\\' })
       foreach ($g in $gpus) {
-        $k = 'HKLM:\\SYSTEM\\CurrentControlSet\\Enum\\' + $g.PNPDeviceID + '\\Device Parameters\\Interrupt Management\\MessageSignaledInterruptProperties'
+        $base = 'HKLM:\\SYSTEM\\CurrentControlSet\\Enum\\' + $g.PNPDeviceID + '\\Device Parameters\\Interrupt Management'
+        $k = $base + '\\MessageSignaledInterruptProperties'
         if (Test-Path -LiteralPath $k) { Set-Val $k 'MSISupported' 0 'DWord' }
+        $ap = $base + '\\Affinity Policy'
+        if (Test-Path -LiteralPath $ap) { Del-Val $ap 'DevicePriority' }
       }
       Write-Output 'ok'`,
     // O probe é colado numa linha só pelo tweaksStatus (replace de \n por espaço),
@@ -496,9 +643,24 @@ if ($gpus.Count -eq 0) { Write-Output '0' } else {
   T('mpo', {
     cat: 'desempenho', title: 'Correção de tela piscando (MPO)', tags: ['Estabilidade'],
     desc: 'Desliga o Multiplane Overlay, causa conhecida de tela piscando, faixas pretas e travadinhas com G-Sync/FreeSync ou com dois monitores.',
-    // OverlayTestMode = 5 desliga o MPO. O off era 5 também, então aplicar e desaplicar
-    // gravavam o mesmo valor e o ajuste nunca mudava nada. Agora desaplicar volta para 0.
-    reg: [{ path: HKCU + '\\Software\\Microsoft\\Windows\\DWM', name: 'OverlayTestMode', type: 'DWord', on: 5, off: 0 }],
+    // HIVE CORRETA: HKLM, não HKCU.
+    //
+    // O DWM (Desktop Window Manager) roda como SYSTEM e lê HKLM. O nosso gravava em
+    // HKCU — lugar que o DWM nunca lê — então este ajuste não fazia efeito nenhum.
+    // Descoberto comparando o payload com o GDZ (que usa HKLM) e confirmado pela
+    // varredura de binários do verificador u1.
+    //
+    // Duas chaves, como no GDZ:
+    //   Dwm\OverlayTestMode = 5   (desliga o Multiplane Overlay)
+    //   GraphicsDrivers\DisableOverlays = 1 (reforço no driver)
+    // off volta para 0 / 0 (o padrão do Windows).
+    //
+    // Precisa de administrador: é HKLM. Sem admin o app avisa, que é o certo.
+    reintentar: 'admin',
+    reg: [
+      { path: HKLM + '\\SOFTWARE\\Microsoft\\Windows\\Dwm', name: 'OverlayTestMode', type: 'DWord', on: 5, off: 0 },
+      { path: HKLM + '\\SYSTEM\\CurrentControlSet\\Control\\GraphicsDrivers', name: 'DisableOverlays', type: 'DWord', on: 1, off: 0 },
+    ],
     note: 'Só ative se você tem esse problema. Sem ele, não muda nada.',
   }),
   T('transparency', {
@@ -532,21 +694,52 @@ if ($gpus.Count -eq 0) { Write-Output '0' } else {
       { path: HKCU + '\\Control Panel\\Keyboard', name: 'KeyboardSpeed', type: 'String', on: '31', off: null },
     ],
   }),
-  T('sticky', { padrao: "506", rec: true,
+  T('sticky', { padrao: "510", rec: true,
     cat: 'inputlag', title: 'Sem janelas de acessibilidade no meio do jogo', tags: ['Nada abrindo sozinho'],
     desc: 'Apertar Shift 5 vezes ou segurar Num Lock/Shift não abre mais as janelas de Teclas de Aderência e Filtragem no meio da partida. Os recursos continuam nas Configurações.',
-    reg: [{ path: HKCU + '\\Control Panel\\Accessibility\\StickyKeys', name: 'Flags', type: 'String', on: "0", off: "506" }],
+    // Flags é BITMASK:
+    //   0x2 = SKF_AVAILABLE (o recurso existe)
+    //   0x4 = SKF_HOTKEYACTIVE (o atalho está ligado)
+    // Padrão do Windows: StickyKeys 510, ToggleKeys 62, Keyboard Response 126.
+    //
+    // Tirar SÓ o bit do atalho: 510-4=506, 62-4=58, 126-4=122. O recurso continua
+    // disponível nas Configurações do Windows, como o card promete.
+    //
+    // Antes o nosso gravava 0, que apaga também o AVAILABLE: o recurso deixava de
+    // existir para quem precisa dele. Correção do desvio encontrado na comparação.
+    reg: [
+      { path: HKCU + '\\Control Panel\\Accessibility\\StickyKeys', name: 'Flags', type: 'String', on: "506", off: "510" },
+      { path: HKCU + '\\Control Panel\\Accessibility\\ToggleKeys', name: 'Flags', type: 'String', on: "58", off: "62" },
+      { path: HKCU + '\\Control Panel\\Accessibility\\Keyboard Response', name: 'Flags', type: 'String', on: "122", off: "126" },
+    ],
   }),
   T('numlock', {
     cat: 'inputlag', title: 'Num Lock ligado ao iniciar', tags: ['Praticidade'],
     desc: 'O teclado numérico já vem ligado na tela de login e quando você entra no Windows.',
-    reg: [{ path: HKCU + '\\Control Panel\\Keyboard', name: 'InitialKeyboardIndicators', type: 'String', on: '2', off: '0' }],
+    // Dois lugares:
+    //   HKCU                          -> o Num Lock depois de entrar no Windows
+    //   HKEY_USERS\.DEFAULT          -> a tela de login (antes de qualquer usuário entrar)
+    //
+    // A do .DEFAULT só é gravável como administrador (a ACL padrão dá apenas ReadKey
+    // para Usuários). Sem admin o app avisa, em vez de dizer que fez.
+    reg: [
+      { path: HKCU + '\\Control Panel\\Keyboard', name: 'InitialKeyboardIndicators', type: 'String', on: '2', off: '0' },
+      { path: 'Registry::HKEY_USERS\\.DEFAULT\\Control Panel\\Keyboard', name: 'InitialKeyboardIndicators', type: 'String', on: '2', off: '0' },
+    ],
   }),
   // — Internet
   T('delivery', { padrao: 0, rec: true,
     cat: 'live', title: 'Sem upload de atualizações para outros PCs', tags: ['Internet livre'],
     desc: 'O Windows para de enviar pedaços de atualizações para computadores de outras pessoas pela internet. Sobra upload para o jogo, a chamada e a live.',
-    reg: [{ path: HKCU + '\\Software\\Microsoft\\Windows\\CurrentVersion\\DeliveryOptimization', name: 'SystemSettingsDownloadMode', type: 'DWord', on: 2, off: 0 }],
+    // A chave anterior ("SystemSettingsDownloadMode" em HKCU) NÃO EXISTE em nenhum
+    // binário do Windows — verificada por varredura de strings em System32,
+    // SystemApps e ImmersiveControlPanel (u1). O nosso era inerte: gravava e nada
+    // mudava. Confirmado com Get-DeliveryOptimizationPerfSnap: o DownloadMode real
+    // (CdnOnly) vinha da política DODownloadMode, não da nossa chave.
+    //
+    // A chave que o Windows lê é DODownloadMode em HKLM\Policies (exige admin).
+    // 0 = CdnOnly: baixa só da CDN da Microsoft, sem trocar pedaços com outros PCs.
+    reg: [{ path: HKLM + '\\SOFTWARE\\Policies\\Microsoft\\Windows\\DeliveryOptimization', name: 'DODownloadMode', type: 'DWord', on: 0, off: 1 }],
   }),
   T('lso', {
     cat: 'live', title: 'LSO da placa de rede desligado', tags: ['Live'],
@@ -646,31 +839,64 @@ else { $off = @($p | Where-Object { (@($_.RegistryValue) -join '') -eq '0' }); i
     probe: `$h = Get-Val '${HKLM}\\SYSTEM\\CurrentControlSet\\Control\\Power' 'HibernateEnabled'; if ($null -eq $h -or $h -eq 0) { Write-Output '1' } else { Write-Output '0' }`,
   }),
   // — Windows: privacidade
-  T('telemetry', {
-    cat: 'tweaks', title: 'Telemetria e anúncios personalizados', rec: true, tags: ['Privacidade'],
-    desc: 'Desliga o serviço que envia dados de uso para a Microsoft, o ID de propaganda e as pesquisas de "dê sua opinião". Um processo a menos rodando o tempo todo.',
-    reg: [{ path: HKLM + '\\SOFTWARE\\Policies\\Microsoft\\Windows\\DataCollection', name: 'AllowTelemetry', type: 'DWord', on: 0, off: 1 }],
-    svc: ['DiagTrack'],
+  T('telemetry', { padrao: 1, rec: true,
+    cat: 'tweaks', title: 'Telemetria e anúncios personalizados', tags: ['Privacidade'],
+    desc: 'O Windows para de enviar dados de uso e diagnóstico e de usar o seu histórico para personalizar anúncios e dicas.',
+    note: 'Em notebook, a bateria pode durar um pouco mais. Nada do seu uso sai do PC.',
+    // As quatro chaves do GDZ.
+    //
+    // AllowTelemetry=0 é política de Enterprise/Education: no Windows 10 Pro o valor 0
+    // equivale a 1 (Policy CSP, "Security"). O que realmente interrompe o envio é o
+    // serviço DiagTrack, desligado pela ação "Desativar Telemetria".
+    // As outras três cobrem o que o texto deste card promete: identificador de anúncio,
+    // marketing com dados de diagnóstico e pedido de feedback.
+    reg: [
+      { path: HKLM + '\\SOFTWARE\\Policies\\Microsoft\\Windows\\DataCollection', name: 'AllowTelemetry', type: 'DWord', on: 0, off: 1 },
+      { path: HKCU + '\\Software\\Microsoft\\Windows\\CurrentVersion\\AdvertisingInfo', name: 'Enabled', type: 'DWord', on: 0, off: 1 },
+      { path: HKCU + '\\Software\\Microsoft\\Windows\\CurrentVersion\\Privacy', name: 'TailoredExperiencesWithDiagnosticDataEnabled', type: 'DWord', on: 0, off: 1 },
+      { path: HKCU + '\\Software\\Microsoft\\Siuf\\Rules', name: 'NumberOfSIUFInPeriod', type: 'DWord', on: 0, off: 1 },
+    ],
   }),
-  T('suggestions', {
-    cat: 'tweaks', title: 'Sem sugestões, dicas e apps instalados sozinhos', rec: true, tags: ['Privacidade'],
-    desc: 'O Windows para de instalar apps promovidos (joguinhos, TikTok...) e tira as "sugestões" do Iniciar e das Configurações e as dicas que aparecem na tela.',
+  T('suggestions', { padrao: 1, rec: true,
+    cat: 'tweaks', title: 'Sem sugestões, dicas e apps instalados sozinhos', tags: ['Privacidade'],
+    desc: 'O Windows para de instalar jogos e apps promovidos, de mostrar dicas na tela de bloqueio e de sugerir programas no menu Iniciar.',
+    note: 'Alguns apps que vêm com o Windows continuam instalados; eles só deixam de ser sugeridos.',
+    // As oito chaves do GDZ que o verificador u2 confirmou como reais e eficazes no
+    // Windows 10 22H2 (as cinco últimas presentes também nesta máquina).
+    //
+    // DisableWindowsConsumerFeatures NÃO entra: é política de Enterprise/Education
+    // (Policy CSP, Experience) e no Windows 10 Pro é inócua — só faria o código
+    // parecer completo sem mudar nada.
     reg: [
       { path: HKCU + '\\Software\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager', name: 'SubscribedContent-338388Enabled', type: 'DWord', on: 0, off: 1 },
       { path: HKCU + '\\Software\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager', name: 'SubscribedContent-338389Enabled', type: 'DWord', on: 0, off: 1 },
       { path: HKCU + '\\Software\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager', name: 'SystemPaneSuggestionsEnabled', type: 'DWord', on: 0, off: 1 },
-      { path: HKCU + '\\Software\\Microsoft\\Windows\\CurrentVersion\\AdvertisingInfo', name: 'Enabled', type: 'DWord', on: 0, off: 1 },
+      { path: HKCU + '\\Software\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager', name: 'SilentInstalledAppsEnabled', type: 'DWord', on: 0, off: 1 },
+      { path: HKCU + '\\Software\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager', name: 'SoftLandingEnabled', type: 'DWord', on: 0, off: 1 },
+      { path: HKCU + '\\Software\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager', name: 'SubscribedContent-353694Enabled', type: 'DWord', on: 0, off: 1 },
+      { path: HKCU + '\\Software\\Microsoft\\Windows\\CurrentVersion\​ContentDeliveryManager', name: 'SubscribedContent-353696Enabled', type: 'DWord', on: 0, off: 1 },
+      { path: HKCU + '\\Software\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager', name: 'SubscribedContent-310093Enabled', type: 'DWord', on: 0, off: 1 },
     ],
   }),
   T('bing', { rec: true,
     cat: 'tweaks', title: 'Pesquisa do Iniciar sem Bing', tags: ['Privacidade'],
     desc: 'A pesquisa do menu Iniciar procura só no seu PC: sem resultados da web e sem sugestões do Bing. Fica mais rápida e o que você digita não vai para a internet.',
-    reg: [{ path: HKLM + '\\SOFTWARE\\Policies\\Microsoft\\Windows\\Windows Search', name: 'DisableWebSearch', type: 'DWord', on: 1, off: 0 }],
+    // Duas chaves, como o GDZ — e são as que o Windows realmente lê:
+    //   BingSearchEnabled = 0            (Search.Core.dll) desliga os resultados da web
+    //   DisableSearchBoxSuggestions = 1  (SHCore.dll)    desliga as sugestões
+    //
+    // O nosso usava DisableWebSearch em HKLM, que a varredura de binários (u1) só
+    // encontrou em metadados .winmd — sem efeito prático.
+    reg: [
+      { path: HKCU + '\\Software\\Microsoft\\Windows\\CurrentVersion\\Search', name: 'BingSearchEnabled', type: 'DWord', on: 0, off: 1 },
+      { path: HKCU + '\\SOFTWARE\\Policies\\Microsoft\\Windows\\Explorer', name: 'DisableSearchBoxSuggestions', type: 'DWord', on: 1, off: 0 },
+    ],
   }),
   T('activity', { rec: true,
     cat: 'tweaks', title: 'Sem histórico de atividades', tags: ['Privacidade'],
     desc: 'O Windows para de registrar quais arquivos, sites e apps você abriu e de enviar esse histórico para a sua conta Microsoft.',
     reg: [
+      { path: HKLM + '\\SOFTWARE\\Policies\\Microsoft\\Windows\\System', name: 'EnableActivityFeed', type: 'DWord', on: 0, off: 1 },
       { path: HKLM + '\\SOFTWARE\\Policies\\Microsoft\\Windows\\System', name: 'PublishUserActivities', type: 'DWord', on: 0, off: 1 },
       { path: HKLM + '\\SOFTWARE\\Policies\\Microsoft\\Windows\\System', name: 'UploadUserActivities', type: 'DWord', on: 0, off: 1 },
     ],
@@ -678,7 +904,15 @@ else { $off = @($p | Where-Object { (@($_.RegistryValue) -join '') -eq '0' }); i
   T('widgets', { padrao: 0,
     cat: 'tweaks', title: 'Sem Widgets (notícias e clima)', rec: true, tags: ['Mais FPS'],
     desc: 'Tira o painel de notícias e clima da barra de tarefas e impede que ele fique carregado em segundo plano: são centenas de MB de memória a menos.',
-    reg: [{ path: ADV, name: 'TaskbarDa', type: 'DWord', on: 0, off: 1 }],
+    // TaskbarDa esconde o botão da barra; EnableFeeds desliga os feeds por política.
+    // As duas juntas: o botão some E o conteúdo para de ser buscado.
+    //
+    // AllowNewsAndInterests NÃO entra: a varredura de binários (u1) não achou essa
+    // política em nenhum componente do Windows 10 — ela é de versões mais novas.
+    reg: [
+      { path: ADV, name: 'TaskbarDa', type: 'DWord', on: 0, off: 1 },
+      { path: HKLM + '\\SOFTWARE\\Policies\\Microsoft\\Windows\\Windows Feeds', name: 'EnableFeeds', type: 'DWord', on: 0, off: 1 },
+    ],
     restart: 'reboot',
   }),
   T('location', {
@@ -691,7 +925,12 @@ else { $off = @($p | Where-Object { (@($_.RegistryValue) -join '') -eq '0' }); i
   T('end-task', { rec: true,
     cat: 'tweaks', title: 'Finalizar tarefa pela barra de tarefas', tags: ['Praticidade'],
     desc: 'Botão direito num programa na barra de tarefas → "Finalizar tarefa". Fecha na hora um jogo travado, sem abrir o Gerenciador de Tarefas.',
-    reg: [{ path: ADV, name: 'TaskbarEndTask', type: 'DWord', on: 1, off: 0 }],
+    // Caminho correto: dentro de TaskbarDeveloperSettings.
+    //
+    // O nosso gravava em "Advanced\TaskbarEndTask", que não existe em binário nenhum
+    // do Windows (verificado com varredura de strings por u1). O Windows 11 lê
+    // "Advanced\TaskbarDeveloperSettings\TaskbarEndTask".
+    reg: [{ path: ADV + '\\TaskbarDeveloperSettings', name: 'TaskbarEndTask', type: 'DWord', on: 1, off: 0 }],
     // GDZ: `caps.build && caps.build < 22631 ? "Requer Windows 11 23H2 ou mais novo." : null`.
     // O `build &&` é do GDZ e é o que importa: sem leitura (build 0) NÃO bloqueia — um
     // ajuste de barra de tarefas não pode virar refém de uma falha de leitura do Windows.
@@ -1383,7 +1622,7 @@ async function lerRegsAtuais(regs) {
   if (!regs.length) return null;
   const linhas = regs.map((r) => {
     const e = (x) => String(x == null ? '' : x).replace(/'/g, "''");
-    return `$v = Get-Val '${e(r.path)}' '${e(r.name)}'; if ($null -eq $v) { $l += @{ name='${e(r.name)}'; existe=$false; valor=$null; texto='' } } else { $l += @{ name='${e(r.name)}'; existe=$true; valor=$v; texto=[string]$v } }`;
+    return `$v = Get-Val '${e(r.path)}' '${e(r.name)}'; if ($null -eq $v) { $l += @{ path='${e(r.path)}'; name='${e(r.name)}'; existe=$false; valor=$null; texto='' } } else { $l += @{ path='${e(r.path)}'; name='${e(r.name)}'; existe=$true; valor=$v; texto=[string]$v } }`;
   });
   const r = await ps(`$l = @()\n${linhas.join('\n')}\nWrite-Output (Json $l)`, 45000);
   if (!r.ok || !r.out) return null;
@@ -1392,9 +1631,33 @@ async function lerRegsAtuais(regs) {
     const lista = Array.isArray(j) ? j : (j ? [j] : []);
     // O Json do PowerShell devolve OBJETO quando o array tem um item só; a mesma
     // armadilha já mordeu o restoreBackup(). Normalizar sempre para lista.
+    // Indexar por path|name, NÃO só por name.
+    //
+    // No `sticky` os três itens se chamam `Flags` e ficam em chaves diferentes:
+    // StickyKeys, ToggleKeys e Keyboard Response. Com o mapa só por nome, o último
+    // vencia e os três eram comparados contra ele — o ajuste gravava certo e o app
+    // respondia "precisa de administrador".
     const mapa = {};
-    lista.forEach((x) => { if (x && x.name) mapa[x.name] = { existe: !!x.existe, texto: x.texto == null ? '' : String(x.texto) }; });
-    return regs.map((r) => mapa[r.name] || { existe: false, texto: '' });
+    lista.forEach((x) => {
+      if (!x || !x.name) return;
+      const k = String(x.name).toLowerCase();
+      const dado = { existe: !!x.existe, texto: x.texto == null ? '' : String(x.texto), path: String(x.path || '').toLowerCase() };
+      if (!mapa[k]) mapa[k] = [];
+      mapa[k].push(dado);
+    });
+    // Cada reg tem o seu path, então procuro o item certo dentro da lista do nome.
+    const usados = {};
+    return regs.map((r) => {
+      const k = String(r.name).toLowerCase();
+      const grupo = mapa[k] || [];
+      const alvoPath = String(r.path || '').toLowerCase();
+      const i = usados[k] || 0;
+      // primeiro tenta casar pelo path; se o Json não devolveu path, cai na ordem
+      let achado = grupo.find((x) => x.path === alvoPath && !x.__usado);
+      if (!achado) achado = grupo[i];
+      if (achado) { achado.__usado = true; usados[k] = i + 1; }
+      return achado ? { existe: achado.existe, texto: achado.texto } : { existe: false, texto: '' };
+    });
   } catch (e) { return null; }
 }
 
