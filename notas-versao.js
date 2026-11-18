@@ -10,6 +10,12 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.51': {
+    corrigido: [
+      'Correcao de acentuacao nos textos internos do projeto. Nao muda nada no que voce ve.',
+    ],
+    novo: [],
+  },
   '1.4.50': {
     corrigido: [
       'O aviso de compra aparecia sem motivo a cada dois minutos. Corrigido.',
