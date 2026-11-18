@@ -583,6 +583,13 @@ T('dlss-rec', {
     // GDZ: `!rtx ? "Só para placas de vídeo NVIDIA RTX..." : !nvapi ? "O driver da
     // NVIDIA não está instalado neste PC." : null`. Duas causas, não uma: ter a placa
     // não basta, o driver precisa estar instalado — sem ele o DLSS nem existe.
+    // Os dois valores do DRS (Driver Settings da NVIDIA), copiados do GDZ:
+    //   DLSS_SR_OVERRIDE = 283385345 -> 1  (liga a substituição do DLSS)
+    //   DLSS_SR_PRESET   = 283385331 -> 16777215 (preset RECOMMENDED)
+    drs: [
+      { id: 283385345, on: 1, off: 0 },
+      { id: 283385331, on: 16777215, off: 0 },
+    ],
     block: (caps) => !caps.rtx
       ? 'Só para placas de vídeo NVIDIA RTX, que são as que têm DLSS.'
       : !caps.nvapi
@@ -658,8 +665,8 @@ if ($gpus.Count -eq 0) { Write-Output '0' } else {
     // Precisa de administrador: é HKLM. Sem admin o app avisa, que é o certo.
     reintentar: 'admin',
     reg: [
-      { path: HKLM + '\\SOFTWARE\\Microsoft\\Windows\\Dwm', name: 'OverlayTestMode', type: 'DWord', on: 5, off: 0 },
-      { path: HKLM + '\\SYSTEM\\CurrentControlSet\\Control\\GraphicsDrivers', name: 'DisableOverlays', type: 'DWord', on: 1, off: 0 },
+      { path: HKLM + '\\SOFTWARE\\Microsoft\\Windows\\Dwm', name: 'OverlayTestMode', type: 'DWord', on: 5, off: null },
+      { path: HKLM + '\\SYSTEM\\CurrentControlSet\\Control\\GraphicsDrivers', name: 'DisableOverlays', type: 'DWord', on: 1, off: null },
     ],
     note: 'Só ative se você tem esse problema. Sem ele, não muda nada.',
   }),
@@ -691,7 +698,7 @@ if ($gpus.Count -eq 0) { Write-Output '0' } else {
     note: 'Vale para o Windows todo: digitando, segurar uma tecla enche a linha de letras mais rápido.',
     reg: [
       { path: HKCU + '\\Control Panel\\Keyboard', name: 'KeyboardDelay', type: 'String', on: '0', off: '1' },
-      { path: HKCU + '\\Control Panel\\Keyboard', name: 'KeyboardSpeed', type: 'String', on: '31', off: null },
+      { path: HKCU + '\\Control Panel\\Keyboard', name: 'KeyboardSpeed', type: 'String', on: '31', off: '31' },
     ],
   }),
   T('sticky', { padrao: "510", rec: true,
@@ -724,7 +731,7 @@ if ($gpus.Count -eq 0) { Write-Output '0' } else {
     // para Usuários). Sem admin o app avisa, em vez de dizer que fez.
     reg: [
       { path: HKCU + '\\Control Panel\\Keyboard', name: 'InitialKeyboardIndicators', type: 'String', on: '2', off: '0' },
-      { path: 'Registry::HKEY_USERS\\.DEFAULT\\Control Panel\\Keyboard', name: 'InitialKeyboardIndicators', type: 'String', on: '2', off: '0' },
+      { path: 'Registry::HKEY_USERS\\.DEFAULT\\Control Panel\\Keyboard', name: 'InitialKeyboardIndicators', type: 'String', on: '2', off: '2147483648' },
     ],
   }),
   // — Internet
@@ -739,7 +746,7 @@ if ($gpus.Count -eq 0) { Write-Output '0' } else {
     //
     // A chave que o Windows lê é DODownloadMode em HKLM\Policies (exige admin).
     // 0 = CdnOnly: baixa só da CDN da Microsoft, sem trocar pedaços com outros PCs.
-    reg: [{ path: HKLM + '\\SOFTWARE\\Policies\\Microsoft\\Windows\\DeliveryOptimization', name: 'DODownloadMode', type: 'DWord', on: 0, off: 1 }],
+    reg: [{ path: HKLM + '\\SOFTWARE\\Policies\\Microsoft\\Windows\\DeliveryOptimization', name: 'DODownloadMode', type: 'DWord', on: 0, off: null }],
   }),
   T('lso', {
     cat: 'live', title: 'LSO da placa de rede desligado', tags: ['Live'],
@@ -834,6 +841,9 @@ else { $off = @($p | Where-Object { (@($_.RegistryValue) -join '') -eq '0' }); i
     cat: 'limpeza', title: 'Desligar de verdade (sem hibernação)', tags: ['Espaço em disco'],
     desc: 'Desativa a hibernação e a Inicialização Rápida. O "Desligar" passa a zerar o Windows (drivers e memória limpos a cada boot) e o arquivo hiberfil.sys some, liberando alguns GB no disco C:.',
     note: 'O PC pode levar alguns segundos a mais para ligar. Em notebook, você perde a opção Hibernar.',
+    // Duas coisas, como o GDZ: o comando oficial (powercfg /h off) apaga o
+    // hiberfil.sys, e a chave impede o Windows de recriar.
+    reg: [{ path: HKLM + '\\SYSTEM\\CurrentControlSet\\Control\\Power', name: 'HibernateEnabled', type: 'DWord', on: 0, off: 1 }],
     on: `powercfg /h off; Write-Output 'ok'`,
     off: `powercfg /h on; Write-Output 'ok'`,
     probe: `$h = Get-Val '${HKLM}\\SYSTEM\\CurrentControlSet\\Control\\Power' 'HibernateEnabled'; if ($null -eq $h -or $h -eq 0) { Write-Output '1' } else { Write-Output '0' }`,
@@ -851,10 +861,10 @@ else { $off = @($p | Where-Object { (@($_.RegistryValue) -join '') -eq '0' }); i
     // As outras três cobrem o que o texto deste card promete: identificador de anúncio,
     // marketing com dados de diagnóstico e pedido de feedback.
     reg: [
-      { path: HKLM + '\\SOFTWARE\\Policies\\Microsoft\\Windows\\DataCollection', name: 'AllowTelemetry', type: 'DWord', on: 0, off: 1 },
+      { path: HKLM + '\\SOFTWARE\\Policies\\Microsoft\\Windows\\DataCollection', name: 'AllowTelemetry', type: 'DWord', on: 0, off: null },
       { path: HKCU + '\\Software\\Microsoft\\Windows\\CurrentVersion\\AdvertisingInfo', name: 'Enabled', type: 'DWord', on: 0, off: 1 },
       { path: HKCU + '\\Software\\Microsoft\\Windows\\CurrentVersion\\Privacy', name: 'TailoredExperiencesWithDiagnosticDataEnabled', type: 'DWord', on: 0, off: 1 },
-      { path: HKCU + '\\Software\\Microsoft\\Siuf\\Rules', name: 'NumberOfSIUFInPeriod', type: 'DWord', on: 0, off: 1 },
+      { path: HKCU + '\\Software\\Microsoft\\Siuf\\Rules', name: 'NumberOfSIUFInPeriod', type: 'DWord', on: 0, off: null },
     ],
   }),
   T('suggestions', { padrao: 1, rec: true,
@@ -874,8 +884,11 @@ else { $off = @($p | Where-Object { (@($_.RegistryValue) -join '') -eq '0' }); i
       { path: HKCU + '\\Software\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager', name: 'SilentInstalledAppsEnabled', type: 'DWord', on: 0, off: 1 },
       { path: HKCU + '\\Software\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager', name: 'SoftLandingEnabled', type: 'DWord', on: 0, off: 1 },
       { path: HKCU + '\\Software\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager', name: 'SubscribedContent-353694Enabled', type: 'DWord', on: 0, off: 1 },
-      { path: HKCU + '\\Software\\Microsoft\\Windows\\CurrentVersion\​ContentDeliveryManager', name: 'SubscribedContent-353696Enabled', type: 'DWord', on: 0, off: 1 },
+      { path: HKCU + '\\Software\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager', name: 'SubscribedContent-353696Enabled', type: 'DWord', on: 0, off: 1 },
       { path: HKCU + '\\Software\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager', name: 'SubscribedContent-310093Enabled', type: 'DWord', on: 0, off: 1 },
+      // Politica de Enterprise/Education (Policy CSP, Experience). No Windows 10 Pro
+      // e inocua; fica aqui pela paridade com o programa de referencia.
+      { path: HKLM + '\\SOFTWARE\\Policies\\Microsoft\\Windows\\CloudContent', name: 'DisableWindowsConsumerFeatures', type: 'DWord', on: 1, off: null },
     ],
   }),
   T('bing', { rec: true,
@@ -888,30 +901,35 @@ else { $off = @($p | Where-Object { (@($_.RegistryValue) -join '') -eq '0' }); i
     // O nosso usava DisableWebSearch em HKLM, que a varredura de binários (u1) só
     // encontrou em metadados .winmd — sem efeito prático.
     reg: [
-      { path: HKCU + '\\Software\\Microsoft\\Windows\\CurrentVersion\\Search', name: 'BingSearchEnabled', type: 'DWord', on: 0, off: 1 },
-      { path: HKCU + '\\SOFTWARE\\Policies\\Microsoft\\Windows\\Explorer', name: 'DisableSearchBoxSuggestions', type: 'DWord', on: 1, off: 0 },
+      { path: HKCU + '\\Software\\Microsoft\\Windows\\CurrentVersion\\Search', name: 'BingSearchEnabled', type: 'DWord', on: 0, off: null },
+      { path: HKCU + '\\SOFTWARE\\Policies\\Microsoft\\Windows\\Explorer', name: 'DisableSearchBoxSuggestions', type: 'DWord', on: 1, off: null },
     ],
   }),
   T('activity', { rec: true,
     cat: 'tweaks', title: 'Sem histórico de atividades', tags: ['Privacidade'],
     desc: 'O Windows para de registrar quais arquivos, sites e apps você abriu e de enviar esse histórico para a sua conta Microsoft.',
     reg: [
-      { path: HKLM + '\\SOFTWARE\\Policies\\Microsoft\\Windows\\System', name: 'EnableActivityFeed', type: 'DWord', on: 0, off: 1 },
-      { path: HKLM + '\\SOFTWARE\\Policies\\Microsoft\\Windows\\System', name: 'PublishUserActivities', type: 'DWord', on: 0, off: 1 },
-      { path: HKLM + '\\SOFTWARE\\Policies\\Microsoft\\Windows\\System', name: 'UploadUserActivities', type: 'DWord', on: 0, off: 1 },
+      { path: HKLM + '\\SOFTWARE\\Policies\\Microsoft\\Windows\\System', name: 'EnableActivityFeed', type: 'DWord', on: 0, off: null },
+      { path: HKLM + '\\SOFTWARE\\Policies\\Microsoft\\Windows\\System', name: 'PublishUserActivities', type: 'DWord', on: 0, off: null },
+      { path: HKLM + '\\SOFTWARE\\Policies\\Microsoft\\Windows\\System', name: 'UploadUserActivities', type: 'DWord', on: 0, off: null },
     ],
   }),
   T('widgets', { padrao: 0,
     cat: 'tweaks', title: 'Sem Widgets (notícias e clima)', rec: true, tags: ['Mais FPS'],
     desc: 'Tira o painel de notícias e clima da barra de tarefas e impede que ele fique carregado em segundo plano: são centenas de MB de memória a menos.',
     // TaskbarDa esconde o botão da barra; EnableFeeds desliga os feeds por política.
+    // TaskbarDa é NOSSA (o GDZ não tem): ele só esconde o botão, e sem ela o
+    // botão continuaria aparecendo mesmo com os feeds desligados.
     // As duas juntas: o botão some E o conteúdo para de ser buscado.
     //
     // AllowNewsAndInterests NÃO entra: a varredura de binários (u1) não achou essa
     // política em nenhum componente do Windows 10 — ela é de versões mais novas.
     reg: [
       { path: ADV, name: 'TaskbarDa', type: 'DWord', on: 0, off: 1 },
-      { path: HKLM + '\\SOFTWARE\\Policies\\Microsoft\\Windows\\Windows Feeds', name: 'EnableFeeds', type: 'DWord', on: 0, off: 1 },
+      // AllowNewsAndInterests: a varredura de binarios (u1) nao a encontrou no
+      // Windows 10. Fica pela paridade; no Win10 quem desliga e o EnableFeeds.
+      { path: HKLM + '\\SOFTWARE\\Policies\\Microsoft\\Dsh', name: 'AllowNewsAndInterests', type: 'DWord', on: 0, off: null },
+      { path: HKLM + '\\SOFTWARE\\Policies\\Microsoft\\Windows\\Windows Feeds', name: 'EnableFeeds', type: 'DWord', on: 0, off: null },
     ],
     restart: 'reboot',
   }),
@@ -919,7 +937,13 @@ else { $off = @($p | Where-Object { (@($_.RegistryValue) -join '') -eq '0' }); i
     cat: 'tweaks', title: 'Localização desligada', tags: ['Privacidade'],
     desc: 'Nenhum app consegue saber onde você está.',
     note: 'O fuso horário automático, o Clima e o "Localizar meu dispositivo" deixam de funcionar.',
-    reg: [{ path: HKLM + '\\SOFTWARE\\Policies\\Microsoft\\Windows\\LocationAndSensors', name: 'DisableLocation', type: 'DWord', on: 1, off: 0 }],
+    // As duas chaves do GDZ + a nossa, que e mais forte:
+    //   Policies\\DisableLocation   -> desliga por politica (o nosso)
+    //   ConsentStore\\Location=Deny -> nega a permissao app por app (o GDZ)
+    reg: [
+      { path: HKLM + '\\SOFTWARE\\Policies\\Microsoft\\Windows\\LocationAndSensors', name: 'DisableLocation', type: 'DWord', on: 1, off: 0 },
+      { path: HKLM + '\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\Location', name: 'Value', type: 'String', on: 'Deny', off: 'Allow' },
+    ],
   }),
   // — Windows: praticidade
   T('end-task', { rec: true,
@@ -930,7 +954,7 @@ else { $off = @($p | Where-Object { (@($_.RegistryValue) -join '') -eq '0' }); i
     // O nosso gravava em "Advanced\TaskbarEndTask", que não existe em binário nenhum
     // do Windows (verificado com varredura de strings por u1). O Windows 11 lê
     // "Advanced\TaskbarDeveloperSettings\TaskbarEndTask".
-    reg: [{ path: ADV + '\\TaskbarDeveloperSettings', name: 'TaskbarEndTask', type: 'DWord', on: 1, off: 0 }],
+    reg: [{ path: ADV + '\\TaskbarDeveloperSettings', name: 'TaskbarEndTask', type: 'DWord', on: 1, off: null }],
     // GDZ: `caps.build && caps.build < 22631 ? "Requer Windows 11 23H2 ou mais novo." : null`.
     // O `build &&` é do GDZ e é o que importa: sem leitura (build 0) NÃO bloqueia — um
     // ajuste de barra de tarefas não pode virar refém de uma falha de leitura do Windows.
@@ -949,7 +973,7 @@ else { $off = @($p | Where-Object { (@($_.RegistryValue) -join '') -eq '0' }); i
   T('this-pc', {
     cat: 'tweaks', title: 'Explorador abre em "Este Computador"', tags: ['Praticidade'],
     desc: 'Ao abrir o Explorador (Win+E) você cai direto nos seus discos, em vez da página Início com arquivos recentes.',
-    reg: [{ path: ADV, name: 'LaunchTo', type: 'DWord', on: 1, off: 2 }],
+    reg: [{ path: ADV, name: 'LaunchTo', type: 'DWord', on: 1, off: null }],
   }),
   T('classic-menu', {
     cat: 'tweaks', title: 'Menu do botão direito completo', restart: 'explorer', tags: ['Praticidade'],
@@ -983,7 +1007,7 @@ else { $off = @($p | Where-Object { (@($_.RegistryValue) -join '') -eq '0' }); i
     desc: 'Botão Iniciar e ícones no canto esquerdo, como no Windows 10.',
     note: 'Só existe no Windows 11.',
     cap: 'win11',
-    reg: [{ path: ADV, name: 'TaskbarAl', type: 'DWord', on: 0, off: 1 }],
+    reg: [{ path: ADV, name: 'TaskbarAl', type: 'DWord', on: 0, off: null }],
     // GDZ: `WIN11` — mesma trava do classic-menu, com o texto dele.
     block: (caps) => caps.build && caps.build < 22000 ? 'Só existe no Windows 11.' : null,
   }),
@@ -995,7 +1019,11 @@ else { $off = @($p | Where-Object { (@($_.RegistryValue) -join '') -eq '0' }); i
   T('bsod-detail', {
     cat: 'tweaks', title: 'Tela azul com detalhes do erro', tags: ['Diagnóstico'],
     desc: 'Se o PC der tela azul, ela mostra o código e o arquivo que causou o erro. É a pista para achar o culpado (driver de vídeo, overclock, memória...).',
-    reg: [{ path: HKLM + '\\SYSTEM\\CurrentControlSet\\Control\\CrashControl', name: 'DisplayParameters', type: 'DWord', on: 1, off: 0 }],
+    // DisplayParameters mostra o codigo do erro; DisableEmoticon tira o emoticon.
+    reg: [
+      { path: HKLM + '\\SYSTEM\\CurrentControlSet\\Control\\CrashControl', name: 'DisplayParameters', type: 'DWord', on: 1, off: 0 },
+      { path: HKLM + '\\SYSTEM\\CurrentControlSet\\Control\\CrashControl', name: 'DisableEmoticon', type: 'DWord', on: 1, off: 0 },
+    ],
   }),
 ];
 
@@ -1009,7 +1037,14 @@ const ACTIONS = {
     title: 'Plano de energia Alto Desempenho',
     desc: 'O processador não baixa a velocidade para economizar energia: menos travadinhas e FPS mínimo mais alto.',
     note: 'Gasta um pouco mais de energia.',
-    run: `powercfg /setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c; Write-Output 'ok'`,
+    // Com fallback: se o plano de Alto Desempenho nao existir neste Windows,
+    // /setactive falha e antes o script respondia 'ok' do mesmo jeito. O GDZ
+    // duplica o esquema e tenta de novo.
+    run: `$p = '8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c'
+      powercfg /setactive $p 2>$null
+      if ($LASTEXITCODE -ne 0) { powercfg /duplicatescheme $p $p 2>$null | Out-Null; powercfg /setactive $p 2>$null }
+      if ($LASTEXITCODE -ne 0) { Write-Output 'VL_ERRO: o Windows nao aceitou o plano de energia Alto Desempenho.'; exit }
+      Write-Output 'ok'`,
     detect: `$g = [regex]::Match((powercfg /getactivescheme | Out-String), '[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}').Value; Write-Output $g`,
     revert: `powercfg /setactive 381b4222-f694-41f0-9685-ff5bb260df2e; Write-Output 'ok'`,
   },
@@ -1085,13 +1120,18 @@ const ACTIONS = {
     revert: `Set-Val '${HKLM}\\SYSTEM\\CurrentControlSet\\Control\\GraphicsDrivers' 'HwSchMode' 1 'DWord'; Write-Output 'ok'`,
   },
   'Jogos em Janela Otimizados': {
-    tag: 'desempenho', rec: true, title: 'Jogos em janela e sem bordas otimizados',
-    desc: 'Jogos em janela ou tela cheia sem bordas passam a usar a apresentação moderna: menos atraso, G-Sync/FreeSync e Auto HDR.',
-    regs: [{ path: HKCU + '\\Software\\Microsoft\\DirectX\\GraphicsSettings', name: 'SwapEffectUpgradeEnable', type: 'DWord', on: 1, off: 0 }],
-    detect: `if ((Get-Val '${HKCU}\\Software\\Microsoft\\DirectX\\GraphicsSettings' 'SwapEffectUpgradeEnable') -eq 1) { Write-Output '1' } else { Write-Output '0' }`,
-    revert: `Set-Val '${HKCU}\\Software\\Microsoft\\DirectX\\GraphicsSettings' 'SwapEffectUpgradeEnable' 0 'DWord'; Write-Output 'ok'`,
-  },
-  // 'Efeitos Visuais Off' REMOVIDO: o GDZ não tem esse ajuste.
+    tag: 'desempenho', title: 'Jogos em janela com o modo moderno de apresentação', btn: 'Otimizar',
+    desc: 'Marca os jogos para usarem o caminho moderno de apresentação de imagem do DirectX, que é o que tira o atraso extra de quem joga em janela ou tela cheia sem exclusividade.',
+    // O GDZ reescreve DirectXUserGlobalSettings preservando o resto do valor:
+    // remove o SwapEffectUpgradeEnable antigo e acrescenta ...=1; no fim.
+    // O nosso gravava so uma chave de registro, que não é a que o DirectX lê.
+    run: String.raw`$k = 'HKCU:\Software\Microsoft\DirectX\UserGpuPreferences'
+      if (-not (Test-Path -LiteralPath $k)) { New-Item -Path $k -Force | Out-Null }
+      $cur = [string](Get-ItemProperty -LiteralPath $k -Name DirectXUserGlobalSettings -ErrorAction SilentlyContinue).DirectXUserGlobalSettings
+      $cur = $cur -replace 'SwapEffectUpgradeEnable=\d;', ''
+      Set-ItemProperty -LiteralPath $k -Name DirectXUserGlobalSettings -Value ($cur + 'SwapEffectUpgradeEnable=1;') -Type String -Force
+      Write-Output 'ok'`,
+  },  // 'Efeitos Visuais Off' REMOVIDO: o GDZ não tem esse ajuste.
   //
   // Medido: o Explorer IGNORA VisualFXSetting — a chave mudava mas nada na tela
   // mudava. O ajuste não fazia nem o bem nem o mal, MAS o desfazer gravava 0
@@ -1174,46 +1214,21 @@ const ACTIONS = {
     revert: `$p = Get-Val '${HKLM}\\SOFTWARE\\OBS Studio' '(default)'; if (-not $p) { $p = 'C:\\Program Files\\obs-studio\\bin\\64bit\\obs64.exe' }; Del-Val '${HKCU}\\Software\\Microsoft\\Windows NT\\CurrentVersion\\AppCompatFlags\\Layers' $p; Write-Output 'ok'`,
   },
   'Pagefile Automático': {
-    tag: 'memoria', rec: true, restart: 'reboot', title: 'Memória virtual gerenciada pelo Windows',
-    desc: 'Faz o Windows cuidar do arquivo de paginação. Sem ele, jogos pesados fecham do nada e o Windows fica sem memória.',
-    // VL: automatico de verdade.
-    //
-    // Gravar PagingFiles vazio NAO basta. Medido na maquina do dono: a chave ficou
-    // vazia, o Windows passou a ler '?:\\pagefile.sys' e o pagefile.sys nunca foi
-    // criado. Sem paginacao o Windows nao tem onde guardar memoria: o Explorer
-    // travou ("Area de Trabalho nao esta respondendo") e programas cairam com oom.
-    //
-    // O automatico do Windows sao DUAS coisas juntas:
-    //   1. Win32_ComputerSystem.AutomaticManagedPagefile = True
-    //   2. PagingFiles vazio (o Windows calcula o tamanho)
-    //
-    // O `on` faz as duas. O `detect` so diz ligado quando as duas valem. O
-    // `revert` grava um tamanho explicito razoavel em vez de deixar nulo.
-    regs: [{ path: HKLM + '\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Memory Management', name: 'PagingFiles', type: 'MultiString', on: '', off: null }],
-    on: `
-      $mm = 'HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Memory Management'
+    tag: 'desempenho', title: 'Arquivo de paginação gerenciado pelo Windows', btn: 'Ajustar',
+    desc: 'Devolve o tamanho do arquivo de paginação para o Windows decidir. Resolve o "memória insuficiente" que aparece quando alguém fixa um tamanho pequeno demais.',
+    // O GDZ usa Set-CimInstance, que e a API oficial e faz o Windows recalcular o
+    // tamanho. Gravar PagingFiles no registro funciona, mas nao forca o recalculo e
+    // pode deixar o Windows com um tamanho fixo antigo.
+    run: String.raw`$cs = Get-CimInstance Win32_ComputerSystem
+      if ($cs.AutomaticManagedPagefile) { Write-Output 'ja-gerenciado'; exit 0 }
       try {
-        $cs = Get-WmiObject Win32_ComputerSystem -EnableAllPrivileges -ErrorAction Stop
-        if (-not $cs.AutomaticManagedPagefile) {
-          $cs.AutomaticManagedPagefile = $true
-          $cs.Put() | Out-Null
-        }
-      } catch { }
-      Set-ItemProperty -LiteralPath $mm -Name PagingFiles -Value @() -Type MultiString -Force -ErrorAction SilentlyContinue
+        Set-CimInstance -InputObject $cs -Property @{ AutomaticManagedPagefile = $true } -ErrorAction Stop
+      } catch {
+        Write-Output 'VL_ERRO: o Windows nao deixou mudar o arquivo de paginacao. Tente abrir o VL como administrador.'
+        exit
+      }
       Write-Output 'ok'`,
-    detect: `
-      $auto = $false
-      try { $auto = [bool](Get-WmiObject Win32_ComputerSystem -ErrorAction Stop).AutomaticManagedPagefile } catch { }
-      $v = Get-Val '${HKLM}\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Memory Management' 'PagingFiles'
-      $tem = $false
-      if ($null -ne $v) { $tem = (@($v | Where-Object { $_ -ne $null -and ([string]$_).Trim() -ne '' }).Count -gt 0) }
-      if ($auto -and -not $tem) { Write-Output '1' } else { Write-Output '0' }`,
-    revert: String.raw`
-      $mm = 'HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management'
-      Set-ItemProperty -LiteralPath $mm -Name PagingFiles -Value @('C:\pagefile.sys 2048 8192') -Type MultiString -Force -ErrorAction SilentlyContinue
-      Write-Output 'ok'`,
-  },
-};
+  },};
 
 const ACTION_NAMES = Object.keys(ACTIONS);
 
@@ -1291,7 +1306,7 @@ const ONCES = {
   'Apps de Sincronização Fechados': {
     tag: 'desempenho', title: 'Fechar OneDrive, Dropbox e Google Drive', btn: 'Fechar',
     desc: 'Fecha os apps de nuvem para não usarem disco e internet durante o jogo. Voltam a abrir na próxima vez que você ligar o PC.',
-    run: `foreach ($n in @('OneDrive','Dropbox','GoogleDriveFS')) { Get-Process -Name $n -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue }; Write-Output 'ok'`,
+    run: `foreach ($n in @('OneDrive','Dropbox','GoogleDriveFS','BackgroundTransferHost')) { Get-Process -Name $n -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue }; Write-Output 'ok'`,
   },
   'Explorer Mínimo': {
     tag: 'tweaks', title: 'Reiniciar a barra de tarefas', btn: 'Reiniciar',
@@ -2348,6 +2363,40 @@ function safeRes(w, h) {
   return { w: Math.round(wi), h: Math.round(hi) };
 }
 
+// DRS (Driver Settings da NVIDIA) via NVAPI — o caminho de APLICAR.
+//
+// O `drs.ps1` (copiado literal do GDZ) traz a classe C# [GDZ.Drs] com
+// Set(id, valor) e Del(id), e a função GdzDrsInit que abre a sessão NVAPI.
+// Aqui ele é lido do disco e concatenado com as chamadas do tweak.
+//
+// Sem NVAPI (driver não-NVIDIA, driver antigo), o script responde VL_ERRO e o
+// app mostra a mensagem — em vez de dizer "concluído" sem ter feito nada.
+async function aplicaDrs(itens, want) {
+  let base = '';
+  try {
+    base = fs.readFileSync(path.join(__dirname, 'drs.ps1'), 'utf8');
+  } catch (err) {
+    return { ok: false, error: 'o driver da NVIDIA não respondeu (arquivo de suporte ausente).' };
+  }
+  const linhas = [base, '', 'if (-not (GdzDrsInit)) { Write-Output \'VL_ERRO: o driver da NVIDIA nao respondeu. Atualize o driver e tente de novo.\'; exit }'];
+  for (const it of itens) {
+    const id = Number(it.id);
+    if (!Number.isFinite(id)) continue;
+    if (want) {
+      linhas.push('[GDZ.Drs]::Set(' + id + ', ' + Number(it.on) + ')');
+    } else {
+      // Desligar: apagar o valor devolve o controle ao driver (é o que o GDZ faz
+      // quando o `off` é nulo/ausente).
+      linhas.push('[GDZ.Drs]::Del(' + id + ')');
+    }
+  }
+  linhas.push('Write-Output \'ok\'');
+  const r = await ps(linhas.join('\n'), 60000);
+  const v = resultadoPs(r, r.out);
+  if (!v.ok) return { ok: false, error: await mensagemDaFalha(v) };
+  return { ok: true };
+}
+
 async function applyTweak(id, want) {
   const t = tweakById(id);
   if (!t) return { success: false, error: 'ajuste desconhecido' };
@@ -2365,6 +2414,25 @@ async function applyTweak(id, want) {
   }
   const regs = tweakRegs(t);
   const svcs = t.svc || [];
+
+  // DRS (Driver Settings da NVIDIA) via NVAPI.
+  //
+  // O GDZ aplica o preset de DLSS por aqui. A infraestrutura (drs.ps1, copiada
+  // literal do GDZ) já existia para o DESFAZER; faltava o caminho de APLICAR.
+  //
+  // Se o NVAPI não responder (driver antigo, placa não-NVIDIA), o script avisa
+  // em vez de fingir que aplicou.
+  const drsItens = Array.isArray(t.drs) ? t.drs : [];
+  if (drsItens.length) {
+    const r = await aplicaDrs(drsItens, want);
+    if (!r.ok) return { success: false, on: !want, error: r.error };
+
+    // Ajuste que SÓ tem DRS (como o DLSS): não há registro, serviço nem probe para
+    // conferir depois, e o estado do NVAPI só faz sentido depois de reiniciar.
+    // Se não há mais nada a aplicar, o sucesso do script É a resposta.
+    const soDrs = !regs.length && !svcs.length && !t.on && !t.off && !t.probe;
+    if (soDrs) return { success: true, on: want };
+  }
   zeraErro(t);
   if (want) {
     // 1. Estado ANTES
