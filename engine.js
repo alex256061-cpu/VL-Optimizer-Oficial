@@ -2280,8 +2280,50 @@ function mesmaCoisa(a, b) {
   return true;
 }
 
+// ── Ações por jogo (GENERIC_GAME_SPEC do GDZ) ─────────────────────────────
+//
+// O card do jogo manda "Otimizar <nome>" e esse nome não está na lista fixa de
+// ACTIONS. O GDZ reconhece por regex e usa uma spec genérica:
+//
+//     if (!ACTIONS[nome] && /^Otimizar .{1,60}$/.test(nome)) spec = GENERIC_GAME_SPEC;
+//
+// A spec do GDZ é [SCHEME, ...GAME_MODE_ITEMS, ...DVR_ITEMS]. Aqui o SCHEME vira
+// o `run` (powercfg) e os 4 itens de registro viram `regs`, que é a forma que
+// este motor já entende: psBackupState guarda o valor atual, runAction aplica o
+// `on`, revertAction restaura. O backup e a volta saem de graça.
+const PLAN_ALTO = '8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c';
+const GAME_OPT_RE = /^Otimizar .{1,60}$/;
+
+function specDoJogo(nome, caps) {
+  const x3dDual = !!(caps && caps.x3dDual);
+  const regs = [
+    { path: HKCU + '\\SOFTWARE\\Microsoft\\GameBar', name: 'AllowAutoGameMode', type: 'DWord', on: 1, off: 1 },
+    { path: HKCU + '\\SOFTWARE\\Microsoft\\GameBar', name: 'AutoGameModeEnabled', type: 'DWord', on: 1, off: 1 },
+    { path: HKCU + '\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\GameDVR', name: 'AppCaptureEnabled', type: 'DWord', on: 0, off: 1 },
+    { path: HKCU + '\\System\\GameConfigStore', name: 'GameDVR_Enabled', type: 'DWord', on: 0, off: 1 },
+  ];
+  // No X3D de dois CCDs o plano de energia NÃO é trocado: o driver da AMD usa o
+  // Equilibrado para estacionar o CCD sem cache. É o `caps.x3dDual ? '' : SET_PLAN`
+  // do GENERIC_GAME_OPT.
+  const run = x3dDual ? undefined : 'powercfg /setactive ' + PLAN_ALTO + " 2>$null; Write-Output 'ok'";
+  return {
+    tag: 'desempenho',
+    title: 'Perfil do jogo',
+    desc: 'Liga o Modo de Jogo, desliga a gravação em segundo plano e põe o plano de energia de desempenho.',
+    note: x3dDual ? 'No seu Ryzen X3D de dois chips o plano de energia não é trocado, de propósito.' : undefined,
+    jogo: nome,
+    regs,
+    run,
+  };
+}
+
 async function runAction(name) {
-  const a = ACTIONS[name];
+  let a = ACTIONS[name];
+  if (!a && typeof name === 'string' && GAME_OPT_RE.test(name)) {
+    let capsJogo = null;
+    try { capsJogo = await getCaps(); } catch (err) { capsJogo = null; }
+    a = specDoJogo(name, capsJogo);
+  }
   if (!a) return { success: false, error: 'ação desconhecida' };
   // TRAVA NO BACKEND — é o que o GDZ faz no `run-action`:
   //   const blocked = blockedActions(caps);
@@ -2339,7 +2381,14 @@ async function runAction(name) {
     if (r.out.includes('noobs')) return { success: false, error: 'OBS não encontrado neste PC.' };
   }
   const msg = a.restart === 'reboot' ? 'Vale depois de reiniciar o PC.' : undefined;
-  return { success: true, message: msg };
+  // O renderer só mostra o botão de desfazer quando a ação TEM volta. O sinal é
+  // o mesmo que revertAction usa depois: backup gravado ou `revert` declarado.
+  let revertible = false;
+  try {
+    const bks = loadBackups();
+    revertible = !!(bks && bks[name]) || !!a.revert;
+  } catch (err) { revertible = !!a.revert; }
+  return { success: true, message: msg, revertible };
 }
 
 // Tira da saída do PowerShell o que não pode ir para a tela do cliente:
@@ -2429,7 +2478,10 @@ function podeCitarSaida(txt) {
 }
 
 async function revertAction(name) {
-  const a = ACTIONS[name];
+  let a = ACTIONS[name];
+  if (!a && typeof name === 'string' && GAME_OPT_RE.test(name)) {
+    a = specDoJogo(name, null);
+  }
   if (!a) return { success: false, error: 'ação desconhecida' };
   const b = loadBackups()[name];
   if (b) {
@@ -2468,7 +2520,9 @@ async function runOnce(name) {
     if (!prova.ok) return { success: false, error: prova.error };
   }
   const msg = limpaSaida(v.saidaOk).slice(0, 200);
-  return { success: true, message: msg || 'concluído' };
+  // Ação "de uma vez": por definição não tem volta no motor. Vai explícito
+  // para o renderer não mostrar um ↩ que levaria a "sem backup".
+  return { success: true, message: msg || 'concluído', revertible: false };
 }
 
 function valorDesaida(txt, chave) {
@@ -2696,6 +2750,8 @@ module.exports = {
   getDns, setDns, TWEAKS, ACTIONS, ONCES, TOOLS, tweakById, DATA_DIR: () => DATA_DIR,
   // travas de segurança (GDZ: blockedActions / tweakBlocks)
   getBlocked, blockedActions, tweakBlocks, tweakAction, buildCaps,
+  // ações por jogo (GENERIC_GAME_SPEC do GDZ)
+  specDoJogo, GAME_OPT_RE,
   // expostos para as medições (nao usados pelo app)
   servicosDoScript, confereServico, confereScript, resultadoPs, limpaSaida, mensagemDaFalha,
 };
