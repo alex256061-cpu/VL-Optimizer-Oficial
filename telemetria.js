@@ -327,10 +327,31 @@ function planEvent(tipo, trigger) {
 /// Manda até 30 eventos de uma vez. Igual ao GDZ.
 async function flushPlanEvents() {
   planEventsTimer = null;
-  const sessao = deps.usuario() ? deps.sessaoAtual() : null;
+
+  // PRIMEIRO confirma que tem para onde mandar e que tem o que mandar.
+  //
+  // Antes o splice(0,30) vinha antes deste teste: com a sessão ainda null (acontece
+  // logo depois de abrir o app, porque deps.usuario() é assíncrono aqui), os
+  // eventos eram retirados da fila e descartados sem nenhum envio.
+  // O GDZ tem o mesmo formato, mas lá o currentUser é síncrono e já existe.
+  if (!planEvents.length) return;
+  const u = await Promise.resolve(deps.usuario()).catch(() => null);
+  if (!u) return;
+  const sessao = await Promise.resolve(deps.sessaoAtual()).catch(() => null);
+  if (!sessao || sessao.offline) return;
+
   const lote = planEvents.splice(0, 30);
-  if (!lote.length || !sessao) return;
-  await deps.apiCall('POST', '/app/events', { events: lote });
+
+  try {
+    const r = await deps.apiCall('POST', '/app/events', { events: lote });
+    // 400 = o servidor recusou o conteúdo (evento com nome fora da lista, por
+    // exemplo). Descartar é o certo: reenviar não resolve.
+    // Qualquer outra falha devolve o lote para a fila, para tentar de novo.
+    if (r && r.status === 400) return;
+    if (!r || r.status === 0 || r.status >= 500) planEvents.unshift(...lote);
+  } catch (e) {
+    planEvents.unshift(...lote);
+  }
 }
 
 module.exports = {

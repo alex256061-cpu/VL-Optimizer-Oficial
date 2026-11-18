@@ -61,6 +61,26 @@ for (const f of arquivos) {
 if (erros) parar(erros + ' arquivo(s) com erro. Nada foi publicado.');
 ok('todos OK');
 
+// ── 1b. cards da tela x ações do motor ───────────────────────────────────
+//
+// O QUE ESTE PASSO IMPEDE
+//   O projeto ficou preso num ciclo: uma opção era implementada, quebrava, era
+//   removida do motor, mas o CARD continuava na tela. O cliente via o card,
+//   clicava e recebia "ação desconhecida". Depois, semanas adiante, alguém
+//   comparava com o programa de referência, via "falta essa opção" e
+//   reimplementava do zero — sem saber que já tinha sido removida de propósito.
+//
+//   O verificar-cards.js confere duas coisas:
+//     A) nenhum card aponta para ação inexistente
+//     B) nenhuma remoção já decidida voltou sem liberação explícita
+passo('1b', 'Conferindo os cards da tela x as ações do motor');
+try {
+  execFileSync(process.execPath, [path.join(RAIZ, 'verificar-cards.js'), '--falhar'], { stdio: 'inherit' });
+  ok('cards conferidos');
+} catch (e) {
+  parar('Há card na tela sem ação no motor, ou uma opção removida voltou. Nada foi publicado.');
+}
+
 // ── 2. versão ─────────────────────────────────────────────────────────────
 passo(2, 'Atualizando a versao para ' + versao);
 const pkgPath = path.join(RAIZ, 'package.json');

@@ -10,6 +10,16 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.50': {
+    corrigido: [
+      'O aviso de compra aparecia sem motivo a cada dois minutos. Corrigido.',
+      'O programa deixava de registrar parte do uso do plano quando a sessao ainda estava carregando ao abrir.',
+      '"Explorer Minimo" e outras acoes de uma vez podiam dizer "concluido" mesmo quando o script avisava que falhou. Agora a falha aparece.',
+      'A "Otimizacao Rapida" e o "Defender Off" agora conferem o resultado depois de aplicar: se o Windows recusar por falta de administrador, o aviso diz isso em vez de dar concluido.',
+      'Os cards "Tela em 720p" e "Efeitos visuais" sairam da tela: as duas acoes tinham sido removidas porque causavam problema, mas o botao continuava aparecendo e dava erro ao clicar.',
+    ],
+    novo: [],
+  },
   '1.4.49': {
     corrigido: [
       'O aviso "Compra confirmada" nao aparece mais sem motivo: ele aparecia a cada dois minutos mesmo sem nenhuma compra, porque o programa comparava o plano com nada.',
