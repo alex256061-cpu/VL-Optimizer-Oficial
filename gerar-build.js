@@ -67,18 +67,32 @@ const copiarDir = (de, para) => {
   }
 };
 
-copiarDir(path.join(BK, 'src'), path.join(RAIZ, 'src'));
-if (fs.existsSync(path.join(BK, 'site'))) {
-  copiarDir(path.join(BK, 'site'), path.join(RAIZ, 'site'));
+// Restaurar os originais só faz sentido ao gerar OUTRA marca.
+//
+// Em `gerar-build vl` restaurar é voltar no tempo: o .originais-vl é um backup
+// congelado, e cada build revertia src/, site/, notas-versao.js e
+// electron-builder.json para aquele ponto. Foi assim que a 1.4.47 foi publicada
+// sem foto-sistema.js e restaurar-sistema.js no pacote (o app não abria).
+//
+// Para a VL, o projeto atual JÁ É o original: não há nada para restaurar.
+if (M.marca !== 'vl') {
+  copiarDir(path.join(BK, 'src'), path.join(RAIZ, 'src'));
+  if (fs.existsSync(path.join(BK, 'site'))) {
+    copiarDir(path.join(BK, 'site'), path.join(RAIZ, 'site'));
+  }
+  for (const f of ['package.json', 'electron-builder.json', 'notas-versao.js']) {
+    fs.copyFileSync(path.join(BK, f), path.join(RAIZ, f));
+  }
+  console.log('  originais restaurados (.originais-vl) para a marca ' + M.marca);
+} else {
+  console.log('  originais: marca vl, o projeto atual já é o original (nada restaurado)');
 }
+
+// As imagens da marca continuam sendo copiadas SEMPRE: são assets, não código.
 for (const f of ['icon.png', 'icon.ico', 'logo.png', 'logo-branco.png']) {
   const de = path.join(BK, f);
   if (fs.existsSync(de)) fs.copyFileSync(de, path.join(RAIZ, 'assets', f));
 }
-for (const f of ['package.json', 'electron-builder.json', 'notas-versao.js']) {
-  fs.copyFileSync(path.join(BK, f), path.join(RAIZ, f));
-}
-console.log('  originais restaurados (.originais-vl)');
 
 // ── 2. package.json ────────────────────────────────────────────────────
 {
@@ -163,18 +177,20 @@ if (M.marca !== 'vl') {
 {
   const dir = path.join(RAIZ, 'marca');
   fs.mkdirSync(dir, { recursive: true });
-  const dados = {
-    nome: M.nome,
-    nomeCurto: M.nomeCurto,
-    appId: M.appId,
-    pasta: M.pasta,
-    modelo: M.modelo,
-    supabase: M.supabase,
-    site: M.site,
-    github: M.github,
-    assets: M.assets,
-    cores: M.cores,
-  };
+  // Grava o objeto de marca INTEIRO, não uma lista escolhida à mão.
+  //
+  // Antes era uma lista manual e não tinha chaveReleasePublica nem assinaturaModo:
+  // o pacote saía SEM a chave pública e a verificação da assinatura da atualização
+  // ficava desligada, mesmo com assinaturaModo = 'obrigatorio'.
+  //
+  // Fora ficam só os atalhos de runtime que não são dado de marca:
+  // dirDados (caminho no PC do usuário), urlAtualizacoes/urlDownload (derivados de
+  // site), tarefa (derivado de nomeCurto), ehPadrao e marca (nome do arquivo).
+  const dados = {};
+  const FORA = new Set(['dirDados', 'urlAtualizacoes', 'urlDownload', 'tarefa', 'ehPadrao', 'marca']);
+  for (const k of Object.keys(M)) {
+    if (!FORA.has(k)) dados[k] = M[k];
+  }
   fs.writeFileSync(path.join(dir, 'usada.json'), JSON.stringify(dados, null, 2) + '\n', 'utf8');
   fs.writeFileSync(path.join(dir, 'ATIVA.txt'), M.marca + '\n', 'utf8');
   console.log('  marca/usada.json: ' + M.nome + ' (só esta entra no pacote)');

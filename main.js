@@ -95,6 +95,62 @@ telemetria.configurar({
   apiCall: (metodo, rota, corpo) => conta.telemetriaPedir(metodo, rota, corpo),
 });
 telemetria.iniciar();
+
+// ── PLAN_SYNC: o app percebe sozinho quando o plano muda ─────────────────
+//
+// O renderer já escutava "entitlement-update" (src/plano.js) e o preload já
+// expunha o canal, mas o main nunca enviava: compra feita no site só aparecia se
+// o cliente clicasse em "Já comprei".
+//
+// Os números são os do GDZ: 10 s quando acabou de comprar (por 20 min), 2 min em
+// repouso, e uma checagem extra quando a janela ganha foco (15 s de intervalo
+// mínimo). O laço bate a cada 5 s e só faz a chamada quando venceu o prazo.
+const PLAN_SYNC = { fastMs: 10000, fastForMs: 1200000, focusGapMs: 15000, idleMs: 120000 };
+let planSyncFastUntil = 0;
+let planSyncLast = 0;
+let planSyncBusy = false;
+
+// O que identifica "o plano mudou": plano + vitalício + data de validade.
+function planKey(u) {
+  if (!u) return '';
+  return [u.plan || '', u.lifetime ? '1' : '0', u.licenseExpiresAt || ''].join('|');
+}
+
+async function syncPlan() {
+  if (planSyncBusy) return;
+  planSyncBusy = true;
+  planSyncLast = Date.now();
+  try {
+    const antes = _sessaoCache.valor && _sessaoCache.valor.user ? conta.usuario() : null;
+    const agora = await conta.usuario();
+    if (!agora) return;
+    if (planKey(agora) === planKey(antes)) return;
+
+    // Comprou agora? Duas marcas: virou pro, ou virou vitalício, ou a validade
+    // aumentou. Nesse caso passa a checar de 10 em 10 s por 20 min.
+    const virouPro = String(agora.plan) === 'pro' && String(antes && antes.plan) !== 'pro';
+    const virouVital = !!agora.lifetime && !(antes && antes.lifetime);
+    const validadeMaior = String(agora.licenseExpiresAt || '') > String((antes && antes.licenseExpiresAt) || '');
+    const comprou = virouPro || virouVital || validadeMaior;
+    if (comprou) planSyncFastUntil = Date.now() + PLAN_SYNC.fastForMs;
+
+    if (win && !win.isDestroyed()) {
+      win.webContents.send('entitlement-update', Object.assign({}, agora, { bought: comprou }));
+    }
+  } catch (e) {
+  } finally {
+    planSyncBusy = false;
+  }
+}
+
+setInterval(() => {
+  const ms = Date.now() < planSyncFastUntil ? PLAN_SYNC.fastMs : PLAN_SYNC.idleMs;
+  if (Date.now() - planSyncLast >= ms) syncPlan();
+}, 5000).unref();
+
+function syncPlanOnFocus() {
+  if (Date.now() - planSyncLast >= PLAN_SYNC.focusGapMs) syncPlan();
+}
 ex.fpsRestore();
 
 
@@ -391,6 +447,10 @@ function createWindow() {
   //
   // Só age quando NÃO estiver numa recriação: se o renderer caiu e o app está se
   // recuperando, o 'closed' vem de um fechamento programático, não do usuário.
+  // Ao voltar para o app (compra feita no site no navegador), confere o plano na hora.
+  // É o syncPlanOnFocus do GDZ: 15 s de intervalo mínimo para não bater em cada alt-tab.
+  win.on('focus', () => { try { syncPlanOnFocus(); } catch (e) { } });
+
   win.on('closed', () => {
     win = null;
     if (app.isQuitting) return;              // já está saindo: nada a fazer
