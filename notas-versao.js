@@ -10,6 +10,19 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.45': {
+    corrigido: [
+      'Limpeza do codigo da tela de novidades: tirei os estilos que sobravam do aviso de atualizacao removido na versao anterior.',
+    ],
+    novo: [],
+  },
+  '1.4.44': {
+    corrigido: [
+      'Quem esta no plano gratis agora ve a chamada "Ver os planos" na aba Sobre, com o preco. O bloco existia no codigo mas nao na tela.',
+      'O card "Atualizacao" saiu da aba Sobre. O app continua verificando sozinho e avisa pelo aviso da tela quando ha versao nova, como o programa de referencia faz.',
+    ],
+    novo: [],
+  },
   '1.4.43': {
     corrigido: [
       'O medidor de FPS passou a guardar as medicoes e enviar em lotes, como o programa de referencia: fila de ate 500 no disco, 50 por envio a cada 5 minutos, e o par antes/depois e ligado pelo identificador da medicao (funciona mesmo depois de fechar o app).',

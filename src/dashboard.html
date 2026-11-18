@@ -1059,28 +1059,7 @@
     }
 
   
-    /* Atualização */
-    .upd-card { margin-top: 18px; border: 1px solid var(--border2); border-radius: 14px; padding: 18px 20px; background: var(--white); }
-    .upd-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-    .upd-title { font-size: 14px; font-weight: 800; }
-    .upd-ver { font-size: 12px; color: var(--text3); font-family: 'JetBrains Mono', monospace; margin-top: 2px; }
-    .upd-btn { padding: 9px 18px; border-radius: 10px; border: 1.5px solid var(--border2); background: transparent; color: var(--text); font-family: inherit; font-size: 13px; font-weight: 800; cursor: pointer; -webkit-app-region: no-drag; transition: all .18s; }
-    .upd-btn:hover { border-color: var(--purple); color: var(--purple); }
-    .upd-btn.primary { background: var(--purple); border-color: var(--purple); color: #fff; }
-    .upd-btn.primary:hover { filter: brightness(1.1); }
-    .upd-btn:disabled { opacity: .55; cursor: default; }
-    .upd-box { margin-top: 14px; display: none; }
-    .upd-box.on { display: block; }
-    .upd-resumo { font-size: 13px; font-weight: 800; color: var(--purple); margin-bottom: 10px; }
-    .upd-grupo { margin-top: 12px; }
-    .upd-grupo-t { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--text3); margin-bottom: 6px; }
-    .upd-item { font-size: 13px; color: var(--text2); line-height: 1.6; padding-left: 16px; position: relative; margin-bottom: 6px; }
-    .upd-item::before { content: '•'; position: absolute; left: 2px; color: var(--purple); font-weight: 900; }
-    .upd-bar { height: 6px; border-radius: 999px; background: var(--border); overflow: hidden; margin-top: 10px; }
-    .upd-bar > i { display: block; height: 100%; width: 0%; background: var(--purple); transition: width .3s; }
-    .upd-erro { font-size: 12px; color: #ff6b6b; margin-top: 8px; }
-
-  </style>
+      </style>
 
   <link rel="stylesheet" href="tweaks.css">
 
@@ -2725,19 +2704,26 @@
           <!-- Só no app instalado (plano.js mostra): no portátil não existe -->
 
 
-          <!-- Atualização: mostra a versão instalada, verifica e instala -->
-          <div class="upd-card" id="upd-card">
-            <div class="upd-head">
-              <div>
-                <div class="upd-title">Atualização</div>
-                <div class="upd-ver" id="upd-ver">Versão …</div>
-              </div>
-              <button class="upd-btn" id="upd-check" onclick="updCheck()">Verificar atualização</button>
-            </div>
-            <div class="upd-box" id="upd-box"></div>
-          </div>
+          
 
-          <div class="about-pref" id="autostart-pref" style="display:none">
+          <!-- Só para quem está no plano grátis (plano.js mostra, preenche e esconde) -->
+<div class="about-plan" id="about-plan" hidden>
+  <div class="about-plan-txt">
+    <div class="about-plan-kicker">Você está no plano grátis</div>
+    <div class="about-plan-t">Libere todas as otimizações</div>
+    <div class="about-plan-s" id="about-plan-s">Perfis de desempenho, VL Scaling, Input Lag e Modo Live, tudo com volta em um clique.</div>
+    <ul class="about-plan-list">
+      <li>Todas as otimizações liberadas</li>
+      <li>VL Scaling e ajustes por jogo</li>
+      <li>Modo Live e Input Lag</li>
+    </ul>
+  </div>
+  <div class="about-plan-cta">
+    <button class="qo-btn" type="button" id="about-plan-btn">Ver os planos</button>
+    <div class="about-plan-note" id="about-plan-note">Pix, liberado na hora</div>
+  </div>
+</div>
+<div class="about-pref" id="autostart-pref" style="display:none">
 
             <div>
 
@@ -5354,139 +5340,6 @@
   function updEsc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
   }
-
-  function updPintar(info) {
-    updEstado = info;
-    const ver = document.getElementById('upd-ver');
-    const box = document.getElementById('upd-box');
-    const btn = document.getElementById('upd-check');
-    if (!ver || !box) return;
-
-    if (!info || info.success === false) {
-      ver.textContent = 'Versão indisponível';
-      if (info && info.error) {
-        box.className = 'upd-box on';
-        box.innerHTML = '<div class="upd-erro">' + updEsc(info.error) + '</div>';
-      }
-      return;
-    }
-
-    ver.textContent = 'Versão ' + (info.atual || '—') + ' instalada';
-    if (btn) btn.textContent = 'Verificar atualização';
-
-    // nada novo
-    if (!info.temNova) {
-      if (info.erro) {
-        box.className = 'upd-box on';
-        box.innerHTML = '<div class="upd-erro">Não foi possível verificar agora: ' + updEsc(info.erro) + '</div>';
-      } else {
-        box.className = 'upd-box on';
-        box.innerHTML = '<div class="upd-resumo" style="color:var(--text2)">Você está na versão mais recente.</div>';
-      }
-      return;
-    }
-
-    // tem nova: manda montar o cartão
-    box.className = 'upd-box on';
-    const n = info.notas;
-    let html = '<div class="upd-resumo">Versão ' + updEsc(info.disponivel) + ' disponível</div>';
-
-    if (n && ((n.corrigido && n.corrigido.length) || (n.novo && n.novo.length))) {
-      const c1 = (n.corrigido || []).length, n1 = (n.novo || []).length;
-      const titulo = (!n1 && c1) ? ('Apenas correções' + (c1 === 1 ? ': 1 ajuste' : ': ' + c1 + ' ajustes'))
-        : (n1 && !c1) ? ('Novidades: ' + n1)
-          : (c1 + ' correções e ' + n1 + ' novidades');
-      html = '<div class="upd-resumo">Versão ' + updEsc(info.disponivel) + ' — ' + titulo + '</div>';
-      if (n1) {
-        html += '<div class="upd-grupo"><div class="upd-grupo-t">Novo</div>' +
-          n.novo.map((x) => '<div class="upd-item">' + updEsc(x) + '</div>').join('') + '</div>';
-      }
-      if (c1) {
-        html += '<div class="upd-grupo"><div class="upd-grupo-t">Corrigido</div>' +
-          n.corrigido.map((x) => '<div class="upd-item">' + updEsc(x) + '</div>').join('') + '</div>';
-      }
-    } else if (info.doRelease) {
-      // sem texto escrito à mão: mostra o corpo do release, limpo
-      const linhas = String(info.doRelease).split(/\r?\n/)
-        .map((l) => l.trim())
-        .filter((l) => l && !/^#{1,6}\s/.test(l) && !/^[-=]{3,}$/.test(l))
-        .map((l) => l.replace(/^[-*+]\s+/, '').replace(/\*\*/g, '').replace(/`/g, ''));
-      if (linhas.length) {
-        html += '<div class="upd-grupo"><div class="upd-grupo-t">O que mudou</div>' +
-          linhas.slice(0, 20).map((l) => '<div class="upd-item">' + updEsc(l) + '</div>').join('') + '</div>';
-      }
-    }
-
-    if (info.baixando) {
-      html += '<div class="upd-bar"><i style="width:' + (info.percentual || 0) + '%"></i></div>' +
-        '<div class="upd-ver" style="margin-top:6px">Baixando… ' + (info.percentual || 0) + '%</div>';
-    } else if (info.conferindo) {
-      // O app está conferindo a assinatura do instalador baixado. Lê ~140 MB, então
-      // leva alguns segundos: a tela precisa dizer que está trabalhando.
-      html += '<div class="upd-bar"><i style="width:100%"></i></div>' +
-        '<div class="upd-ver" style="margin-top:6px">Conferindo a assinatura da atualização…</div>';
-    } else if (info.baixado) {
-      html += '<div style="margin-top:14px"><button class="upd-btn primary" onclick="updInstalar()">Instalar agora e reiniciar</button></div>';
-    } else {
-      html += '<div style="margin-top:14px"><button class="upd-btn primary" onclick="updCheck()">Baixar atualização</button>' +
-        ' <button class="upd-btn" onclick="updAbrirPagina()">Ver no site</button></div>';
-    }
-
-    box.innerHTML = html;
-  }
-
-  async function updLer() {
-    try {
-      const info = await ipcRenderer.invoke('update-info');
-      updPintar(info);
-      return info;
-    } catch (e) {
-      updPintar({ success: false, error: String(e && e.message || e) });
-      return null;
-    }
-  }
-
-  async function updCheck() {
-    const btn = document.getElementById('upd-check');
-    const box = document.getElementById('upd-box');
-    if (btn) { btn.disabled = true; btn.textContent = 'Verificando…'; }
-    if (box) { box.className = 'upd-box on'; box.innerHTML = '<div class="upd-ver">Procurando versão nova…</div>'; }
-    try {
-      await ipcRenderer.invoke('update-check');
-    } catch (e) { }
-    if (btn) btn.disabled = false;
-    await updLer();
-    // enquanto baixa, acompanha
-    updAcompanhar();
-  }
-
-  let updTimer = null;
-  function updAcompanhar() {
-    if (updTimer) clearInterval(updTimer);
-    updTimer = setInterval(async () => {
-      const info = await updLer();
-      if (!info || !info.baixando) { clearInterval(updTimer); updTimer = null; }
-    }, 1500);
-  }
-
-  async function updInstalar() {
-    try { await ipcRenderer.invoke('update-install'); } catch (e) { }
-  }
-
-  async function updAbrirPagina() {
-    try { await ipcRenderer.invoke('update-open-page'); } catch (e) { }
-  }
-
-  // Ao abrir a página Sobre, preenche a versão e procura atualização.
-  document.addEventListener('DOMContentLoaded', () => {
-    setTimeout(() => { if (document.getElementById('upd-ver')) updLer(); }, 700);
-  });
-  // O app troca de página sem recarregar o documento: observa a página Sobre aparecer.
-  const updObs = new MutationObserver(() => {
-    const el = document.getElementById('upd-ver');
-    if (el && !updEstado) updLer();
-  });
-  try { updObs.observe(document.body, { childList: true, subtree: true }); } catch (e) { }
 
   // Aviso de versão nova sem abrir a página Sobre.
   //
