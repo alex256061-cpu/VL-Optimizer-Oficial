@@ -10,6 +10,17 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.54': {
+    corrigido: [
+      'O "DLSS no modelo recomendado pela NVIDIA" nao fazia nada: aparecia o botao, mas o ajuste nao tinha o que aplicar. Agora aplica o preset recomendado no driver da NVIDIA, como o programa de referencia.',
+      'O "Plano de Alta Performance" agora avisa quando o Windows nao aceita o plano, em vez de dizer que deu certo.',
+      'Varios ajustes acertados com o programa de referencia: telemetria, sugestoes, Num Lock, historico de atividades, widgets, localizacao, brilho da tela azul, internet sem envio para outros PCs, pesquisa sem Bing, barra de tarefas e arquivo de paginacao.',
+      'O "Arquivo de paginacao" e os "Jogos em janela" usavam um caminho que o Windows nao le. Corrigidos para o caminho certo.',
+      'A "Sobreposicao do Steam" nao funcionava: agora fecha o Steam, altera a configuracao de cada conta e reabre.',
+      'O "Explorer Minimo" reinicia so a janela do seu usuario, nao a de todos.',
+    ],
+    novo: [],
+  },
   '1.4.53': {
     corrigido: [
       'O botao "Religar o Windows Defender" dizia "o Windows nao aceitou a mudanca" em PC que usa outro antivirus. Agora diz que este PC nao tem o Windows Defender instalado, que e a verdade.',
