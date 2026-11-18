@@ -619,7 +619,10 @@
     btn.textContent = it.kind === 'tool' ? 'Rodando…' : 'Aplicando…';
     let r;
     if (it.kind === 'tool') r = await invoke('tweak-tool', { id: it.id });
-    else if (it.kind === 'fix') r = await invoke('revert-action', { action: it.act });
+    // Os 4 cards 'fix' são ações de RELIGAR, e vivem em ONCES (não em ACTIONS).
+    // `revert-action` só conhece ACTIONS e devolvia "ação desconhecida" nos 4.
+    // `run-action` roteia: ONCES -> runOnce, senão -> runAction.
+    else if (it.kind === 'fix') r = await invoke('run-action', { action: it.act });
     else r = await invoke('run-action', { action: it.act });
     // A página pode ter sido redesenhada enquanto rodava: atualiza o botão que estiver na tela.
     const cur = document.querySelector(`.tw-row[data-key="${CSS.escape(it.key)}"] .tw-tool-btn`) || btn;

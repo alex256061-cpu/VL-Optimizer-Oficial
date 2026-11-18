@@ -3438,12 +3438,50 @@ ex.getBackups = () => Object.keys(core.loadBackups());
 ex.restoreAll = async () => {
   const b = core.loadBackups();
   const names = Object.keys(b);
-  let n = 0;
-  for (const k of names) {
-    const r = await core.restoreBackup(k);
-    if (r.success) n++;
+
+  // Sem backup não há o que restaurar. Antes isto devolvia success:true com count:0
+  // e a tela apagava todos os botões de desfazer, dizendo "restauradas (0)".
+  if (!names.length) {
+    return {
+      success: false,
+      count: 0,
+      error: 'Não há nenhuma otimização guardada para desfazer. Os botões de desfazer aparecem depois que você aplica algo.',
+    };
   }
-  return { success: true, count: n, message: `Configurações restauradas (${n} otimiza${n === 1 ? 'ção' : 'ões'}).` };
+
+  let n = 0;
+  const falharam = [];
+  for (const k of names) {
+    try {
+      const r = await core.restoreBackup(k);
+      if (r && r.success) n++;
+      else falharam.push(k);
+    } catch (e) {
+      falharam.push(k);
+    }
+  }
+
+  // Restaurou algumas mas não todas: é sucesso parcial, e o cliente precisa saber.
+  if (n === 0) {
+    return {
+      success: false,
+      count: 0,
+      error: 'Nenhuma configuração pôde ser restaurada agora. Tente abrir o VL como administrador.',
+    };
+  }
+  if (falharam.length) {
+    return {
+      success: true,
+      count: n,
+      parcial: true,
+      message: `${n} configuração${n === 1 ? '' : 'ões'} restaurada${n === 1 ? '' : 's'}, mas ${falharam.length} não deu para desfazer agora.`,
+    };
+  }
+  return {
+    success: true,
+    count: n,
+    message: `Configurações restauradas (${n} otimiza${n === 1 ? 'ção' : 'ões'}).`,
+  };
 };
 ex.updateStatus = () => ({ available: false, version: require('electron').app.getVersion(), current: require('electron').app.getVersion() });
 // Planos vendidos, no formato que o src/plano.js espera.

@@ -75,6 +75,10 @@ const cardsA = [...otim.matchAll(/\bA\('([^']+)'/g)].map((m) => m[1]);
 const cardsO = [...otim.matchAll(/\bO\('([^']+)'/g)].map((m) => m[1]);
 const cardsT = [...otim.matchAll(/\bT\('([^']+)'/g)].map((m) => m[1]);
 const cardsC = [...otim.matchAll(/\bC\('([^']+)'/g)].map((m) => m[1]);
+// FIX e TOOL também são cards clicáveis. O auditor s1 achou os 4 botões "Religar"
+// mortos justamente porque esta verificação não olhava o tipo 'fix'.
+const cardsFIX = [...otim.matchAll(/\bFIX\('([^']+)'/g)].map((m) => m[1]);
+const cardsTOOL = [...otim.matchAll(/\bTOOL\('([^']+)'/g)].map((m) => m[1]);
 
 const problemas = [];
 const avisos = [];
@@ -88,6 +92,21 @@ for (const nome of cardsA) {
 for (const nome of cardsO) {
   if (!ONCES.has(nome.toLowerCase())) {
     problemas.push('CARD SEM ONCE: "' + nome + '" — está na tela, mas o motor não tem a ação de uma vez.');
+  }
+}
+// FIX: o botão chama 'run-action', que roteia ONCES -> runOnce. Então o nome
+// precisa existir em ONCES OU em ACTIONS. Se não existir em nenhum, o clique
+// devolve "ação desconhecida" — foi o que aconteceu com os 4 botões "Religar".
+for (const nome of cardsFIX) {
+  if (!ONCES.has(nome.toLowerCase()) && !ACOES.has(nome.toLowerCase())) {
+    problemas.push('CARD FIX SEM AÇÃO: "' + nome + '" — o botão "Religar" chama run-action, mas o nome não está em ONCES nem em ACTIONS. Clicar dá "ação desconhecida".');
+  }
+}
+// TOOL: precisa existir em TOOLS, senão o clique não roda nada.
+const TOOLS = new Set(Object.keys(engine.TOOLS || {}).map((x) => x.toLowerCase()));
+for (const nome of cardsTOOL) {
+  if (!TOOLS.has(nome.toLowerCase())) {
+    problemas.push('CARD TOOL SEM FERRAMENTA: "' + nome + '" — o botão chama tweak-tool, mas a ferramenta não existe no motor.');
   }
 }
 for (const nome of cardsT) {

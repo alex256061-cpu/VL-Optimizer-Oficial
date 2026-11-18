@@ -537,6 +537,9 @@ function startTicker() {
       }
     } catch (e) {}
   }, 500);
+  // unref: este timer não deve manter o processo vivo. Sem isto, um app que não
+  // fechou a janela principal ficava pendurado por causa do tick do overlay.
+  if (tickTimer && typeof tickTimer.unref === 'function') tickTimer.unref();
 }
 
 // ── IPC ──
