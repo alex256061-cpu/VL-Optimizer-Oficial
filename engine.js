@@ -1332,17 +1332,41 @@ const ONCES = {
   'Defender Off': {
     tag: 'tweaks', title: 'Religar o Windows Defender', btn: 'Religar',
     desc: 'Religa a proteção em tempo real, se uma versão antiga do VL a desligou.',
-        prova: { tipo: 'nok', chave: 'nok', mensagem: 'O Windows não deixou desligar o Defender: isso precisa de administrador e pode ser bloqueado por política de grupo.' },
-    run: `Set-MpPreference -DisableRealtimeMonitoring $false -ErrorAction SilentlyContinue; Set-Val '${HKLM}\\SOFTWARE\\Policies\\Microsoft\\Windows Defender\\Real-Time Protection' 'DisableRealtimeMonitoring' 0 'DWord'; # Prova de efeito: se o Windows recusou (sem admin ou política de grupo),
-      # as preferências continuam ligadas e isto devolve nok=1.
+        prova: { tipo: 'nok', chave: 'nok', mensagem: 'O Windows não deixou religar o Defender: isso precisa de administrador e pode ser bloqueado por política de grupo.' },
+    run: `# Só chama o cmdlet se ele existir.
+      #
+      # Em PC sem o Windows Defender (antivirus de terceiro), Set-MpPreference nao
+      # existe e a chamada direta abortava o script inteiro. O -ErrorAction
+      # SilentlyContinue" não segura erro de comando não encontrado. Aí o app
+      # respondia "o Windows nao aceitou a mudanca" e mandava o cliente tentar como
+      # administrador, quando o problema é outro.
+      if (Get-Command Set-MpPreference -ErrorAction SilentlyContinue) {
+        Set-MpPreference -DisableRealtimeMonitoring $false -ErrorAction SilentlyContinue
+        Set-MpPreference -DisableIOAVProtection $false -ErrorAction SilentlyContinue
+        Set-MpPreference -DisableBehaviorMonitoring $false -ErrorAction SilentlyContinue
+        Set-MpPreference -DisableScriptScanning $false -ErrorAction SilentlyContinue
+      } else {
+        Write-Output 'sem-defender'
+        exit 0
+      }
+      Set-Val '${HKLM}\\SOFTWARE\\Policies\\Microsoft\\Windows Defender\\Real-Time Protection' 'DisableRealtimeMonitoring' 0 'DWord'; # Prova de efeito de RELIGAR.
+      #
+      # Disable* = $false significa proteção LIGADA, que é o que este botão quer.
+      # Então o erro é o contrário: a proteção continuar desligada.
+      # (A versão anterior contava erro quando estava LIGADA e dizia "falhou"
+      #  justamente quando tinha dado certo.)
+      #
+      # Se o cmdlet não existir (Defender removido ou antivírus de terceiro), NÃO
+      # bloqueia: sem prova de falha, não se afirma falha. Antes o catch devolvia
+      # nok=1 e o botão respondia "falhou" para sempre neste tipo de PC.
       $nok = 0
       try {
         $p = Get-MpPreference -ErrorAction Stop
-        if ($p.DisableRealtimeMonitoring -ne $true) { $nok++ }
-        if ($p.DisableIOAVProtection -ne $true) { $nok++ }
-        if ($p.DisableBehaviorMonitoring -ne $true) { $nok++ }
-        if ($p.DisableScriptScanning -ne $true) { $nok++ }
-      } catch { $nok = 1 }
+        if ($p.DisableRealtimeMonitoring) { $nok++ }
+        if ($p.DisableIOAVProtection) { $nok++ }
+        if ($p.DisableBehaviorMonitoring) { $nok++ }
+        if ($p.DisableScriptScanning) { $nok++ }
+      } catch { $nok = 0 }
       Write-Output "nok=$nok"`,
   },
   'Desativar Atualizações Windows': {

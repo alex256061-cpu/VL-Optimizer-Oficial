@@ -10,6 +10,13 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.53': {
+    corrigido: [
+      'O botao "Religar o Windows Defender" dizia "o Windows nao aceitou a mudanca" em PC que usa outro antivirus. Agora diz que este PC nao tem o Windows Defender instalado, que e a verdade.',
+      'A conferencia do Defender estava invertida: contava como falha quando a protecao estava LIGADA, que e justamente o resultado desejado.',
+    ],
+    novo: [],
+  },
   '1.4.52': {
     corrigido: [
       'Os quatro botoes "Religar" da aba Reparos nao faziam nada: clicavam e respondiam "acao desconhecida". Agora religam o Windows Defender, o Windows Update, a Restauracao do Sistema e consertam a escala da tela.',
