@@ -10,6 +10,21 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.48': {
+    corrigido: [
+      'Corrigida a atualizacao que podia deixar o programa sem abrir: a ferramenta de build estava revertendo arquivos internos para uma versao antiga antes de gerar o instalador.',
+      'A assinatura da atualizacao voltou a ser conferida no programa instalado.',
+      'A compra feita no site agora libera o app sozinha, sem precisar clicar em "Ja comprei".',
+    ],
+    novo: [],
+  },
+  '1.4.47': {
+    corrigido: [
+      'A assinatura da atualizacao voltou a ser conferida.',
+      'A compra feita no site agora libera o app sozinha.',
+    ],
+    novo: [],
+  },
   '1.4.46': {
     corrigido: [
       'O botao de desfazer passou a aparecer depois de aplicar uma otimizacao. Ele existia na tela mas o programa nunca avisava que a acao tinha volta, entao ficava sempre escondido.',
