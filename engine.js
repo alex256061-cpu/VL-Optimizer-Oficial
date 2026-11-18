@@ -989,6 +989,7 @@ const ONCES = {
     // desfazer. O plano de energia em notebook na bateria é o mais arriscado:
     // processador em 100% sem boost esquenta e o Windows entra em throttling.
     confirm: true,
+        prova: { tipo: 'nok', chave: 'nok', mensagem: 'Algumas mudanças não foram aceitas. Abra o VL como administrador e tente de novo.' },
     run: `
       # Notebook na bateria? Usa o plano Equilibrado em vez de forçar desempenho.
       # Medido: em algumas máquinas o GUID do "Alto Desempenho" nem existe, e o
@@ -1014,7 +1015,18 @@ const ONCES = {
       Set-Val '${HKCU}\\Control Panel\\Mouse' 'MouseSpeed' '0' 'String'
       Set-Val '${HKCU}\\Control Panel\\Mouse' 'MouseThreshold1' '0' 'String'
       Set-Val '${HKCU}\\Control Panel\\Mouse' 'MouseThreshold2' '0' 'String'
-      Write-Output 'ok'`,
+      # Prova de efeito: lê de volta o que dava para conferir sem admin.
+      # O plano de energia só é conferido quando não é notebook na bateria.
+      $nok = 0
+      if ((Get-Val '${HKCU}\\Software\\Microsoft\\GameBar' 'AutoGameModeEnabled') -ne 1) { $nok++ }
+      if ((Get-Val '${HKCU}\\System\\GameConfigStore' 'GameDVR_Enabled') -ne 0) { $nok++ }
+      if ((Get-Val '${HKCU}\\Software\\Microsoft\\Windows\\CurrentVersion\\GameDVR' 'AppCaptureEnabled') -ne 0) { $nok++ }
+      if ((Get-Val '${HKCU}\\Control Panel\\Mouse' 'MouseSpeed') -ne '0') { $nok++ }
+      if (-not $vlEhNotebookNaBateria) {
+        $atual = [regex]::Match((powercfg /getactivescheme | Out-String), '[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}').Value
+        if ($atual -ne $vlPlano) { $nok++ }
+      }
+      Write-Output "nok=$nok"`,
   },
   'UWP Removidos': {
     tag: 'desempenho', title: 'Remover apps que vêm com o Windows', btn: 'Remover',
@@ -1081,7 +1093,18 @@ const ONCES = {
   'Defender Off': {
     tag: 'tweaks', title: 'Religar o Windows Defender', btn: 'Religar',
     desc: 'Religa a proteção em tempo real, se uma versão antiga do VL a desligou.',
-    run: `Set-MpPreference -DisableRealtimeMonitoring $false -ErrorAction SilentlyContinue; Set-Val '${HKLM}\\SOFTWARE\\Policies\\Microsoft\\Windows Defender\\Real-Time Protection' 'DisableRealtimeMonitoring' 0 'DWord'; Write-Output 'ok'`,
+        prova: { tipo: 'nok', chave: 'nok', mensagem: 'O Windows não deixou desligar o Defender: isso precisa de administrador e pode ser bloqueado por política de grupo.' },
+    run: `Set-MpPreference -DisableRealtimeMonitoring $false -ErrorAction SilentlyContinue; Set-Val '${HKLM}\\SOFTWARE\\Policies\\Microsoft\\Windows Defender\\Real-Time Protection' 'DisableRealtimeMonitoring' 0 'DWord'; # Prova de efeito: se o Windows recusou (sem admin ou política de grupo),
+      # as preferências continuam ligadas e isto devolve nok=1.
+      $nok = 0
+      try {
+        $p = Get-MpPreference -ErrorAction Stop
+        if ($p.DisableRealtimeMonitoring -ne $true) { $nok++ }
+        if ($p.DisableIOAVProtection -ne $true) { $nok++ }
+        if ($p.DisableBehaviorMonitoring -ne $true) { $nok++ }
+        if ($p.DisableScriptScanning -ne $true) { $nok++ }
+      } catch { $nok = 1 }
+      Write-Output "nok=$nok"`,
   },
   'Desativar Atualizações Windows': {
     tag: 'tweaks', title: 'Religar o Windows Update', btn: 'Religar',
@@ -2519,7 +2542,30 @@ async function runOnce(name) {
     const prova = await provaDeEfeito(o.prova, v.saidaOk);
     if (!prova.ok) return { success: false, error: prova.error };
   }
-  const msg = limpaSaida(v.saidaOk).slice(0, 200);
+  // Ação "de uma vez": por definição não tem volta no motor. Vai explícito
+  // para o renderer não mostrar um ↩ que levaria a "sem backup".
+  const limpo = limpaSaida(v.saidaOk);
+  const msg = limpo.slice(0, 200);
+
+  // O script pode avisar falha na própria saída. Antes o runOnce ignorava isso e
+  // devolvia success:true — o 'Explorer Mínimo' escrevia 'falhou' e a tela mostrava
+  // "falhou — concluído!".
+  //
+  // As marcas usadas pelos scripts deste projeto:
+  //   - a palavra 'falhou' no fim da saída (Explorer Mínimo)
+  //   - o prefixo 'VL_ERRO:' (ferramentas e várias ações)
+  // 'sem-explorer' NÃO é falha: é "não havia sessão do Explorador", e o script
+  // termina com exit 0 dizendo que não havia nada a fazer.
+  const textoNorm = limpo.trim().toLowerCase();
+  const scriptFalhou =
+    textoNorm === 'falhou' ||
+    textoNorm.endsWith(' falhou') ||
+    /VL_ERRO:/i.test(limpo);
+
+  if (scriptFalhou) {
+    return { success: false, error: limpo.replace(/^VL_ERRO:\s*/i, '').trim() || 'o script não concluiu', revertible: false };
+  }
+
   // Ação "de uma vez": por definição não tem volta no motor. Vai explícito
   // para o renderer não mostrar um ↩ que levaria a "sem backup".
   return { success: true, message: msg || 'concluído', revertible: false };
@@ -2532,6 +2578,15 @@ function valorDesaida(txt, chave) {
 
 async function provaDeEfeito(prova, saida) {
   if (!prova) return { ok: true };
+  // Regra do 'nok': o script conta quantas coisas NÃO ficaram como deviam.
+  // 0 é sucesso, qualquer coisa acima disso é falha. Usada pelas ações que
+  // conferem o valor de volta depois de escrever.
+  if (prova.tipo === 'nok') {
+    const n = valorDesaida(saida, prova.chave || 'nok');
+    if (n === null) return { ok: true }; // não imprimiu: não dá para provar, não bloqueia
+    if (n === 0) return { ok: true };
+    return { ok: false, error: prova.mensagem || 'O Windows não aplicou a mudança. Confira se o VL está aberto como administrador.' };
+  }
   if (prova.tipo === 'contador') {
     const n = valorDesaida(saida, prova.chave || 'removed');
     if (n === null) return { ok: true };
