@@ -10,6 +10,14 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.46': {
+    corrigido: [
+      'O botao de desfazer passou a aparecer depois de aplicar uma otimizacao. Ele existia na tela mas o programa nunca avisava que a acao tinha volta, entao ficava sempre escondido.',
+      '"Aplicar perfil", no card do jogo, agora grava um ponto de restauracao antes de mexer e pode ser desfeito por completo, como no programa de referencia.',
+      'No Ryzen X3D de dois chips (7900X3D, 7950X3D, 9900X3D, 9950X3D, 7945HX3D) o perfil do jogo nao troca o plano de energia, de proposito: o driver da AMD precisa do plano Equilibrado para escolher o chip certo. Igual ao programa de referencia.',
+    ],
+    novo: [],
+  },
   '1.4.45': {
     corrigido: [
       'Limpeza do codigo da tela de novidades: tirei os estilos que sobravam do aviso de atualizacao removido na versao anterior.',
