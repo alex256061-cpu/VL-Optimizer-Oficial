@@ -116,23 +116,40 @@ function planKey(u) {
   return [u.plan || '', u.lifetime ? '1' : '0', u.licenseExpiresAt || ''].join('|');
 }
 
+// Último estado de plano que ESTE processo viu.
+//
+// Antes eu guardava o "antes" em _sessaoCache.valor.user, mas _sessaoCache.valor é
+// booleano (resultado de sessaoAtiva), não o usuário: o campo 'antes' virava null sempre,
+// planKey(null) nunca batia e o aviso "Compra confirmada" aparecia a cada 2 min.
+let planUltimoVisto = null;
+
 async function syncPlan() {
   if (planSyncBusy) return;
   planSyncBusy = true;
   planSyncLast = Date.now();
   try {
-    const antes = _sessaoCache.valor && _sessaoCache.valor.user ? conta.usuario() : null;
     const agora = await conta.usuario();
-    if (!agora) return;
-    if (planKey(agora) === planKey(antes)) return;
+    if (!agora || !agora.id) return;
 
-    // Comprou agora? Duas marcas: virou pro, ou virou vitalício, ou a validade
+    // Primeira leitura depois de abrir: só registra.
+    // Sem um "antes" não dá para afirmar que houve compra — e afirmar seria mentir.
+    if (planUltimoVisto === null) {
+      planUltimoVisto = agora;
+      return;
+    }
+
+    if (planKey(agora) === planKey(planUltimoVisto)) return;
+
+    // Mudou de verdade. Comprou se virou pro, virou vitalício, ou se a validade
     // aumentou. Nesse caso passa a checar de 10 em 10 s por 20 min.
-    const virouPro = String(agora.plan) === 'pro' && String(antes && antes.plan) !== 'pro';
-    const virouVital = !!agora.lifetime && !(antes && antes.lifetime);
-    const validadeMaior = String(agora.licenseExpiresAt || '') > String((antes && antes.licenseExpiresAt) || '');
+    const antes = planUltimoVisto;
+    const virouPro = String(agora.plan) === 'pro' && String(antes.plan) !== 'pro';
+    const virouVital = !!agora.lifetime && !antes.lifetime;
+    const validadeMaior = String(agora.licenseExpiresAt || '') > String(antes.licenseExpiresAt || '');
     const comprou = virouPro || virouVital || validadeMaior;
     if (comprou) planSyncFastUntil = Date.now() + PLAN_SYNC.fastForMs;
+
+    planUltimoVisto = agora;
 
     if (win && !win.isDestroyed()) {
       win.webContents.send('entitlement-update', Object.assign({}, agora, { bought: comprou }));
@@ -555,7 +572,11 @@ async function sessaoAtiva() {
   return ok;
 }
 
-function esquecerSessao() { _sessaoCache = { valor: null, quando: 0 }; }
+function esquecerSessao() {
+  _sessaoCache = { valor: null, quando: 0 };
+  // Plano do usuário anterior não vale como "antes" para o próximo login.
+  try { planUltimoVisto = null; } catch (e) { }
+}
 
 const H = (name, fn) => ipcMain.handle(name, async (e, arg) => {
   if (!CANAIS_LIVRES.has(name) && !(await sessaoAtiva())) {

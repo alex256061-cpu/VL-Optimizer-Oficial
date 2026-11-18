@@ -10,6 +10,12 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.49': {
+    corrigido: [
+      'O aviso "Compra confirmada" nao aparece mais sem motivo: ele aparecia a cada dois minutos mesmo sem nenhuma compra, porque o programa comparava o plano com nada.',
+    ],
+    novo: [],
+  },
   '1.4.48': {
     corrigido: [
       'Corrigida a atualizacao que podia deixar o programa sem abrir: a ferramenta de build estava revertendo arquivos internos para uma versao antiga antes de gerar o instalador.',
