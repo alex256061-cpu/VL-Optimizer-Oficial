@@ -10,6 +10,13 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.55': {
+    corrigido: [
+      'Ajustes do VL Scaling que envolvem uma opcao ainda nao usada no Lossless nao eram gravados, mas o programa dizia "aplicado". Agora a opcao e criada no arquivo do Lossless e passa a valer.',
+      'O programa so diz que aplicou um ajuste do Scaling quando ele realmente mudou o arquivo.',
+    ],
+    novo: [],
+  },
   '1.4.54': {
     corrigido: [
       'O "DLSS no modelo recomendado pela NVIDIA" nao fazia nada: aparecia o botao, mas o ajuste nao tinha o que aplicar. Agora aplica o preset recomendado no driver da NVIDIA, como o programa de referencia.',

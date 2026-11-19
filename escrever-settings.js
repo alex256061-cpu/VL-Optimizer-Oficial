@@ -85,8 +85,26 @@ function esc(v) {
 /// tem de atualizar o modelo com o Lossless aberto, não deixar o app inventar.
 function setInBlock(block, name, value) {
   const re = new RegExp('<' + name + '>[^<]*</' + name + '>');
-  if (!re.test(block)) return block;
-  return block.replace(re, '<' + name + '>' + esc(value) + '</' + name + '>');
+  const novo = '<' + name + '>' + esc(value) + '</' + name + '>';
+  if (re.test(block)) return block.replace(re, novo);
+
+  // A tag não existe no arquivo.
+  //
+  // Antes: devolvia o bloco intacto e o put() contava como aplicado — o cliente
+  // mudava a opção no Scaling e nada era gravado.
+  //
+  // Agora: insere a tag dentro do bloco do perfil, antes do fechamento.
+  // O Settings.xml do Lossless começa mínimo (só as tags que o cliente já usou) e
+  // cresce conforme ele usa o programa; nós fazemos o mesmo.
+  const fim = block.lastIndexOf('</');
+  if (fim < 0) {
+    // bloco sem nenhuma tag: devolve como está (não invento estrutura)
+    return block;
+  }
+  // descobre a indentação da última tag para ficar parecido com o resto
+  const ultimaLinha = block.slice(0, fim).split('\n').pop() || '';
+  const indent = (ultimaLinha.match(/^\s*/) || ['      '])[0];
+  return block.slice(0, fim) + indent + novo + '\n    ' + block.slice(fim);
 }
 
 /// Pega o bloco <Profile> do arquivo. Retorna { xml, block } ou null.
@@ -202,8 +220,13 @@ function gravar(cfgBruto) {
 
   const put = (nome, valor) => {
     if (valor === undefined || valor === null || valor === '') return;
+    const antesDoPut = block;
     block = setInBlock(block, nome, valor);
-    aplicados.push(nome);
+    // Só conta como aplicado se o bloco mudou de verdade. Antes contava sempre,
+    // então o retorno dizia "apliquei" mesmo quando a tag não existia e nada mudou.
+    if (block !== antesDoPut || aplicados.indexOf(nome) >= 0) {
+      if (aplicados.indexOf(nome) < 0) aplicados.push(nome);
+    }
   };
 
   // Geracao de quadros
