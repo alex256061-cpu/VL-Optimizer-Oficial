@@ -10,6 +10,13 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.57': {
+    corrigido: [
+      'A aba VL Scaling nao mostrava a configuracao atual e o botao "Recomendado" sempre dava erro. Ao clicar em Iniciar, os valores de fabrica eram gravados por cima do que voce tinha ajustado. Corrigido.',
+      'Sete controles do VL Scaling nao eram gravados: modo de desempenho, modo de redimensionamento, ajuste da imagem, modo janela, iniciar como administrador e iniciar minimizado. Corrigido.',
+    ],
+    novo: [],
+  },
   '1.4.56': {
     corrigido: [
       'O botao "Limpar cache de shaders" dava erro em toda tentativa. Agora limpa e diz quantos caches encontrou.',

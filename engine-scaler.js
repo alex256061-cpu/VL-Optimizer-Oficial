@@ -125,26 +125,39 @@ function mountScaler(ex) {
     if (!Number.isFinite(sharpness)) sharpness = 0;
     sharpness = Math.min(Math.max(sharpness, 0), 100);
 
+    // Todos os campos que a tela coleta (lsGetConfig) PRECISAM entrar aqui.
+    //
+    // Antes faltavam 7: lsfg2Mode, perfMode, scaleMode, fitMode, windowedMode,
+    // startAsAdmin e startMinimized. O cliente mexia no controle, clicava em
+    // Iniciar, e o valor voltava ao padrão sem aviso — porque o gravador nunca
+    // recebeu o campo. O `gravar` já sabia gravar todos eles.
     const applied = engine.accepts({
       scaleType: type,
       fsrType: c.fsrType || 'fsr1',
       scaleFactor: factor,
       sharpness,
       frameGeneration: fg,
+      lsfg2Mode: c.lsfg2Mode || undefined,
       multiplier: Number(c.multiplier) || Number(c.lsfg3Multiplier) || 2,
       targetFps: Number(c.targetFps) || Number(c.lsfg3Target) || 300,
       flowScale: Number(c.flowScale) || 1.0,
+      perfMode: !!c.perfMode,
       queueTarget: Number(c.queueTarget) || 1,
       maxFrameLatency: Number(c.maxFrameLatency) || 1,
+      scaleMode: c.scaleMode || undefined,
+      fitMode: c.fitMode || undefined,
+      windowedMode: !!c.windowedMode,
       syncMode: c.syncMode || 'standard',
       captureApi: c.captureApi || 'dxgi',
       lsfg3Mode: c.lsfg3Mode || 'adaptive',
-      resizeBefore: !!c.resizeBeforeScaling,
+      resizeBefore: !!c.resizeBeforeScaling || !!c.resizeBefore,
       hdrCompat: !!c.hdrCompat,
       scaleCursor: !!c.scaleCursor,
       vrs: c.vrs !== false,
       autoScale: !!c.autoScale,
       autoDelay: Number(c.autoDelay) || 0,
+      startAsAdmin: !!c.startAsAdmin,
+      startMinimized: !!c.startMinimized,
     });
 
     if (!applied.ok) {
@@ -248,8 +261,44 @@ function mountScaler(ex) {
     return { success: true, message: r.message };
   };
 
-  ex.lsConfig = async () => engine.lerGravado();
-  ex.lsStatus = async () => engine.status();
+  // NÃO sobrescrever o lsConfig com o mapa plano.
+  //
+  // A tela espera { success, configured, current, recommended }. Antes esta linha
+  // trocava o handler por `engine.lerGravado()` (só o mapa de tags), e a aba Scaling:
+  //   - não carregava a configuração atual da tela (r.success/r.current ausentes)
+  //   - o botão "Recomendado" sempre mostrava erro (r.recommended ausente)
+  //   - ao clicar em Iniciar, gravava os defaults por cima do que o cliente ajustou
+  //
+  // Aqui monto o mesmo formato do ex.lsConfig original, com os valores da engine
+  // integrada. Assim a tela mostra o que está gravado de verdade.
+  const lsConfigOriginal = ex.lsConfig;
+  ex.lsConfig = async (cfg) => {
+    // Com argumento = gravar (mesmo comportamento do original).
+    if (cfg && typeof cfg === 'object') return lsConfigOriginal(cfg);
+
+    let lido = null;
+    try { lido = engine.lerGravado(); } catch (err) { lido = null; }
+
+    // lerGravado pode devolver o mapa direto ou { settings }. Aceita os dois.
+    const mapa = (lido && lido.settings) ? lido.settings : lido;
+    const temAlgo = !!(mapa && typeof mapa === 'object' && Object.keys(mapa).length);
+    const base = lsConfigOriginal();
+    return {
+      success: true,
+      configured: temAlgo,
+      needsFirstRun: !temAlgo,
+      current: temAlgo ? mapa : base.current,
+      recommended: base.recommended,
+      file: base.file,
+      engine: 'lossless',
+    };
+  };
+
+  ex.lsStatus = async () => {
+    const st = engine.status ? engine.status() : {};
+    const r = await Promise.resolve(st).catch(() => ({}));
+    return Object.assign({ running: false, engine: 'lossless', needsFirstRun: false }, r || {});
+  };
 
   return ex;
 }
