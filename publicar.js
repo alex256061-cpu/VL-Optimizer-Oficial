@@ -318,6 +318,29 @@ async function api(url, opts) {
       path.join(pastaSig, versao + '.sig')
     );
     ok('site\\atualizacoes\\assinatura\\' + versao + '.sig');
+
+    // Cópia numa pasta de RAIZ que nenhuma Function intercepta.
+    //
+    // Por que existe: a primeira versão da Function de assinatura fazia fetch() para o
+    // próprio site e isso NÃO funciona em produção — o sub-request não chegava no
+    // arquivo estático e a Function respondia 404 para toda versão. Como
+    // marca/usada.json usa assinaturaModo 'obrigatorio', o app apagava o instalador
+    // baixado e o auto-update ficou quebrado (o app instalado parou na 1.4.31).
+    //
+    // A Function agora tenta env.ASSETS, depois /assinaturas/<versao>.sig e por último
+    // o caminho original. Esta cópia é o que mantém o segundo caminho vivo.
+    const pastaRaiz = path.join(SITE, 'assinaturas');
+    fs.mkdirSync(pastaRaiz, { recursive: true });
+    for (const a of fs.readdirSync(pastaRaiz)) {
+      if (a.toLowerCase().endsWith('.sig') && a !== versao + '.sig') {
+        fs.rmSync(path.join(pastaRaiz, a), { force: true });
+      }
+    }
+    fs.copyFileSync(
+      path.join(releaseDir, 'Instalar-VL-Optimizer-' + versao + '.exe.sig'),
+      path.join(pastaRaiz, versao + '.sig')
+    );
+    ok('site\\assinaturas\\' + versao + '.sig');
   } else {
     console.log('    (sem assinatura: nada publicado em atualizacoes/assinatura)');
   }
