@@ -47,6 +47,7 @@
     "marca.js",
     "marca/usada.json",
     "assets/**/*",
+    "!assets/clientes/**",
     "src/**/*",
     "bin/**/*",
     "native/lossless/**/*",

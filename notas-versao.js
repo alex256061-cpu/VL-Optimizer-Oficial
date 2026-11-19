@@ -10,6 +10,13 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.62': {
+    corrigido: [
+      'O instalador levava junto a pasta de imagens de outra marca de revendedor (2,2 MB que nao apareciam na tela, mas nao deviam viajar no seu produto). O instalador ficou 2,2 MB menor.',
+    ],
+    novo: [],
+  },
+
   '1.4.61': {
     corrigido: [
       'A pagina Internet > DNS nao funcionava: nenhuma opcao aplicava, nem a de voltar ao automatico. Era um erro de sintaxe no comando que o app mandava ao Windows.',
