@@ -295,17 +295,22 @@ async function check() {
 
 // Instala a versão baixada e reinicia. Só é chamado por ação explícita do usuário.
 function install() {
-  if (!autoUpdater || !state.downloaded) return { ok: false, error: 'Nenhuma atualização baixada.' };
+  // A tela checa r.success/r.error (main.js repassa o retorno direto).
+  // Antes devolvia { ok } e, quando a atualização dava certo, a tela mostrava
+  // "Não foi possível atualizar agora." — o inverso do que aconteceu.
+  if (!autoUpdater || !state.downloaded) {
+    return { success: false, ok: false, error: 'Nenhuma atualização baixada.' };
+  }
   // Segunda fechadura: `downloaded` só fica true depois da assinatura conferida, mas
   // se algo reprovou no caminho, o botão não instala de jeito nenhum.
   if (state.assinatura === 'reprovada') {
-    return { ok: false, error: assinatura.MSG_NAO_CONFERE };
+    return { success: false, ok: false, error: assinatura.MSG_NAO_CONFERE };
   }
   try {
     setImmediate(() => { try { autoUpdater.quitAndInstall(false, true); } catch (e) { } });
-    return { ok: true };
+    return { success: true, ok: true };
   } catch (e) {
-    return { ok: false, error: e.message };
+    return { success: false, ok: false, error: e.message };
   }
 }
 

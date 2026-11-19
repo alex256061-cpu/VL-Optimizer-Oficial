@@ -1,25 +1,32 @@
 // main.js — VL Optimizer (Electron)
 const { app, BrowserWindow, ipcMain, shell, screen, nativeTheme, globalShortcut, Notification, dialog } = require('electron');
 
-// Rastreio de janelas (temporario): registra toda janela criada e toda pagina carregada.
-try {
-  const fsLog = require('fs');
-  const LOGF = "C:\\VLTemp\\janela-log3.txt";
-  const registrar = (linha) => {
-    try { fsLog.appendFileSync(LOGF, linha + '\n'); } catch (e) { }
-  };
-  app.on('browser-window-created', (_e, w) => {
-    const pilha = (new Error().stack || '').split('\n').slice(2, 7).map(s => s.trim().replace(/^at /, '')).join(' <- ');
-    registrar('CRIADA :: ' + pilha);
-  });
-  const proto = BrowserWindow.prototype;
-  const lf = proto.loadFile;
-  proto.loadFile = function (f, ...rest) {
-    const pilha = (new Error().stack || '').split('\n').slice(2, 8).map(s => s.trim().replace(/^at /, '')).join(' <- ');
-    registrar('CARREGOU ' + String(f).split(/[\\/]/).pop() + ' :: ' + pilha);
-    return lf.call(this, f, ...rest);
-  };
-} catch (e) { }
+// Rastreio de janelas — SÓ para desenvolvimento.
+//
+// Já foi incondicional: o app do cliente escrevia um log em C:\VLTemp e
+// monkey-patchava BrowserWindow.prototype.loadFile em produção. Agora só liga com
+// VL_TRACE_JANELAS=1, e o log vai para a pasta de dados do próprio app.
+if (process.env.VL_TRACE_JANELAS === '1') {
+  try {
+    const fsLog = require('fs');
+    const pathLog = require('path');
+    const LOGF = pathLog.join(process.env.APPDATA || require('os').homedir(), 'VL Optimizer', 'janela-log.txt');
+    const registrar = (linha) => {
+      try { fsLog.appendFileSync(LOGF, linha + '\n'); } catch (e) { }
+    };
+    app.on('browser-window-created', () => {
+      const pilha = (new Error().stack || '').split('\n').slice(2, 7).map((s) => s.trim().replace(/^at /, '')).join(' <- ');
+      registrar('CRIADA :: ' + pilha);
+    });
+    const proto = BrowserWindow.prototype;
+    const lf = proto.loadFile;
+    proto.loadFile = function (f, ...rest) {
+      const pilha = (new Error().stack || '').split('\n').slice(2, 8).map((s) => s.trim().replace(/^at /, '')).join(' <- ');
+      registrar('CARREGOU ' + String(f).split(/[\\/]/).pop() + ' :: ' + pilha);
+      return lf.call(this, f, ...rest);
+    };
+  } catch (e) {}
+}
 
 const path = require('path');
 const fs = require('fs');
@@ -738,7 +745,21 @@ H('update-open-page', () => {
   try { updater.openReleasePage(); return { success: true }; }
   catch (e) { return { success: false, error: e.message }; }
 });
-H('claim-key', (a) => ex.claimKey(a && a.codigo));
+H('claim-key', (a) => {
+  // A tela manda { key }. Antes lia a.codigo (campo que não existe) e o resgate
+  // sempre respondia "Digite a chave.".
+  //
+  // E a tela checa r.success / r.error, mas o resgatarChave devolve { ok, erro }.
+  // Aqui normalizo o retorno: sem o segundo conserto, a tela diria
+  // "Não foi possível resgatar" MESMO quando a chave fosse aceita.
+  const codigo = (a && (a.key || a.codigo)) || '';
+  return Promise.resolve(ex.claimKey(codigo)).then((r) => {
+    if (!r) return { success: false, error: 'Não foi possível resgatar a chave.' };
+    const ok = (r.success !== undefined) ? !!r.success : !!r.ok;
+    if (ok) return { success: true, user: r.user || r.perfil || null };
+    return { success: false, error: r.error || r.erro || 'Não foi possível resgatar a chave.' };
+  }).catch((e) => ({ success: false, error: (e && e.message) || 'Não foi possível resgatar a chave.' }));
+});
 H('telemetry-consent', () => ex.telemetryConsent());
 H('telemetry-consent-set', (e, a) => ex.telemetryConsentSet(a));
 H('offers', () => ex.offers());

@@ -10,6 +10,19 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.56': {
+    corrigido: [
+      'O botao "Limpar cache de shaders" dava erro em toda tentativa. Agora limpa e diz quantos caches encontrou.',
+      'O botao "Resgatar chave" nao funcionava: o programa procurava a chave no lugar errado. Corrigido.',
+      'Quando a atualizacao dava certo, a tela mostrava "Nao foi possivel atualizar". Corrigido.',
+      'Encerrar um programa na lista de processos dizia "encerrado" mesmo quando o Windows bloqueava. Agora avisa.',
+      'O "Detectar jogo aberto" podia apontar para o Explorer ou o navegador. Agora so reconhece jogos.',
+      'O botao de limpar cache de um jogo da Epic nao apagava nada e dizia que tinha limpado. Corrigido.',
+      'A limpeza de "sobras" de um programa podia listar pastas do proprio Windows. Corrigido.',
+      'O cache de shaders, o do Epic e o de programas desconhecidos agora dizem a verdade quando nao ha nada para limpar.',
+    ],
+    novo: [],
+  },
   '1.4.55': {
     corrigido: [
       'Ajustes do VL Scaling que envolvem uma opcao ainda nao usada no Lossless nao eram gravados, mas o programa dizia "aplicado". Agora a opcao e criada no arquivo do Lossless e passa a valer.',
