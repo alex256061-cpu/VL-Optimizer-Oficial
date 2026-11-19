@@ -565,6 +565,86 @@ const CANAIS_LIVRES = new Set([
   'gs-minimize', 'gs-maximize', 'gs-close',
 ]);
 
+// ── Bloqueio por PLANO (mesmo modelo do channelAllowed do GDZ) ─────────────
+//
+// Antes o plano só era verificado no renderer (src/plano.js esconde as páginas).
+// Quem chamasse o IPC direto usava tudo de graça. Agora o backend também recusa.
+//
+// O mapa é o do GDZ, adaptado aos nomes de feature que o nosso plano.js e o Supabase
+// já usam (fps, gargalo, hardware, jogos, inicializacao). Plano com "*" libera tudo.
+const CANAIS_SEMPRE_LIVRES = new Set([
+  'get-user', 'check-session', 'logout', 'recuperar-senha', 'conta-status', 'conta-plano',
+  'ir-para-login', 'open-site', 'open-scaling-window', 'gs-minimize', 'gs-maximize', 'gs-close',
+  'minimize-window', 'maximize-window', 'close-window',
+  'update-status', 'update-install', 'update-check', 'update-open-page',
+  'get-hardware', 'get-mem-stats', 'get-recommendations', 'opti-status', 'fivem-gfx-status',
+]);
+
+const CANAL_FEATURE = {
+  'fps-status': 'fps',
+  'fps-set-target': 'fps',
+  'fps-record': 'fps',
+  'fps-clear': 'fps',
+  'fps-overlay-set': 'fps',
+  'fps-base-mark': 'fps',
+  'fps-base-clear': 'fps',
+  'measure-bottleneck': 'gargalo',
+  'bn-find-game': 'gargalo',
+  'bn-notify': 'gargalo',
+  'run-check': 'hardware',
+  'pcinfo-get': 'hardware',
+  'pcinfo-live': 'hardware',
+  'startup-list': 'inicializacao',
+  'startup-set': 'inicializacao',
+  'games-scan': 'jogos',
+  'games-status': 'jogos',
+  'game-clean': 'jogos',
+  'shader-clean': 'jogos',
+};
+
+const MSG_PLANO = 'Isso faz parte do plano pago. Abra "Sobre" e clique em "Ver os planos".';
+
+// A ficha do plano vem do mesmo lugar que o resto do app: conta.perfil().
+// Guardada por 15 s para não consultar o banco a cada clique.
+let _planoCache = { valor: null, quando: 0 };
+async function planoAtual() {
+  const agora = Date.now();
+  if (_planoCache.valor && agora - _planoCache.quando < 15000) return _planoCache.valor;
+  let p = null;
+  try { p = await conta.perfil(); } catch (e) { p = null; }
+  // Sem Supabase configurado, não há plano: libera tudo (não travar quem já usa).
+  if (!conta.configurado()) p = { plan: 'pro', features: ['*'], lifetime: true };
+  _planoCache = { valor: p, quando: agora };
+  return p;
+}
+
+function temFeature(perfil, feat) {
+  if (!perfil) return false;
+  const lista = Array.isArray(perfil.features) ? perfil.features : [];
+  if (lista.includes('*')) return true;
+  return lista.includes(feat);
+}
+
+async function canalPermitido(nome, arg) {
+  if (CANAIS_SEMPRE_LIVRES.has(nome)) return { ok: true };
+  const p = await planoAtual();
+  if (!p) return { ok: false, error: 'Faça login para usar esta função.', code: 'no_session' };
+  if (temFeature(p, '*')) return { ok: true };
+
+  // Ação avulsa: "Otimização Rápida" é liberada no plano de entrada, como no GDZ.
+  if (nome === 'run-action' || nome === 'run-once') {
+    const acao = arg && (arg.action || arg.nome || arg);
+    if (acao === 'Otimização Rápida') {
+      return temFeature(p, 'quick-opt') ? { ok: true } : { ok: false, error: MSG_PLANO, code: 'plan' };
+    }
+    return { ok: true };
+  }
+
+  const feat = CANAL_FEATURE[nome];
+  if (!feat) return { ok: true };   // canal não mapeado = liberado (mesma regra do GDZ)
+  return temFeature(p, feat) ? { ok: true } : { ok: false, error: MSG_PLANO, code: 'plan' };
+}
+
 // Cache curto: não consulta o banco a cada clique, mas percebe o logout em até 15 segundos.
 let _sessaoCache = { valor: null, quando: 0 };
 
@@ -586,11 +666,19 @@ function esquecerSessao() {
   _sessaoCache = { valor: null, quando: 0 };
   // Plano do usuário anterior não vale como "antes" para o próximo login.
   try { planUltimoVisto = null; } catch (e) { }
+  // A ficha do plano mudou de conta: o cache de permissão também precisa cair.
+  try { _planoCache = { valor: null, quando: 0 }; } catch (e) { }
 }
 
 const H = (name, fn) => ipcMain.handle(name, async (e, arg) => {
   if (!CANAIS_LIVRES.has(name) && !(await sessaoAtiva())) {
     return { success: false, error: 'Faça login para usar esta função.', code: 'no_session' };
+  }
+  // Segunda trava: o PLANO. Antes só o renderer escondia as páginas; quem chamasse o
+  // IPC direto usava tudo. Agora o backend recusa igual ao channelAllowed do GDZ.
+  const permitido = await canalPermitido(name, arg);
+  if (!permitido.ok) {
+    return { success: false, error: permitido.error, code: permitido.code || 'plan' };
   }
   return fn(arg);
 });

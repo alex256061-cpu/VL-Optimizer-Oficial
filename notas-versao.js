@@ -10,6 +10,23 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.58': {
+    corrigido: [
+      '"Limpar cache de shaders" nao funcionava e agora limpa de verdade.',
+      '"Resgatar chave" nao funcionava. Corrigido.',
+      'A tela dizia que a atualizacao falhou quando ela tinha dado certo. Corrigido.',
+      'Encerrar processo, detectar jogo aberto, limpar cache da Epic e detectar sobras de programas: todos agora avisam a verdade.',
+      'A aba VL Scaling nao mostrava a configuracao atual e o "Recomendado" dava erro. Corrigido.',
+      'As opcoes de sincronizacao do VL Scaling nao eram gravadas. Corrigido.',
+    ],
+    novo: [
+      'A recomendacao de encoder para live agora usa a sua placa de video de verdade (NVENC, AMF ou QuickSync), com preset, bitrate e keyframe.',
+      'A aba Sobre mostra a versao instalada e deixa voce ligar ou desligar a telemetria quando quiser.',
+      'O overlay agora mostra a temperatura da CPU, quando o PC tiver o sensor.',
+      'O botao "Restaurar" da aba Reparos religa tudo que uma versao antiga do VL possa ter desligado: servicos, Game Bar, atualizacoes, arquivo de paginacao e mais.',
+      'Num Ryzen X3D de dois chips, o Xbox Game Bar nao e mais removido: o driver da AMD usa ele para escolher o chip certo do jogo.',
+    ],
+  },
   '1.4.57': {
     corrigido: [
       'A aba VL Scaling nao mostrava a configuracao atual e o botao "Recomendado" sempre dava erro. Ao clicar em Iniciar, os valores de fabrica eram gravados por cima do que voce tinha ajustado. Corrigido.',

@@ -804,13 +804,27 @@ ex.appsLeftovers = async ({ key }) => {
   // Sem esta guarda, uma chave fora do cache deixava nm = '', path.join(base, '')
   // devolvia a própria pasta-raiz (C:\Program Files, C:\ProgramData...), e a tela
   // oferecia apagar o sistema como se fosse "sobra" de um programa.
+  // Nomes de pasta que NUNCA são sobra de um programa: são compartilhados entre
+  // vários ou pertencem ao próprio Windows. É o `safeAppDir` do GDZ.
+  const PASTA_PROTEGIDA = new Set([
+    'microsoft', 'windows', 'windowsapps', 'windows nt', 'common files', 'internet explorer',
+    'installshield', 'package cache', 'temp', 'tmp', 'cache', 'data', 'appdata', 'programdata',
+    'program files', 'program files (x86)', 'system32', 'syswow64', 'drivers', 'desktop',
+    'documents', 'downloads', 'pictures', 'videos', 'music', 'public', 'default', 'default user',
+    'all users', 'users', 'steam', 'steamapps', 'epic games', 'riot games', 'battle.net',
+    'google', 'mozilla', 'nvidia corporation', 'amd', 'intel', 'realtek', 'obs-studio',
+  ]);
+
   const nm = String(a.name || '').replace(/[\\/:*?"<>|]/g, '').trim();
   const RAIZES = new Set([
     'C:\\ProgramData', 'C:\\Program Files', 'C:\\Program Files (x86)',
     path.join(os.homedir(), 'AppData', 'Roaming'),
     path.join(os.homedir(), 'AppData', 'Local'),
   ].map((p) => p.toLowerCase().replace(/\\+$/, '')));
-  if (nm.length >= 3) {
+  // Proteções do `safeAppDir` do GDZ: nome curto, nome reservado ou nome que é
+  // pasta compartilhada NÃO entram como sobra.
+  const nomeProtegido = nm.length < 3 || PASTA_PROTEGIDA.has(nm.toLowerCase());
+  if (!nomeProtegido) {
     for (const base of [path.join(os.homedir(), 'AppData', 'Roaming'), path.join(os.homedir(), 'AppData', 'Local'), 'C:\\ProgramData', 'C:\\Program Files', 'C:\\Program Files (x86)']) {
       const p = path.join(base, nm);
       if (RAIZES.has(p.toLowerCase().replace(/\\+$/, ''))) continue; // nunca a raiz
@@ -2419,7 +2433,7 @@ function overlayPayload() {
   };
 }
 
-let lastSys = { cpu: null, cpuTemp: null, gpu: null, gpuTemp: null, ramUsed: null, ramTotal: null, gpuAt: 0 };
+let lastSys = { cpu: null, cpuTemp: null, cpuTempAt: 0, gpu: null, gpuTemp: null, ramUsed: null, ramTotal: null, gpuAt: 0 };
 async function sysSample() {
   // CPU e RAM vem do proprio Node: neste Windows os contadores de performance respondem
   // "nenhum contador valido" para \Processor(_Total).
@@ -2441,6 +2455,35 @@ async function sysSample() {
     lastSys.ramTotal = Math.round(tot / 1048576);
     lastSys.ramUsed = Math.round((tot - liv) / 1048576);
   } catch (e) { }
+
+  // Temperatura da CPU.
+  //
+  // O campo existia no lastSys desde sempre e NUNCA era preenchido — o overlay tinha
+  // a opção "Temp. da CPU" e mostrava "--" em todo PC.
+  //
+  // Mesma fonte do GDZ: Win32_PerfFormattedData_Counters_ThermalZoneInformation.
+  // O valor vem em Kelvin × 10; Celsius = valor / 10 - 273.15.
+  // Faixa aceita 30..115 °C, igual ao GDZ: fora disso é leitura inválida (muitos
+  // notebooks devolvem 0 ou 2732 quando não têm o sensor).
+  //
+  // Não faz a cada 500 ms: o contador de performance custa ~100 ms e a temperatura
+  // não muda rápido. A cada 4 s é de sobra.
+  if (!lastSys.cpuTempAt || Date.now() - lastSys.cpuTempAt > 4000) {
+    lastSys.cpuTempAt = Date.now();
+    try {
+      const r = await core.ps(String.raw`$tz = @(Get-CimInstance Win32_PerfFormattedData_Counters_ThermalZoneInformation -ErrorAction SilentlyContinue)
+        if (-not $tz.Count) { Write-Output '' ; exit }
+        $m = ($tz | Measure-Object -Property HighPrecisionTemperature -Maximum).Maximum
+        if ($null -eq $m) { Write-Output '' } else { Write-Output ([string]$m) }`, 8000);
+      const bruto = String(r.out || '').trim();
+      if (bruto) {
+        const celsius = Number(bruto) / 10 - 273.15;
+        lastSys.cpuTemp = (celsius > 30 && celsius < 115) ? Math.round(celsius) : null;
+      } else {
+        lastSys.cpuTemp = null;
+      }
+    } catch (e) { lastSys.cpuTemp = null; }
+  }
 
   // GPU pelo nvidia-smi (~120 ms).
   // O intervalo do overlay é 500 ms (o overlayTimer do GDZ), mas o sensor dele roda a
