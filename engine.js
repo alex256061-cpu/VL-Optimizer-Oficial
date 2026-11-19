@@ -304,6 +304,14 @@ async function psBackupState(key, regs, svcs) {
 }
 const esc = (s) => String(s == null ? '' : s).replace(/'/g, "''");
 
+// Chave de identificação de um valor de registro: path|name.
+//
+// Precisa ser path|name porque existe valor HOMÔNIMO em chaves diferentes:
+//   "Flags" em HKCU\Control Panel\Accessibility\StickyKeys, \ToggleKeys e
+//   \Keyboard Response; "InitialKeyboardIndicators" em Keyboard e em ...\Run.
+// Indexar só por name fazia backup/restauração/conferência pegarem o valor errado.
+const chaveReg = (path, name) => String(path || '').toLowerCase().replace(/\\+$/, '') + '|' + String(name || '').toLowerCase();
+
 // Restaura um backup salvo.
 async function restoreBackup(key) {
   const b = loadBackups();
@@ -345,12 +353,21 @@ async function restoreBackup(key) {
   // Conferir se o registro voltou mesmo ao valor original antes de descartar o backup.
   // ps() devolve ok:true apenas quando o PowerShell nao deu erro, nao quando a mudanca
   // aconteceu. Sem esta conferencia, um comando que roda sem efeito apagava o backup.
+  //
+  // A chave da conferencia é path|name, NAO só name.
+  //
+  // Três chaves de acessibilidade têm o MESMO nome de valor ("Flags"): StickyKeys,
+  // ToggleKeys e Keyboard Response. Indexando só por nome, o .find devolvia sempre o
+  // primeiro Flags e comparava 510 contra 62: dava divergência falsa e o cliente via
+  // "o Windows nao voltou ao valor original" com o registro já restaurado corretamente.
+  // Mesma classe de defeito que o lerRegsAtuais já tinha. A função chaveReg é a
+  // mesma usada pelo lerAnterior (backup dos tweaks), definida no topo do arquivo.
   let confere = true;
   if (st.reg && st.reg.length) {
     const partes = st.reg.map((r) => {
       const nome = String(r.name).replace(/'/g, "''");
       const caminho = String(r.path).replace(/'/g, "''");
-      return "$v = $null; $e = $false; try { $v = (Get-ItemProperty -LiteralPath '" + caminho + "' -Name '" + nome + "' -ErrorAction Stop).'" + nome + "'; $e = $true } catch {}; $o += @{ name='" + nome + "'; exists=$e; value=$v }";
+      return "$v = $null; $e = $false; try { $v = (Get-ItemProperty -LiteralPath '" + caminho + "' -Name '" + nome + "' -ErrorAction Stop).'" + nome + "'; $e = $true } catch {}; $o += @{ path='" + caminho + "'; name='" + nome + "'; exists=$e; value=$v }";
     });
     const script = "$o = @()" + String.fromCharCode(10) + partes.join(String.fromCharCode(10)) + String.fromCharCode(10) + "Write-Output (Json $o)";
     const rl = await ps(script, 30000);
@@ -361,8 +378,9 @@ async function restoreBackup(key) {
         // código morto: reportava sucesso e apagava o backup mesmo com valor divergente.
         const bruto = JSON.parse(rl.out);
         const atual = Array.isArray(bruto) ? bruto : (bruto ? [bruto] : []);
+        const porChave = new Map(atual.filter((x) => x && x.name).map((x) => [chaveReg(x.path, x.name), x]));
         for (const original of st.reg) {
-          const agora = atual.find((x) => x && x.name === original.name);
+          const agora = porChave.get(chaveReg(original.path, original.name));
           if (!agora) { confere = false; break; }
           if (!!original.exists !== !!agora.exists) { confere = false; break; }
           if (original.exists && String(agora.value) !== String(original.value)) { confere = false; break; }
@@ -1228,7 +1246,327 @@ const ACTIONS = {
         exit
       }
       Write-Output 'ok'`,
-  },};
+  },
+  // ══════════════════════════════════════════════════════════════════════════
+  // Ações do catálogo do GDZ que NÃO têm card (nem lá nem aqui)
+  //
+  // Extraídas do bundle de referência (const ACTIONS no gdz-SEM-MANGLE.js),
+  // palavra por palavra. Ficam no motor para paridade de capacidade: o canal
+  // run-action aceita os mesmos nomes que o app de referência aceita.
+  //
+  // Sem card de propósito. O GDZ também não mostra nenhuma destas na tela, e
+  // card a mais aqui duplicaria ajuste que já existe (mouse-accel, sticky,
+  // game-mode) e poluiria as páginas.
+  // ══════════════════════════════════════════════════════════════════════════
+  'Sem Atalhos de Acessibilidade': {
+    tag: 'tweaks',
+    title: 'Sem atalhos de acessibilidade',
+    desc: 'Tira o atalho que abre Teclas de Aderência (Shift 5x), Teclas de Alternância e Resposta do Teclado. O recurso continua disponível nas Configurações de Acessibilidade do Windows.',
+    regs: [
+      { path: HKCU + '\\Control Panel\\Accessibility\\StickyKeys', name: 'Flags', type: 'String', on: '506', off: '510' },
+      { path: HKCU + '\\Control Panel\\Accessibility\\ToggleKeys', name: 'Flags', type: 'String', on: '58', off: '62' },
+      { path: HKCU + '\\Control Panel\\Accessibility\\Keyboard Response', name: 'Flags', type: 'String', on: '122', off: '126' },
+    ],
+    detect: `$n = 0
+      foreach ($par in @(@('StickyKeys','506'), @('ToggleKeys','58'), @('Keyboard Response','122'))) {
+        $v = [string](Get-Val ('${HKCU}\\Control Panel\\Accessibility\\' + $par[0]) 'Flags')
+        if ($v -eq $par[1]) { $n++ }
+      }
+      if ($n -eq 3) { Write-Output '1' } else { Write-Output '0' }`,
+    revert: `Set-Val '${HKCU}\\Control Panel\\Accessibility\\StickyKeys' 'Flags' '510' 'String'
+      Set-Val '${HKCU}\\Control Panel\\Accessibility\\ToggleKeys' 'Flags' '62' 'String'
+      Set-Val '${HKCU}\\Control Panel\\Accessibility\\Keyboard Response' 'Flags' '126' 'String'
+      Write-Output 'ok'`,
+  },
+  'Reduzir Input Lag': {
+    tag: 'tweaks',
+    title: 'Menos atraso de mouse e teclado',
+    desc: 'Desliga a aceleração do mouse e os atalhos de acessibilidade de uma vez. É a soma dos dois ajustes.',
+    // Ver comentário em 'Todos Tweaks Aplicados': o driver do mouse precisa da SPI
+    // depois de o registro voltar pelo backup.
+    revertSempre: true,
+    regs: [
+      { path: HKCU + '\\Control Panel\\Mouse', name: 'MouseSpeed', type: 'String', on: '0', off: '1' },
+      { path: HKCU + '\\Control Panel\\Mouse', name: 'MouseThreshold1', type: 'String', on: '0', off: '6' },
+      { path: HKCU + '\\Control Panel\\Mouse', name: 'MouseThreshold2', type: 'String', on: '0', off: '10' },
+      { path: HKCU + '\\Control Panel\\Accessibility\\StickyKeys', name: 'Flags', type: 'String', on: '506', off: '510' },
+      { path: HKCU + '\\Control Panel\\Accessibility\\ToggleKeys', name: 'Flags', type: 'String', on: '58', off: '62' },
+      { path: HKCU + '\\Control Panel\\Accessibility\\Keyboard Response', name: 'Flags', type: 'String', on: '122', off: '126' },
+    ],
+    run: `Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public class VlMouseA { [DllImport("user32.dll")] public static extern bool SystemParametersInfo(uint a, uint b, int[] c, uint d); }' -ErrorAction SilentlyContinue
+      [VlMouseA]::SystemParametersInfo(0x0004, 0, [int[]](0,0,0), 0x0002) | Out-Null
+      Write-Output 'ok'`,
+    detect: `$m = [string](Get-Val '${HKCU}\\Control Panel\\Mouse' 'MouseSpeed')
+      $n = 0
+      foreach ($par in @(@('StickyKeys','506'), @('ToggleKeys','58'), @('Keyboard Response','122'))) {
+        $v = [string](Get-Val ('${HKCU}\\Control Panel\\Accessibility\\' + $par[0]) 'Flags')
+        if ($v -eq $par[1]) { $n++ }
+      }
+      if ($m -eq '0' -and $n -eq 3) { Write-Output '1' } else { Write-Output '0' }`,
+    revert: `Set-Val '${HKCU}\\Control Panel\\Mouse' 'MouseSpeed' '1' 'String'
+      Set-Val '${HKCU}\\Control Panel\\Mouse' 'MouseThreshold1' '6' 'String'
+      Set-Val '${HKCU}\\Control Panel\\Mouse' 'MouseThreshold2' '10' 'String'
+      Set-Val '${HKCU}\\Control Panel\\Accessibility\\StickyKeys' 'Flags' '510' 'String'
+      Set-Val '${HKCU}\\Control Panel\\Accessibility\\ToggleKeys' 'Flags' '62' 'String'
+      Set-Val '${HKCU}\\Control Panel\\Accessibility\\Keyboard Response' 'Flags' '126' 'String'
+      Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public class VlMouseB { [DllImport("user32.dll")] public static extern bool SystemParametersInfo(uint a, uint b, int[] c, uint d); }' -ErrorAction SilentlyContinue
+      [VlMouseB]::SystemParametersInfo(0x0004, 0, [int[]](1,6,10), 0x0002) | Out-Null
+      Write-Output 'ok'`,
+  },
+  'Todos Tweaks Aplicados': {
+    tag: 'tweaks',
+    title: 'Todos os ajustes de uma vez',
+    desc: 'Aplica juntos: mouse sem aceleração, sem atalhos de acessibilidade, Modo de Jogo e jogos em janela otimizados.',
+    // `revertSempre`: o registro volta pelo backup, mas o driver do mouse só pega a
+    // mudança pelo SystemParametersInfo. Sem isso, o ponteiro ficava sem aceleração
+    // até sair e entrar no Windows, enquanto a tela já dizia "desligado".
+    revertSempre: true,
+    regs: [
+      { path: HKCU + '\\Control Panel\\Mouse', name: 'MouseSpeed', type: 'String', on: '0', off: '1' },
+      { path: HKCU + '\\Control Panel\\Mouse', name: 'MouseThreshold1', type: 'String', on: '0', off: '6' },
+      { path: HKCU + '\\Control Panel\\Mouse', name: 'MouseThreshold2', type: 'String', on: '0', off: '10' },
+      { path: HKCU + '\\Control Panel\\Accessibility\\StickyKeys', name: 'Flags', type: 'String', on: '506', off: '510' },
+      { path: HKCU + '\\Control Panel\\Accessibility\\ToggleKeys', name: 'Flags', type: 'String', on: '58', off: '62' },
+      { path: HKCU + '\\Control Panel\\Accessibility\\Keyboard Response', name: 'Flags', type: 'String', on: '122', off: '126' },
+      { path: HKCU + '\\Software\\Microsoft\\GameBar', name: 'AllowAutoGameMode', type: 'DWord', on: 1, off: 0 },
+      { path: HKCU + '\\Software\\Microsoft\\GameBar', name: 'AutoGameModeEnabled', type: 'DWord', on: 1, off: 0 },
+      // Só para o BACKUP: quem escreve este valor é o `run` (porque ele é composto com
+      // o que já estava lá). Sem esta entrada, o `SwapEffectUpgradeEnable=1;` que a
+      // ação acrescenta no Windows 11 ficava para sempre depois do desfazer.
+      { path: HKCU + '\\Software\\Microsoft\\DirectX\\UserGpuPreferences', name: 'DirectXUserGlobalSettings', type: 'String', soBackup: true },
+    ],
+    run: `Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public class VlMouseC { [DllImport("user32.dll")] public static extern bool SystemParametersInfo(uint a, uint b, int[] c, uint d); }' -ErrorAction SilentlyContinue
+      [VlMouseC]::SystemParametersInfo(0x0004, 0, [int[]](0,0,0), 0x0002) | Out-Null
+      if ([Environment]::OSVersion.Version.Build -ge 22000) {
+        $cur = [string](Get-Val '${HKCU}\\Software\\Microsoft\\DirectX\\UserGpuPreferences' 'DirectXUserGlobalSettings')
+        $cur = $cur -replace 'SwapEffectUpgradeEnable=\\d;', ''
+        Set-Val '${HKCU}\\Software\\Microsoft\\DirectX\\UserGpuPreferences' 'DirectXUserGlobalSettings' ($cur + 'SwapEffectUpgradeEnable=1;') 'String'
+      }
+      Write-Output 'ok'`,
+    detect: `$m = [string](Get-Val '${HKCU}\\Control Panel\\Mouse' 'MouseSpeed')
+      $n = 0
+      foreach ($par in @(@('StickyKeys','506'), @('ToggleKeys','58'), @('Keyboard Response','122'))) {
+        $v = [string](Get-Val ('${HKCU}\\Control Panel\\Accessibility\\' + $par[0]) 'Flags')
+        if ($v -eq $par[1]) { $n++ }
+      }
+      $g1 = [string](Get-Val '${HKCU}\\Software\\Microsoft\\GameBar' 'AllowAutoGameMode')
+      $g2 = [string](Get-Val '${HKCU}\\Software\\Microsoft\\GameBar' 'AutoGameModeEnabled')
+      if ($m -eq '0' -and $n -eq 3 -and $g1 -eq '1' -and $g2 -eq '1') { Write-Output '1' } else { Write-Output '0' }`,
+    revert: `Set-Val '${HKCU}\\Control Panel\\Mouse' 'MouseSpeed' '1' 'String'
+      Set-Val '${HKCU}\\Control Panel\\Mouse' 'MouseThreshold1' '6' 'String'
+      Set-Val '${HKCU}\\Control Panel\\Mouse' 'MouseThreshold2' '10' 'String'
+      Set-Val '${HKCU}\\Control Panel\\Accessibility\\StickyKeys' 'Flags' '510' 'String'
+      Set-Val '${HKCU}\\Control Panel\\Accessibility\\ToggleKeys' 'Flags' '62' 'String'
+      Set-Val '${HKCU}\\Control Panel\\Accessibility\\Keyboard Response' 'Flags' '126' 'String'
+      Set-Val '${HKCU}\\Software\\Microsoft\\GameBar' 'AllowAutoGameMode' 0 'DWord'
+      Set-Val '${HKCU}\\Software\\Microsoft\\GameBar' 'AutoGameModeEnabled' 0 'DWord'
+      Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public class VlMouseD { [DllImport("user32.dll")] public static extern bool SystemParametersInfo(uint a, uint b, int[] c, uint d); }' -ErrorAction SilentlyContinue
+      [VlMouseD]::SystemParametersInfo(0x0004, 0, [int[]](1,6,10), 0x0002) | Out-Null
+      Write-Output 'ok'`,
+  },
+  // "Efeitos Visuais Off" — o card que o GDZ MOSTRA e que esteve removido aqui.
+  //
+  // O defeito da versão antiga: o desfazer gravava 0 (padrão) por cima do valor
+  // que o cliente tinha, porque o revert do GDZ só mexe em VisualFXSetting e
+  // NUNCA devolve o UserPreferencesMask. Aqui as duas chaves estão em `regs`,
+  // então o runAction arquiva o valor atual antes de aplicar e o revertAction
+  // restaura EXATAMENTE o que estava — a máscara do cliente não se perde.
+  'Efeitos Visuais Off': {
+    tag: 'desempenho',
+    title: 'Sem efeitos visuais do Windows',
+    desc: 'Tira sombras e animações de janelas e menus. Ajuda em PC com vídeo integrado ou pouca memória.',
+    note: 'O Windows fica com a cara mais simples. O desfazer devolve exatamente o que estava configurado. A mudança vale quando o Explorer reiniciar ou no próximo login.',
+    // Os valores de `on` são os do GDZ: VisualFXSetting=2 e máscara 0x90,0x12,0x03,0x80,0x10.
+    // O `off` é só o padrão de fábrica do Windows (o do GDZ é 0x9E,0x1E,0x07,0x80,0x12):
+    // no caminho normal o desfazer devolve o BACKUP, nunca este valor.
+    regs: [
+      { path: HKCU + '\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\VisualEffects', name: 'VisualFXSetting', type: 'DWord', on: 2, off: 0 },
+      { path: HKCU + '\\Control Panel\\Desktop', name: 'UserPreferencesMask', type: 'Binary', on: '144,18,3,128,16,0,0,0', off: '158,30,7,128,18,0,0,0' },
+    ],
+    // Detect igual ao do GDZ: VisualFXSetting == 2 OU (MinAnimate == 0 E máscara sem
+    // os bits de animação). Sem o MinAnimate, um cliente que só personalizou a máscara
+    // aparecia como "ligado" sem nunca ter aplicado.
+    detect: `$v = [string](Get-Val '${HKCU}\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\VisualEffects' 'VisualFXSetting')
+      $mask = Get-Val '${HKCU}\\Control Panel\\Desktop' 'UserPreferencesMask'
+      $anim = -1
+      if ($mask) { try { $anim = ([int]$mask[0]) -band 0x06 } catch { $anim = -1 } }
+      $mina = [string](Get-Val '${HKCU}\\Control Panel\\Desktop\\WindowMetrics' 'MinAnimate')
+      if ($v -eq '2' -or ($mina -eq '0' -and $anim -ge 0 -and $anim -eq 0)) { Write-Output '1' } else { Write-Output '0' }`,
+    // Fallback (= só quando não existe backup, o que é raro): máscara PADRÃO do GDZ.
+    revert: `Set-Val '${HKCU}\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\VisualEffects' 'VisualFXSetting' 0 'DWord'
+      Set-Val '${HKCU}\\Control Panel\\Desktop' 'UserPreferencesMask' '158,30,7,128,18,0,0,0' 'Binary'
+      Write-Output 'ok'`,
+  },
+  // "720p Boost Ativo" — o card do GDZ que esteve removido aqui por deixar tela preta.
+  //
+  // O defeito da versão antiga: a struct DEVMODE era declarada com 6 inteiros (24
+  // bytes) em vez dos 156 da DEVMODEA. O driver recebia lixo em dmPelsWidth e o
+  // cliente podia ficar sem imagem.
+  //
+  // O que muda em relação ao GDZ (que usa struct de 124 bytes e não testa nada):
+  //   1. a struct é a DEVMODEA completa (156 bytes, conferida em tempo de execução);
+  //   2. um CDS_TEST antes de aplicar — se a tela não aceitar 1280x720, nada muda;
+  //   3. depois de aplicar, confere a resolução real e, se não mudou, já restaura;
+  //   4. a resolução anterior fica em HKCU\Software\VLOptimizer (chave nossa).
+  '720p Boost Ativo': {
+    tag: 'desempenho',
+    title: 'Tela em 720p (emergência)',
+    desc: 'Baixa a resolução do Windows para 1280x720 para a placa de vídeo aguentar. Volta ao desligar ou ao reiniciar o PC.',
+    note: 'Tudo fica maior e menos nítido. Prefira baixar a resolução dentro do jogo ou usar o VL Scaling. O VL testa o modo antes de aplicar: se a sua tela não aceitar 1280x720, nada muda.',
+    // Diferenças em relação ao GDZ, todas de segurança:
+    //   1. DEVMODEW completa (220 bytes) e a chamada feita DENTRO do C#. O GDZ usa
+    //      struct de 124 bytes montada no PowerShell; a nossa versão antiga declarava
+    //      24 bytes e deixou cliente com tela preta.
+    //   2. CDS_TEST antes de aplicar: se a tela não aceitar 1280x720, nada muda.
+    //   3. Todo ChangeDisplaySettings tem o código de retorno conferido.
+    //   4. Depois de aplicar, confere a resolução real; se não mudou, já restaura.
+    //   5. Se restaurar falhar, a mensagem diz que falhou em vez de mentir.
+    //   6. Resolução anterior em HKCU\Software\VLOptimizer (chave nossa) e apagada
+    //      depois de voltar com sucesso.
+    //   7. Ler a resolução por EnumDisplaySettings do próprio monitor primário, em vez
+    //      de Win32_VideoController (que em notebook híbrido devolve a GPU errada).
+    run: `$a = [VlTelaA]::Atual()
+      if (-not $a) { Write-Output 'VL_ERRO: nao consegui ler a resolucao atual da tela, entao nao vou mexer nela.'; exit }
+      if ($a.StartsWith('ERRO:')) { Write-Output ('VL_ERRO: nao consegui ler a resolucao atual da tela (' + $a + ').'); exit }
+      $partes = $a.Split('|')
+      $w0 = 0; $h0 = 0
+      $dims = $partes[0].Split('x')
+      if ($dims.Count -eq 2) { $w0 = [int]$dims[0]; $h0 = [int]$dims[1] }
+      if (-not $w0 -or -not $h0) { Write-Output 'VL_ERRO: a resolucao atual da tela veio vazia. Nada foi alterado.'; exit }
+      if ($w0 -eq 1280 -and $h0 -eq 720) { Write-Output 'ja-720'; exit 0 }
+      New-Key '${HKCU}\\Software\\VLOptimizer'
+      Set-Val '${HKCU}\\Software\\VLOptimizer' 'PrevResW' $w0 'DWord'
+      Set-Val '${HKCU}\\Software\\VLOptimizer' 'PrevResH' $h0 'DWord'
+      $teste = [VlTelaA]::Testar(1280, 720)
+      if ($teste -ne 0) {
+        Write-Output ('VL_ERRO: esta tela nao aceita 1280x720 (o Windows devolveu ' + $teste + '). Nada foi alterado.')
+        exit
+      }
+      $r = [VlTelaA]::Aplicar(1280, 720)
+      if ($r -ne 0) {
+        Write-Output ('VL_ERRO: o Windows recusou mudar para 1280x720 (codigo ' + $r + '). Nada foi alterado.')
+        exit
+      }
+      Start-Sleep -Milliseconds 1200
+      $depois = [VlTelaA]::Atual()
+      if (-not $depois.StartsWith('1280x720|')) {
+        $rb = [VlTelaA]::Aplicar($w0, $h0)
+        Start-Sleep -Milliseconds 800
+        $conf = [VlTelaA]::Atual()
+        if ($rb -eq 0 -and $conf.StartsWith([string]$w0 + 'x' + [string]$h0 + '|')) {
+          Write-Output ('VL_ERRO: a tela nao mudou para 1280x720. A resolucao anterior (' + $w0 + 'x' + $h0 + ') foi restaurada.')
+        } else {
+          Write-Output ('VL_ERRO: a tela nao mudou para 1280x720 E a resolucao anterior (' + $w0 + 'x' + $h0 + ') nao voltou sozinha (codigo ' + $rb + '). Reinicie o PC ou mude a resolucao pelas Configuracoes do Windows.')
+        }
+        exit
+      }
+      Write-Output 'ok'`,
+    detect: `$tem = $false
+      try { $tem = [bool](Get-Val '${HKCU}\\Software\\VLOptimizer' 'PrevResW') } catch { $tem = $false }
+      if (-not $tem) { Write-Output '0' } else {
+        $w = 0; $h = 0
+        $g = @(Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue | Where-Object { $_.CurrentHorizontalResolution -and $_.CurrentVerticalResolution })
+        if ($g.Count) { $w = [int]$g[0].CurrentHorizontalResolution; $h = [int]$g[0].CurrentVerticalResolution }
+        if ($w -eq 1280 -and $h -eq 720) { Write-Output '1' } else { Write-Output '0' }
+      }`,
+    revert: `$w0 = 0; $h0 = 0
+      try { $w0 = [int](Get-Val '${HKCU}\\Software\\VLOptimizer' 'PrevResW') } catch { $w0 = 0 }
+      try { $h0 = [int](Get-Val '${HKCU}\\Software\\VLOptimizer' 'PrevResH') } catch { $h0 = 0 }
+      if (-not $w0 -or -not $h0) { Write-Output 'VL_ERRO: nada a desfazer: nao ha resolucao anterior guardada.'; exit }
+      $teste = [VlTelaB]::Testar($w0, $h0)
+      if ($teste -ne 0) { Write-Output ('VL_ERRO: esta tela nao aceita de volta ' + $w0 + 'x' + $h0 + ' (codigo ' + $teste + '). Nada foi alterado.'); exit }
+      $r = [VlTelaB]::Aplicar($w0, $h0)
+      if ($r -ne 0) { Write-Output ('VL_ERRO: o Windows recusou voltar para ' + $w0 + 'x' + $h0 + ' (codigo ' + $r + ').'); exit }
+      Start-Sleep -Milliseconds 1200
+      $conf = [VlTelaB]::Atual()
+      if (-not $conf.StartsWith([string]$w0 + 'x' + [string]$h0 + '|')) {
+        Write-Output ('VL_ERRO: pedi para voltar a ' + $w0 + 'x' + $h0 + ' mas a tela esta em ' + $conf + '. Use as Configuracoes do Windows para ajustar ou reinicie o PC.')
+        exit
+      }
+      Del-Val '${HKCU}\\Software\\VLOptimizer' 'PrevResW'
+      Del-Val '${HKCU}\\Software\\VLOptimizer' 'PrevResH'
+      Write-Output 'ok'`,
+    // A classe C# que fala com o driver. Fica DECLARADA aqui e o runAction/revertAction
+    // injetam o Add-Type antes do script — assim o PowerShell nunca precisa receber uma
+    // struct por ref (era ali que a struct truncada virava lixo no driver).
+    psPre: `Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+using System.Threading;
+public class __CLASSE__ {
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+  static extern bool EnumDisplaySettingsW(string lpszDeviceName, int iModeNum, ref DEVMODE lpDevMode);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+  static extern int ChangeDisplaySettingsW(ref DEVMODE lpDevMode, int dwFlags);
+  [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+  struct DEVMODE {
+    [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string dmDeviceName;
+    public short dmSpecVersion;
+    public short dmDriverVersion;
+    public short dmSize;
+    public short dmDriverExtra;
+    public int dmFields;
+    public int dmPositionX;
+    public int dmPositionY;
+    public int dmDisplayOrientation;
+    public int dmDisplayFixedOutput;
+    public short dmColor;
+    public short dmDuplex;
+    public short dmYResolution;
+    public short dmTTOption;
+    public short dmCollate;
+    [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string dmFormName;
+    public short dmLogPixels;
+    public int dmBitsPerPel;
+    public int dmPelsWidth;
+    public int dmPelsHeight;
+    public int dmDisplayFlags;
+    public int dmDisplayFrequency;
+    public int dmICMMethod;
+    public int dmICMIntent;
+    public int dmMediaType;
+    public int dmDitherType;
+    public int dmReserved1;
+    public int dmReserved2;
+    public int dmPanningWidth;
+    public int dmPanningHeight;
+  }
+  static DEVMODE Novo() {
+    DEVMODE d = new DEVMODE();
+    d.dmDeviceName = "";
+    d.dmFormName = "";
+    d.dmSize = (short)Marshal.SizeOf(typeof(DEVMODE));
+    return d;
+  }
+  public static string Atual() {
+    try {
+      DEVMODE d = Novo();
+      if (!EnumDisplaySettingsW(null, -1, ref d)) return "";
+      return d.dmPelsWidth + "x" + d.dmPelsHeight + "|" + d.dmDisplayFrequency + "|" + d.dmBitsPerPel;
+    } catch (Exception e) { return "ERRO:" + e.Message; }
+  }
+  public static int Testar(int w, int h) {
+    try {
+      DEVMODE d = Novo();
+      d.dmPelsWidth = w;
+      d.dmPelsHeight = h;
+      d.dmFields = 0x180000;
+      return ChangeDisplaySettingsW(ref d, 0x2);
+    } catch (Exception) { return -99; }
+  }
+  public static int Aplicar(int w, int h) {
+    try {
+      DEVMODE d = Novo();
+      d.dmPelsWidth = w;
+      d.dmPelsHeight = h;
+      d.dmFields = 0x180000;
+      return ChangeDisplaySettingsW(ref d, 0);
+    } catch (Exception) { return -99; }
+  }
+}
+"@`,
+  },
+};
 
 const ACTION_NAMES = Object.keys(ACTIONS);
 
@@ -1457,6 +1795,140 @@ const ONCES = {
     desc: 'Desfaz o antigo "Desativar DPI Scaling", que deixava textos e janelas minúsculos em telas grandes.',
     run: `Set-Val '${HKCU}\\Control Panel\\Desktop' 'Win8DpiScaling' 0 'DWord'; Del-Val '${HKCU}\\Control Panel\\Desktop' 'LogPixels'; Write-Output 'ok'`,
   },
+  // ══════════════════════════════════════════════════════════════════════════
+  // Ações "de uma vez" do catálogo do GDZ que NÃO têm card (nem lá nem aqui)
+  //
+  // Mesmos scripts do bundle de referência (const ACTIONS), palavra por palavra.
+  // Ficam sem card pelo mesmo motivo das ações acima: o GDZ não mostra nenhuma
+  // delas na tela.
+  // ══════════════════════════════════════════════════════════════════════════
+  'Temporários Removidos': {
+    tag: 'tweaks',
+    title: 'Limpar os temporários',
+    btn: 'Limpar',
+    desc: 'Apaga os arquivos temporários com mais de um dia, da pasta do usuário e da pasta do Windows.',
+    // Diferença em relação ao GDZ: ele apaga pastas antigas com -Recurse (o que leva
+    // junto arquivo NOVO que esteja dentro de uma pasta antiga) e não conta falha
+    // nenhuma — um arquivo em uso ou uma pasta do Windows sem permissão passava
+    // batido e o app dizia "concluído". Aqui:
+    //   - apaga só ARQUIVO com data antiga, entrar em subpasta;
+    //   - só remove pasta se ela ficou vazia;
+    //   - não segue junction/symlink (ReparsePoint);
+    //   - conta o que falhou e avisa em vez de mentir sucesso.
+    run: `$limite = (Get-Date).AddDays(-1)
+      $ok = 0; $falha = 0
+      foreach ($base in @($env:TEMP, 'C:\\Windows\\Temp')) {
+        if (-not $base) { continue }
+        if (-not (Test-Path -LiteralPath $base)) { continue }
+        $arquivos = @(Get-ChildItem -LiteralPath $base -Recurse -File -Force -ErrorAction SilentlyContinue |
+          Where-Object { $_.LastWriteTime -lt $limite -and -not ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) })
+        foreach ($f in $arquivos) {
+          try { Remove-Item -LiteralPath $f.FullName -Force -ErrorAction Stop; $ok++ } catch { $falha++ }
+        }
+        $pastas = @(Get-ChildItem -LiteralPath $base -Recurse -Directory -Force -ErrorAction SilentlyContinue |
+          Where-Object { $_.LastWriteTime -lt $limite -and -not ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) } |
+          Sort-Object { $_.FullName.Length } -Descending)
+        foreach ($d in $pastas) {
+          try {
+            if (@(Get-ChildItem -LiteralPath $d.FullName -Force -ErrorAction SilentlyContinue).Count -eq 0) {
+              Remove-Item -LiteralPath $d.FullName -Force -ErrorAction Stop
+            }
+          } catch { }
+        }
+      }
+      if ($ok -eq 0 -and $falha -gt 0) {
+        Write-Output ('VL_ERRO: nao consegui apagar os temporarios (' + $falha + ' item(ns) em uso ou sem permissao). Feche os programas abertos e tente de novo.')
+        exit
+      }
+      Write-Output ('removidos=' + $ok + ' falhas=' + $falha)`,
+  },
+  'Temporários Limpos': {
+    tag: 'tweaks',
+    title: 'Limpar os temporários do Windows',
+    btn: 'Limpar',
+    desc: 'Mesma limpeza dos temporários, incluindo a pasta Temp do Windows.',
+    // Diferença em relação ao GDZ: ele apaga pastas antigas com -Recurse (o que leva
+    // junto arquivo NOVO que esteja dentro de uma pasta antiga) e não conta falha
+    // nenhuma — um arquivo em uso ou uma pasta do Windows sem permissão passava
+    // batido e o app dizia "concluído". Aqui:
+    //   - apaga só ARQUIVO com data antiga, entrar em subpasta;
+    //   - só remove pasta se ela ficou vazia;
+    //   - não segue junction/symlink (ReparsePoint);
+    //   - conta o que falhou e avisa em vez de mentir sucesso.
+    run: `$limite = (Get-Date).AddDays(-1)
+      $ok = 0; $falha = 0
+      foreach ($base in @($env:TEMP, 'C:\\Windows\\Temp')) {
+        if (-not $base) { continue }
+        if (-not (Test-Path -LiteralPath $base)) { continue }
+        $arquivos = @(Get-ChildItem -LiteralPath $base -Recurse -File -Force -ErrorAction SilentlyContinue |
+          Where-Object { $_.LastWriteTime -lt $limite -and -not ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) })
+        foreach ($f in $arquivos) {
+          try { Remove-Item -LiteralPath $f.FullName -Force -ErrorAction Stop; $ok++ } catch { $falha++ }
+        }
+        $pastas = @(Get-ChildItem -LiteralPath $base -Recurse -Directory -Force -ErrorAction SilentlyContinue |
+          Where-Object { $_.LastWriteTime -lt $limite -and -not ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) } |
+          Sort-Object { $_.FullName.Length } -Descending)
+        foreach ($d in $pastas) {
+          try {
+            if (@(Get-ChildItem -LiteralPath $d.FullName -Force -ErrorAction SilentlyContinue).Count -eq 0) {
+              Remove-Item -LiteralPath $d.FullName -Force -ErrorAction Stop
+            }
+          } catch { }
+        }
+      }
+      if ($ok -eq 0 -and $falha -gt 0) {
+        Write-Output ('VL_ERRO: nao consegui apagar os temporarios (' + $falha + ' item(ns) em uso ou sem permissao). Feche os programas abertos e tente de novo.')
+        exit
+      }
+      Write-Output ('removidos=' + $ok + ' falhas=' + $falha)`,
+  },
+  'DNS Otimizado': {
+    tag: 'tweaks',
+    title: 'DNS rápido (Cloudflare e Google)',
+    btn: 'Aplicar',
+    desc: 'Aponta o DNS de todos os adaptadores de rede ligados para 1.1.1.1 e 8.8.8.8.',
+    note: 'Para voltar ao DNS automático, use a página Internet do VL.',
+    // Divergência proposital em relação ao GDZ, e é uma correção:
+    //
+    // O script do GDZ pega TODOS os adaptadores com Status 'Up' e troca o DNS deles.
+    // Isso inclui adaptador de VPN (Radmin, WireGuard, Tailscale) e switch virtual de
+    // Hyper-V/VMware: trocar o DNS desses quebra a VPN e a rede das máquinas virtuais.
+    //
+    // Aqui entra o mesmo filtro que o setDns() do app já usa na página Internet —
+    // é o comportamento que o cliente deste app já tem e que funciona.
+    run: `$idx = @(Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Up' -and $_.Virtual -eq $false -and $_.InterfaceDescription -notmatch 'VPN|Virtual|Hyper-V|VMware|VirtualBox|Loopback|TAP|TUN|Radmin|WireGuard|Tailscale' } | Where-Object { $_.Status -eq 'Up' } | ForEach-Object { $_.InterfaceIndex })
+      if (-not $idx.Count) { $idx = @(Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Up' } | ForEach-Object { $_.InterfaceIndex }) }
+      if (-not $idx.Count) { Write-Output 'VL_ERRO: nenhum adaptador de rede ligado foi encontrado.'; exit }
+      $n = 0
+      foreach ($i in $idx) {
+        try {
+          Set-DnsClientServerAddress -InterfaceIndex $i -ServerAddresses @('1.1.1.1','8.8.8.8') -ErrorAction Stop
+          $n++
+        } catch { }
+      }
+      if (-not $n) { Write-Output 'VL_ERRO: o Windows nao deixou trocar o DNS. Precisa de administrador.'; exit }
+      Write-Output ('ok ' + $n)`,
+  },
+  'Limpar Inicialização': {
+    tag: 'tweaks',
+    title: 'Tirar apps do início do Windows',
+    btn: 'Tirar',
+    desc: 'Desliga a abertura automática de Discord, Spotify, OneDrive, Steam e Epic.',
+    note: 'A pasta de inicialização do Windows é respeitada: só mexe nestes cinco.',
+    run: `$chaveAp = '${HKCU}\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartupApproved\\Run'
+      $chaveRun = '${HKCU}\\Software\\Microsoft\\Windows\\CurrentVersion\\Run'
+      New-Key $chaveAp
+      $run = Get-Item -LiteralPath $chaveRun -ErrorAction SilentlyContinue
+      $n = 0
+      foreach ($a in @('Discord','Spotify','OneDrive','Steam','EpicGamesLauncher')) {
+        if ($run -and (@($run.GetValueNames()) -contains $a)) {
+          Set-Val $chaveAp $a '3,0,0,0,0,0,0,0,0,0,0,0' 'Binary'
+          $n++
+        }
+      }
+      if (-not $n) { Write-Output 'nenhum-na-inicializacao'; exit 0 }
+      Write-Output ('ok ' + $n)`,
+  },
 };
 
 const TOOLS = {
@@ -1513,7 +1985,7 @@ const DNS_OPTS = {
 
 async function getDns() {
   const r = await ps(`
-    $act = @((Get-NetAdapter | Where-Object { $_.Status -eq 'Up' -and $_.Virtual -eq $false -and $_.InterfaceDescription -notmatch 'VPN|Virtual|Hyper-V|VMware|VirtualBox|Loopback|TAP|TUN|Radmin|WireGuard|Tailscale' }) -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Up' } | ForEach-Object { $_.InterfaceIndex })
+    $act = @(Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Up' -and $_.Virtual -eq $false -and $_.InterfaceDescription -notmatch 'VPN|Virtual|Hyper-V|VMware|VirtualBox|Loopback|TAP|TUN|Radmin|WireGuard|Tailscale' } | Where-Object { $_.Status -eq 'Up' } | ForEach-Object { $_.InterfaceIndex })
     $ifs = @(Get-DnsClientServerAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { $_.ServerAddresses.Count -gt 0 -and ($act.Count -eq 0 -or $act -contains $_.InterfaceIndex) })
     if ($ifs.Count -eq 0) { Write-Output 'auto'; exit }
     $a = ($ifs[0].ServerAddresses | Sort-Object) -join ','
@@ -1525,21 +1997,36 @@ async function getDns() {
 async function setDns(provider) {
   const srv = DNS_OPTS[provider];
   if (!provider || !DNS_OPTS.hasOwnProperty(provider)) return { success: false, error: 'DNS inválido' };
+  // Filtro de adaptadores: o mesmo da página Internet.
+  //
+  // A versão anterior deste script tinha um ERRO DE SINTAXE no PowerShell:
+  //   @((Get-NetAdapter | ...) -ErrorAction SilentlyContinue | ...)
+  // `-ErrorAction` só existe em cmdlet; aplicado ao resultado de uma expressão
+  // entre parênteses, o parser recusa o script inteiro. Resultado: a página
+  // Internet > DNS não funcionava em NENHUMA opção — nem escolher DNS, nem voltar
+  // ao automático — e o app mostrava só "falhou". O -ErrorAction agora está no
+  // Get-NetAdapter, que é onde ele vale.
+  const FILTRO = "$idx = @(Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Up' -and $_.Virtual -eq $false -and $_.InterfaceDescription -notmatch 'VPN|Virtual|Hyper-V|VMware|VirtualBox|Loopback|TAP|TUN|Radmin|WireGuard|Tailscale' } | Where-Object { $_.Status -eq 'Up' } | ForEach-Object { $_.InterfaceIndex })\n" +
+    "if (-not $idx.Count) { $idx = @(Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Up' } | ForEach-Object { $_.InterfaceIndex }) }\n" +
+    "if (-not $idx.Count) { Write-Output 'VL_ERRO: nenhum adaptador de rede ligado foi encontrado.'; exit }\n";
+  // Sem administrador, Set-DnsClientServerAddress falha com "Acesso negado". Antes
+  // o -ErrorAction SilentlyContinue engolia isso e o app dizia "pronto" sem ter
+  // trocado nada. Agora a falha é contada e vira erro de verdade na tela.
   if (srv === null) {
-    const r = await ps(`
-      $idx = @((Get-NetAdapter | Where-Object { $_.Status -eq 'Up' -and $_.Virtual -eq $false -and $_.InterfaceDescription -notmatch 'VPN|Virtual|Hyper-V|VMware|VirtualBox|Loopback|TAP|TUN|Radmin|WireGuard|Tailscale' }) -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Up' } | ForEach-Object { $_.InterfaceIndex })
-      if (-not $idx.Count) { $idx = @(Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Up' } | ForEach-Object { $_.InterfaceIndex }) }
-      foreach ($i in $idx) { Set-DnsClientServerAddress -InterfaceIndex $i -ResetServerAddresses -ErrorAction SilentlyContinue }
+    const r = await ps(FILTRO + `      $falhas = 0
+      foreach ($i in $idx) { try { Set-DnsClientServerAddress -InterfaceIndex $i -ResetServerAddresses -ErrorAction Stop } catch { $falhas++ } }
+      if ($falhas -eq $idx.Count) { Write-Output 'VL_ERRO: o Windows nao deixou voltar o DNS ao automatico. Precisa de administrador.'; exit }
       Write-Output 'ok'`);
-    return { success: r.ok, dns: 'auto' };
+    if (!r.ok) return { success: false, error: r.err || 'falha', dns: 'auto' };
+    return { success: true, dns: 'auto' };
   }
   const list = srv.map((s) => `'${s}'`).join(',');
-  const r = await ps(`
-    $idx = @((Get-NetAdapter | Where-Object { $_.Status -eq 'Up' -and $_.Virtual -eq $false -and $_.InterfaceDescription -notmatch 'VPN|Virtual|Hyper-V|VMware|VirtualBox|Loopback|TAP|TUN|Radmin|WireGuard|Tailscale' }) -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Up' } | ForEach-Object { $_.InterfaceIndex })
-    if (-not $idx.Count) { $idx = @(Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Up' } | ForEach-Object { $_.InterfaceIndex }) }
-    foreach ($i in $idx) { Set-DnsClientServerAddress -InterfaceIndex $i -ServerAddresses ${list} -ErrorAction SilentlyContinue }
-    Write-Output 'ok'`);
-  return { success: r.ok, dns: provider };
+  const r = await ps(FILTRO + `      $falhas = 0
+      foreach ($i in $idx) { try { Set-DnsClientServerAddress -InterfaceIndex $i -ServerAddresses ${list} -ErrorAction Stop } catch { $falhas++ } }
+      if ($falhas -eq $idx.Count) { Write-Output 'VL_ERRO: o Windows nao deixou trocar o DNS. Precisa de administrador.'; exit }
+      Write-Output 'ok'`);
+  if (!r.ok) return { success: false, error: r.err || 'falha', dns: provider };
+  return { success: true, dns: provider };
 }
 
 // ── Capacidades do PC ──
@@ -1903,10 +2390,20 @@ async function lerAnterior(regs) {
       if (x.kind) res.tipos[x.path + '\u0000' + x.name] = x.kind;
     });
     // A ordem do Json não é garantida: devolver na ordem de `regs` para casar com os índices.
-    const mapa = {};
-    res.reg.forEach((r) => { mapa[r.name] = r; });
+    //
+    // A chave é path|name, NÃO só name.
+    //
+    // Dois ajustes da tela gravam o MESMO nome de valor em chaves diferentes:
+    //   sticky   -> "Flags" em StickyKeys, ToggleKeys e Keyboard Response
+    //   numlock  -> "InitialKeyboardIndicators" em Keyboard e ...\Run
+    // Indexando só por nome, todos os itens recebiam o ÚLTIMO valor lido: o backup do
+    // sticky gravava 126 nos três, e o desfazer devolvia 126 em StickyKeys (o certo era
+    // 510) — corrupção silenciosa que a própria conferência não pegava, porque comparava
+    // o backup errado com o valor errado que ele mesmo acabara de gravar.
+    const mapa = new Map();
+    res.reg.forEach((r) => { mapa.set(chaveReg(r.path, r.name), r); });
     res.reg = regs.map((r) => {
-      const achado = mapa[r.name] || { exists: false, kind: null, value: null };
+      const achado = mapa.get(chaveReg(r.path, r.name)) || { exists: false, kind: null, value: null };
       return { path: r.path, name: r.name, exists: !!achado.exists, kind: achado.kind || null, value: achado.value };
     });
     return res;
@@ -2092,9 +2589,15 @@ async function actionsStatus() {
     // um erro de sintaxe) e, como os detects rodam todos no mesmo script, um erro
     // derrubava todos — TODAS as ações voltavam desligadas e o painel ficava parado
     // em "14 de 21" mesmo depois de otimizar. Mesmo defeito que o tweaksStatus tinha.
+    // Um detect que lança (throw/exit) derrubava o script inteiro e o fallback marcava
+    // TODAS as ações pelo backup — o painel voltava a "nenhum ajuste ativo" mesmo com
+    // tudo aplicado. O `& { }` só isola escopo, não exceção. Medido: com throw dentro
+    // do bloco, o script saía com código 3 e nenhum valor era devolvido. Por isso cada
+    // detect vai dentro de try/catch próprio: o que falhar devolve vazio e o resto
+    // continua valendo.
     const blocos = itens.map(({ name, a }, idx) => {
       const seguro = String(a.detect);
-      return `$r['${idx}'] = @( & { ${seguro} } ) -join ' '`;
+      return `try { $r['${idx}'] = @( & { ${seguro} } ) -join ' ' } catch { $r['${idx}'] = '' }`;
     });
     const script = `$r = @{}
 ${blocos.join('\n')}
@@ -2538,6 +3041,9 @@ async function applyTweak(id, want) {
     if (regs.length || svcs.length) {
       const lines = [];
       for (const r of regs) {
+        // `soBackup`: a chave é só fotografada (e restaurada no desfazer). Quem
+        // escreve o valor é o `run`, porque o valor final depende do que já estava lá.
+        if (r.soBackup) continue;
         const v = typeof r.on === 'string' ? `'${r.on}'` : r.on;
         lines.push(`Set-Val '${r.path}' '${r.name}' ${v} '${r.type}'`);
       }
@@ -2803,13 +3309,13 @@ async function runAction(name) {
     }
   }
   if (a.run) {
-    const r = await ps(a.run, 120000);
+    const r = await ps(scriptComPre(a, 'run') + a.run, 120000);
     // Mesmo tratamento do runOnce/runTool: saída com texto de permissão é falha, e o
     // stderr cru nunca vai para a tela.
     const v = resultadoPs(r, r.out);
     if (!v.ok) {
       const texto = v.erroVisivel || (v.semPermissao ? v.saidaOk : '') || 'falha';
-      return { success: false, error: await erroDePermissao(texto) };
+      return { success: false, error: await mensagemDeAcao(texto) };
     }
     if (r.out.includes('noobs')) return { success: false, error: 'OBS não encontrado neste PC.' };
   }
@@ -2910,6 +3416,46 @@ function podeCitarSaida(txt) {
   return !!txt && !/Exception|System\.|CategoryInfo|FullyQualifiedErrorId|Cmdlet|cmdlet|ParameterBinding|\uFFFD/i.test(txt);
 }
 
+// Mensagem de falha de uma ação do catálogo.
+//
+// O `erroDePermissao` classifica a falha; quando não classifica, ele devolve o genérico
+// "o Windows nao aceitou a mudanca. Tente abrir o VL como administrador." — que é falso
+// quando o script já explicou o motivo ("esta tela nao aceita 1280x720", "nada a
+// desfazer: nao ha resolucao anterior guardada"). Nesse caso vale mais a nossa frase,
+// desde que ela seja texto legível e não lixo do PowerShell.
+async function mensagemDeAcao(textoBruto) {
+  const amigavel = await erroDePermissao(textoBruto || 'falha');
+  if (/^o Windows n[ãa]o aceitou a mudan/i.test(amigavel)) {
+    const limpo = limpaSaida(textoBruto || '');
+    if (limpo && podeCitarSaida(limpo)) return limpo;
+  }
+  return amigavel;
+}
+
+// Ações que precisam declarar uma classe C# antes do script (o 720p faz isso para
+// falar com o driver sem passar DEVMODE por ref pelo PowerShell).
+//
+// O nome da classe tem que ser diferente entre aplicar e desfazer: são processos
+// PowerShell distintos, mas manter o sufixo evita "type already exists" se algum dia
+// os dois rodarem no mesmo processo. O placeholder é __CLASSE__.
+function scriptComPre(a, qual) {
+  if (!a || !a.psPre) return '';
+  const nome = qual === 'run' ? 'VlTelaA' : 'VlTelaB';
+  return String(a.psPre).split('__CLASSE__').join(nome) + '\n';
+}
+
+// Restaura o estado anterior de uma ação.
+//
+// Ordem:
+//   1. se existe backup (o runAction arquivou antes de aplicar), restaura o backup;
+//   2. se a ação declara `revertSempre`, roda o `revert` DEPOIS do backup — é o caso
+//      dos ajustes que precisam reaplicar o valor no driver por SystemParametersInfo
+//      (o registro volta pelo backup, mas o driver só pega a mudança pela SPI);
+//   3. se não há backup, o `revert` estático só roda quando o estado atual do registro
+//      é EXATAMENTE o que esta ação grava. Sem essa conferência, um ajuste que o
+//      cliente já tinha configurado aparecia como "ligado", o clique em desligar caía
+//      no "padrão de fábrica" e apagava a configuração dele — foi o que aconteceu na
+//      1.4.31 com "Efeitos Visuais Off".
 async function revertAction(name) {
   let a = ACTIONS[name];
   if (!a && typeof name === 'string' && GAME_OPT_RE.test(name)) {
@@ -2920,13 +3466,34 @@ async function revertAction(name) {
   if (b) {
     const rb = await restoreBackup(name);
     if (!rb.success) return { success: false, error: rb.error };
+    if (a.revertSempre && a.revert) {
+      // Best-effort: o registro já voltou. Se o script falhar, o cliente só precisa
+      // sair e entrar de novo no Windows para o driver pegar o valor.
+      await ps(scriptComPre(a, 'revert') + a.revert, 90000);
+    }
     return { success: true };
   }
   if (a.revert) {
-    const r = await ps(a.revert, 60000);
+    // Sem backup: prova de que fomos nós que aplicamos.
+    if (a.regs && a.regs.length) {
+      const conferir = a.regs.filter((r) => !r.soBackup && r.on !== undefined);
+      const atual = await lerAnterior(conferir);
+      const norm = (v) => (Array.isArray(v) ? v.join(',') : String(v == null ? '' : v));
+      let bate = atual.reg.length === conferir.length;
+      for (let i = 0; i < conferir.length && bate; i++) {
+        const r = conferir[i];
+        const x = atual.reg[i];
+        if (!x || !x.exists) { bate = false; break; }
+        if (norm(x.value) !== norm(r.on)) { bate = false; break; }
+      }
+      if (!bate) {
+        return { success: false, error: 'Nada a desfazer: os valores atuais do Windows não são os que este ajuste grava, então não mexo em nada. Se você configurou isso por conta própria, a sua configuração está preservada.' };
+      }
+    }
+    const r = await ps(scriptComPre(a, 'revert') + a.revert, 60000);
     // Saída com texto de permissão também é falha, mesmo com exit code 0.
     if (!r.ok || CARIMBO_SEM_PERMISSAO.test(String(r.err || '')) || CARIMBO_SEM_PERMISSAO.test(String(r.out || ''))) {
-      return { success: false, error: await erroDePermissao(r.err || r.out || 'falha') };
+      return { success: false, error: await mensagemDeAcao(r.err || r.out || 'falha') };
     }
     return { success: true };
   }

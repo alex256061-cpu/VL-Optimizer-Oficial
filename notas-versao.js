@@ -10,6 +10,18 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.61': {
+    corrigido: [
+      'A pagina Internet > DNS nao funcionava: nenhuma opcao aplicava, nem a de voltar ao automatico. Era um erro de sintaxe no comando que o app mandava ao Windows.',
+      'O DNS dizia "pronto" mesmo quando o Windows nao deixava trocar (sem administrador). Agora avisa que precisa de administrador.',
+      'O Desfazer de alguns ajustes acusava erro mesmo tendo voltado ao normal, e o backup de dois ajustes (atalhos de acessibilidade e Num Lock) guardava o valor errado quando duas chaves diferentes usam o mesmo nome de valor.',
+    ],
+    novo: [
+      'Card "Sem efeitos visuais do Windows": tira sombras e animacoes de janelas e menus. O Desfazer devolve exatamente a configuracao que voce ja tinha.',
+      'Card "Tela em 720p (emergencia)": baixa a resolucao para 1280x720 para a placa aguentar. O VL testa o modo antes de aplicar, confere que mudou e volta sozinho se a tela nao aceitar.',
+      'O motor agora aceita as 9 acoes do catalogo completo: Reduzir Input Lag, Todos os ajustes de uma vez, Sem atalhos de acessibilidade, Limpar temporarios, DNS rapido e tirar apps do inicio do Windows.',
+    ],
+  },
   '1.4.60': {
     corrigido: [
       'O icone do VL Scaling na janela ainda era o do programa antigo. Agora e o do VL, na janela, na bandeja e nas propriedades do arquivo.',
