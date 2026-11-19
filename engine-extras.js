@@ -798,10 +798,24 @@ ex.appsLeftovers = async ({ key }) => {
   const items = [];
   const dirs = [];
   if (a.loc) dirs.push(a.loc);
+
+  // O nome precisa existir para procurar pasta com esse nome.
+  //
+  // Sem esta guarda, uma chave fora do cache deixava nm = '', path.join(base, '')
+  // devolvia a própria pasta-raiz (C:\Program Files, C:\ProgramData...), e a tela
+  // oferecia apagar o sistema como se fosse "sobra" de um programa.
   const nm = String(a.name || '').replace(/[\\/:*?"<>|]/g, '').trim();
-  for (const base of [path.join(os.homedir(), 'AppData', 'Roaming'), path.join(os.homedir(), 'AppData', 'Local'), 'C:\\ProgramData', 'C:\\Program Files', 'C:\\Program Files (x86)']) {
-    const p = path.join(base, nm);
-    if (fs.existsSync(p)) dirs.push(p);
+  const RAIZES = new Set([
+    'C:\\ProgramData', 'C:\\Program Files', 'C:\\Program Files (x86)',
+    path.join(os.homedir(), 'AppData', 'Roaming'),
+    path.join(os.homedir(), 'AppData', 'Local'),
+  ].map((p) => p.toLowerCase().replace(/\\+$/, '')));
+  if (nm.length >= 3) {
+    for (const base of [path.join(os.homedir(), 'AppData', 'Roaming'), path.join(os.homedir(), 'AppData', 'Local'), 'C:\\ProgramData', 'C:\\Program Files', 'C:\\Program Files (x86)']) {
+      const p = path.join(base, nm);
+      if (RAIZES.has(p.toLowerCase().replace(/\\+$/, ''))) continue; // nunca a raiz
+      if (fs.existsSync(p)) dirs.push(p);
+    }
   }
   for (const d of [...new Set(dirs)]) {
     const { bytes } = await dirSizes([d], 0);
@@ -1198,12 +1212,70 @@ ex.gameClean = async ({ id }) => {
     if (root) { try { fs.rmSync(root, { recursive: true, force: true }); } catch (e) {} }
     return { success: true };
   }
-  return { success: true };
+
+  // Epic: cache da loja e logs do launcher. Os jogos NÃO são tocados.
+  //
+  // Antes o Epic caía no "return { success: true }" do fim e o app respondia
+  // "Cache limpo." sem apagar um arquivo.
+  if (g.store === 'epic') {
+    const base = path.join(process.env.LOCALAPPDATA || '', 'EpicGamesLauncher', 'Saved');
+    let apagados = 0;
+    const falhas = [];
+    try {
+      for (const e of fs.readdirSync(base, { withFileTypes: true })) {
+        if (!e.isDirectory()) continue;
+        // só webcache* e Logs — nada de config, nada de save de jogo
+        if (!/^webcache/i.test(e.name) && e.name !== 'Logs') continue;
+        const p = path.join(base, e.name);
+        try { fs.rmSync(p, { recursive: true, force: true }); apagados++; }
+        catch (err) { falhas.push(e.name); }
+      }
+    } catch (err) {
+      return { success: false, error: 'Não consegui abrir a pasta do Epic Games Launcher neste PC.' };
+    }
+    if (!apagados && !falhas.length) {
+      return { success: true, apagados: 0, message: 'O Epic não tinha cache acumulado.' };
+    }
+    return { success: true, apagados, falhas, message: apagados + ' item(ns) de cache do Epic limpo(s).' };
+  }
+
+  // Store desconhecida: dizer a verdade em vez de fingir que limpou.
+  return { success: false, error: 'Ainda não sei limpar o cache desta loja: ' + (g.store || 'desconhecida') + '.' };
 };
 
 ex.shaderClean = async () => {
-  for (const d of CATS.find((c) => c.id === 'shaders').paths) { try { fs.rmSync(d, { recursive: true, force: true }); } catch (e) {} }
-  return { success: true };
+  // Cache de shader do DirectX/OpenGL. Esses caminhos NÃO estão no CATS (que trata
+  // de apps específicos); são pastas do próprio Windows e de drivers.
+  //
+  // Antes isto fazia CATS.find(c => c.id === 'shaders').paths — e não existe
+  // categoria 'shaders' no CATS, então lançava TypeError em TODA chamada e o botão
+  // nunca funcionou.
+  const la = process.env.LOCALAPPDATA || '';
+  const pastas = [
+    path.join(la, 'D3DSCache'),                        // cache do DirectX 12
+    path.join(la, 'NVIDIA', 'DXCache'),                // cache do driver NVIDIA
+    path.join(la, 'NVIDIA', 'GLCache'),                // cache OpenGL NVIDIA
+    path.join(la, 'AMD', 'DxCache'),                   // cache do driver AMD
+    path.join(la, 'AMD', 'DxcCache'),
+    path.join(la, 'AMD', 'GLCache'),
+    path.join(la, 'Intel', 'ShaderCache'),             // cache do driver Intel
+    path.join(la, 'Microsoft', 'DirectX', 'ShaderCache'),
+  ].filter(Boolean);
+
+  let apagadas = 0;
+  const falhas = [];
+  for (const d of pastas) {
+    if (!fs.existsSync(d)) continue;
+    try {
+      fs.rmSync(d, { recursive: true, force: true });
+      apagadas++;
+    } catch (e) {
+      falhas.push(path.basename(d));
+    }
+  }
+  // Honestidade: se nenhuma pasta existia, nada foi apagado — mas também não é erro
+  // (o PC simplesmente não tem cache acumulado).
+  return { success: true, apagadas, falhas, message: apagadas ? (apagadas + ' cache(s) limpo(s).') : 'Não havia cache de shader acumulado neste PC.' };
 };
 
 // ────────────────────────────── FIVEM (GTA RP) ──────────────────────────────
@@ -1994,8 +2066,21 @@ ex.getProcesses = async () => {
 };
 
 ex.killProcess = async (pid) => {
-  const r = await core.ps(`Stop-Process -Id ${parseInt(pid, 10) || 0} -Force -ErrorAction SilentlyContinue; Write-Output 'ok'`);
-  return { success: r.ok };
+  const alvo = parseInt(pid, 10);
+  if (!Number.isFinite(alvo) || alvo <= 0) return { success: false, error: 'Processo inválido.' };
+  // Processos do sistema que NUNCA podem ser encerrados daqui: o próprio Windows
+  // depende deles, e o processo pai do app pode estar nessa faixa.
+  if (alvo <= 4) return { success: false, error: 'Este é um processo do próprio Windows e não pode ser encerrado.' };
+
+  // O PowerShell roda com ErrorActionPreference SilentlyContinue, então
+  // "Stop-Process -EA SilentlyContinue; Write-Output 'ok'" devolvia ok mesmo quando
+  // NADA foi encerrado. Aqui o script CONTA quantos sobraram e o app confere.
+  const r = await core.ps(`Stop-Process -Id ${alvo} -Force -ErrorAction SilentlyContinue; Start-Sleep -Milliseconds 200; Write-Output @(Get-Process -Id ${alvo} -ErrorAction SilentlyContinue).Count`);
+  const sobrou = parseInt(String(r.out || '').trim(), 10);
+  if (Number.isFinite(sobrou) && sobrou > 0) {
+    return { success: false, error: 'O processo continua aberto. Ele pode exigir administrador ou ser protegido pelo Windows.' };
+  }
+  return { success: true };
 };
 
 ex.ramClean = async () => {
@@ -2959,7 +3044,16 @@ ex.optiAnalyze = async ({ exe }) => {
 };
 
 ex.optiDetect = async () => {
-  const r = await core.ps(`$p = Get-Process | Where-Object { $_.MainWindowHandle -ne 0 } | Sort-Object -Property WorkingSet64 -Descending | Select-Object -First 1; if ($p) { Write-Output $p.Path }`);
+  // O que NÃO é jogo: processos do Windows e navegadores. Sem esta lista, o
+  // "Detectar jogo aberto" devolvia C:\Windows\Explorer.EXE (ou o Chrome) e o app
+  // oferecia instalar as DLLs do OptiScaler na pasta do programa — com admin, em
+  // C:\Windows. Medido pelo auditor v1: optiDetect() -> exe=Explorer.EXE.
+  const r = await core.ps(`$naoJogo = @('explorer','chrome','msedge','firefox','opera','brave','discord','spotify','steam','steamwebhelper','Code','devenv','notepad','Notepad','powershell','pwsh','cmd','WindowsTerminal','ApplicationFrameHost','SearchHost','ShellExperienceHost','StartMenuExperienceHost','TextInputHost','LockApp','LogonUI','dwm','Taskmgr','vloptimizer','VL Optimizer')
+    $p = Get-Process | Where-Object {
+      $_.MainWindowHandle -ne 0 -and $naoJogo -notcontains $_.ProcessName -and
+      $_.Path -and $_.Path -notmatch '\\Windows\\' -and $_.Path -notmatch '\\WindowsApps\\'
+    } | Sort-Object -Property WorkingSet64 -Descending | Select-Object -First 1
+    if ($p) { Write-Output $p.Path }`);
   const exe = r.out.split('\n')[0].trim();
   if (!exe) return { success: false, error: 'Nenhum jogo aberto agora.' };
   return ex.optiAnalyze({ exe });
