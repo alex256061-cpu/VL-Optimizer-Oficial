@@ -10,6 +10,12 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.60': {
+    corrigido: [
+      'O icone do VL Scaling na janela ainda era o do programa antigo. Agora e o do VL, na janela, na bandeja e nas propriedades do arquivo.',
+    ],
+    novo: [],
+  },
   '1.4.59': {
     corrigido: [
       'A aba VL Scaling agora usa o programa de escalonamento do VL, com o nome e o icone do VL na janela e na bandeja.',
