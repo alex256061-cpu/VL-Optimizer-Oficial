@@ -17,7 +17,7 @@
 // O que o GDZ faz depois de receber isso (documentado no ESTADO.md do l-optimizer):
 //   1. grava as opcoes no Settings.xml
 //   2. FECHA a instancia antiga do Lossless
-//   3. abre LosslessScaling.exe -StartMinimized
+//   3. abre VLScaling.exe -StartMinimized
 //   4. confere 8 s depois se o engine aceitou o arquivo (flag settingsRejected)
 'use strict';
 
@@ -27,8 +27,13 @@ const path = require('path');
 const os = require('os');
 
 const APP_DIR = path.join(__dirname, 'native', 'lossless');
-const EXE = path.join(APP_DIR, 'LosslessScaling.exe');
-const SETTINGS_DIR = path.join(process.env.LOCALAPPDATA || os.tmpdir(), 'Lossless Scaling');
+const EXE = path.join(APP_DIR, 'VLScaling.exe');
+// Pasta de dados do Scaling.
+//
+// Era %LOCALAPPDATA%\Lossless Scaling (a do programa oficial). Agora é a nossa:
+//   - o VLScaling.exe (o motor que embutimos) procura em %LOCALAPPDATA%\VLOptimizer
+//   - e assim o nosso app NÃO mexe na configuração do Lossless do cliente
+const SETTINGS_DIR = path.join(process.env.LOCALAPPDATA || os.tmpdir(), 'VLOptimizer');
 const SETTINGS = path.join(SETTINGS_DIR, 'Settings.xml');
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -162,9 +167,9 @@ function disponivel() {
 
 function processoAtivo() {
   try {
-    const out = execFileSync('tasklist', ['/FO', 'CSV', '/NH', '/FI', 'IMAGENAME eq LosslessScaling.exe'],
+    const out = execFileSync('tasklist', ['/FO', 'CSV', '/NH', '/FI', 'IMAGENAME eq VLScaling.exe'],
       { encoding: 'utf8', windowsHide: true, timeout: 10000 });
-    return /LosslessScaling\.exe/i.test(out);
+    return /VLScaling\.exe/i.test(out);
   } catch (e) { return false; }
 }
 
@@ -173,7 +178,7 @@ function processoAtivo() {
 function fecharInstancia() {
   if (!processoAtivo()) return;
   try {
-    execFileSync('taskkill', ['/F', '/IM', 'LosslessScaling.exe'],
+    execFileSync('taskkill', ['/F', '/IM', 'VLScaling.exe'],
       { windowsHide: true, timeout: 15000, stdio: 'ignore' });
   } catch (e) { }
 }
@@ -193,7 +198,7 @@ function lerGravado() {
 // Canal ls-launch. Recebe o MESMO objeto que o getConfig() do GDZ monta.
 async function launch(cfg) {
   if (!disponivel()) {
-    return { success: false, error: 'LosslessScaling.exe não encontrado em native\\lossless.' };
+    return { success: false, error: 'VLScaling.exe não encontrado em native\\lossless.' };
   }
 
   // 1. gravar

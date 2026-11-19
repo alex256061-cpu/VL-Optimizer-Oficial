@@ -19,7 +19,12 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-const SETTINGS_DIR = path.join(process.env.LOCALAPPDATA || os.tmpdir(), 'Lossless Scaling');
+// Pasta de dados do Scaling.
+//
+// Era %LOCALAPPDATA%\Lossless Scaling (a do programa oficial). Agora é a nossa:
+//   - o VLScaling.exe (o motor que embutimos) procura em %LOCALAPPDATA%\VLOptimizer
+//   - e assim o nosso app NÃO mexe na configuração do Lossless do cliente
+const SETTINGS_DIR = path.join(process.env.LOCALAPPDATA || os.tmpdir(), 'VLOptimizer');
 const SETTINGS = path.join(SETTINGS_DIR, 'Settings.xml');
 
 // Enums exatos do Lossless (copiados do GDZ).

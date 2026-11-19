@@ -17,9 +17,16 @@ const path = require('path');
 const os = require('os');
 
 const APP_DIR = path.join(__dirname, 'native', 'lossless');
-const EXE = path.join(APP_DIR, 'LosslessScaling.exe');
+// O executável rebrandado da nossa marca (o .dll mantém o nome LosslessScaling.dll,
+// porque o assembly .NET exige — só o .exe e os textos são nossos).
+const EXE = path.join(APP_DIR, 'VLScaling.exe');
 // O Lossless guarda as configurações no perfil do usuário, não na pasta do programa.
-const SETTINGS_DIR = path.join(process.env.LOCALAPPDATA || os.tmpdir(), 'Lossless Scaling');
+// Pasta de dados do Scaling.
+//
+// Era %LOCALAPPDATA%\Lossless Scaling (a do programa oficial). Agora é a nossa:
+//   - o VLScaling.exe (o motor que embutimos) procura em %LOCALAPPDATA%\VLOptimizer
+//   - e assim o nosso app NÃO mexe na configuração do Lossless do cliente
+const SETTINGS_DIR = path.join(process.env.LOCALAPPDATA || os.tmpdir(), 'VLOptimizer');
 const SETTINGS = path.join(SETTINGS_DIR, 'Settings.xml');
 
 // Editor do Settings.xml: lê o bloco <Profile> que o Lossless já criou e troca só os campos
@@ -172,15 +179,15 @@ function writeSettings(config) {
 function running() {
   try {
     const { execSync } = require('child_process');
-    const out = execSync('tasklist /FO CSV /NH /FI "IMAGENAME eq LosslessScaling.exe"', { encoding: 'utf8', windowsHide: true });
-    return /LosslessScaling\.exe/i.test(out);
+    const out = execSync('tasklist /FO CSV /NH /FI "IMAGENAME eq VLScaling.exe"', { encoding: 'utf8', windowsHide: true });
+    return /VLScaling\.exe/i.test(out);
   } catch (e) { return false; }
 }
 
 // Abre o programa oficial. Já minimizado, como o GDZ faz, para não cobrir o jogo.
 function launch() {
-  if (!available()) return { ok: false, error: 'LosslessScaling.exe não encontrado em native\\lossless.' };
-  if (running()) return { ok: true, message: 'O Lossless já estava aberto.' };
+  if (!available()) return { ok: false, error: 'VLScaling.exe não encontrado em native\\lossless.' };
+  if (running()) return { ok: true, message: 'O VL Scaling já estava aberto.' };
   try {
     const child = spawn(EXE, ['-StartMinimized'], {
       cwd: APP_DIR,
@@ -189,9 +196,9 @@ function launch() {
       windowsHide: false,
     });
     child.unref();
-    return { ok: true, message: 'Lossless iniciado.' };
+    return { ok: true, message: 'VL Scaling iniciado.' };
   } catch (e) {
-    return { ok: false, error: 'Não foi possível abrir o Lossless: ' + e.message };
+    return { ok: false, error: 'Não foi possível abrir o VL Scaling: ' + e.message };
   }
 }
 
@@ -200,11 +207,11 @@ function stop() {
   // lendo configuracao velha. fecha direto e trata o erro.
   try {
     const { execFileSync } = require('child_process');
-    execFileSync('taskkill', ['/F', '/IM', 'LosslessScaling.exe'],
+    execFileSync('taskkill', ['/F', '/IM', 'VLScaling.exe'],
       { windowsHide: true, timeout: 15000, stdio: 'ignore' });
-    return { ok: true, message: 'Lossless encerrado.' };
+    return { ok: true, message: 'VL Scaling encerrado.' };
   } catch (e) {
-    return { ok: true, message: 'O Lossless já estava fechado.' };
+    return { ok: true, message: 'O VL Scaling já estava fechado.' };
   }
 }
 
@@ -216,7 +223,7 @@ function fecharInstancia() {
   if (!running()) return false;
   try {
     const { execFileSync } = require('child_process');
-    execFileSync('taskkill', ['/F', '/IM', 'LosslessScaling.exe'],
+    execFileSync('taskkill', ['/F', '/IM', 'VLScaling.exe'],
       { windowsHide: true, timeout: 15000, stdio: 'ignore' });
     return true;
   } catch (e) {
@@ -232,10 +239,10 @@ function lerGravado() {
 // Fluxo completo, igual ao do GDZ:
 //   1. grava o Settings.xml
 //   2. FECHA a instancia antiga (sem isso a config nao entra em vigor)
-//   3. abre LosslessScaling.exe -StartMinimized
+//   3. abre VLScaling.exe -StartMinimized
 //   4. confere 8 s depois se o motor aceitou o arquivo
 function accepts(config) {
-  if (!available()) return { ok: false, error: 'LosslessScaling.exe não encontrado.' };
+  if (!available()) return { ok: false, error: 'VLScaling.exe não encontrado.' };
 
   // A ORDEM É CRÍTICA. O Lossless, ao fechar, grava a configuração que está na memória dele por
   // cima do Settings.xml. Se eu gravar antes de fechar, ele sobrescreve o meu arquivo com os
@@ -268,8 +275,8 @@ function accepts(config) {
   return {
     ok: true,
     message: fechou
-      ? 'Lossless reiniciado com a configuração aplicada.'
-      : 'Lossless iniciado com a configuração aplicada.',
+      ? 'VL Scaling reiniciado com a configuração aplicada.'
+      : 'VL Scaling iniciado com a configuração aplicada.',
     settings,
     restarted: fechou,
   };
