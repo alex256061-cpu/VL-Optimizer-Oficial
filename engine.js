@@ -1284,6 +1284,9 @@ const ONCES = {
   },
   'UWP Removidos': {
     tag: 'desempenho', title: 'Remover apps que vêm com o Windows', btn: 'Remover',
+    // A lista depende da ficha do PC: num Ryzen X3D de dois CCDs o Xbox Game Bar FICA
+    // (o driver da AMD usa ele para escolher o CCD do jogo). Ver uwpScript().
+    scriptDinamico: 'uwpScript',
     desc: 'Desinstala Cortana, Clima, Mapas, Filmes e TV, Your Phone, apps do Xbox e outros apps de fábrica.',
     note: 'Não tem desfazer: para ter algum de volta, reinstale pela Microsoft Store.',
     confirm: true,
@@ -1335,14 +1338,66 @@ const ONCES = {
       if (Get-Process -Name explorer -ErrorAction SilentlyContinue) { Write-Output 'ok' } else { Write-Output 'falhou' }`,
   },
   'Padrões Restaurados': {
-    tag: 'tweaks', title: 'Limpar ajustes antigos do L', btn: 'Limpar',
+    tag: 'tweaks', title: 'Limpar ajustes antigos do L', btn: 'Restaurar',
     desc: 'Volta ao padrão do Windows ajustes sem efeito ou prejudiciais de versões antigas (timer, fila do mouse, rede).',
     run: `
-      Set-Val '${HKLM}\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Memory Management' 'LargeSystemCache' 0 'DWord'
-      Del-Val '${HKCU}\\Control Panel\\Mouse' 'MouseSensitivity'
-      Del-Val '${HKCU}\\Control Panel\\Mouse' 'SmoothMouseXCurve'
-      Del-Val '${HKCU}\\Control Panel\\Mouse' 'SmoothMouseYCurve'
-      Write-Output 'ok'`,
+      # Religar o que uma versão antiga do VL desligou e que NÃO tem backup.
+      #
+      # A foto do sistema só existe para o que o app aplicou depois de instalado. Se o
+      # cliente usou uma versão antiga que desligou serviço sem guardar nada, o desfazer
+      # não tem o que restaurar. Estes são os REVERT do GDZ: religam o padrão do Windows.
+      #
+      # NÃO religa o Defender: mexer em antivírus sem o cliente pedir é invasivo.
+
+      $av = @()
+
+      # Serviços que o app pode ter desligado.
+      foreach ($s in @('SysMain','WSearch','DiagTrack','Spooler','Fax','RemoteRegistry','MapsBroker','WbioSrvc','XblAuthManager','XblGameSave','XboxNetApiSvc')) {
+        $svc = Get-Service -Name $s -ErrorAction SilentlyContinue
+        if ($svc -and $svc.StartType -eq 'Disabled') {
+          try { Set-Service -Name $s -StartupType Manual -ErrorAction SilentlyContinue; Start-Service -Name $s -ErrorAction SilentlyContinue; $av += $s } catch {}
+        }
+      }
+
+      # Windows Update volta para Manual (o padrão do Windows 10 Pro).
+      try {
+        $wu = Get-Service -Name wuauserv -ErrorAction SilentlyContinue
+        if ($wu -and $wu.StartType -eq 'Disabled') { Set-Service -Name wuauserv -StartupType Manual -ErrorAction SilentlyContinue; Start-Service -Name wuauserv -ErrorAction SilentlyContinue; $av += 'wuauserv' }
+      } catch {}
+
+      # Pagefile volta a ser gerenciado pelo Windows.
+      try {
+        $cs = Get-CimInstance Win32_ComputerSystem -ErrorAction Stop
+        if (-not $cs.AutomaticManagedPagefile) {
+          Set-CimInstance -InputObject $cs -Property @{ AutomaticManagedPagefile = $true } -ErrorAction Stop
+          $av += 'pagefile'
+        }
+      } catch {}
+
+      # Game Bar e DVR.
+      New-Key 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\GameDVR'
+      Set-Val 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\GameDVR' 'AppCaptureEnabled' 1 'DWord'
+      Set-Val 'HKCU:\System\GameConfigStore' 'GameDVR_Enabled' 1 'DWord'
+      Set-Val 'HKCU:\SOFTWARE\Microsoft\GameBar' 'UseNexusForGameBarEnabled' 1 'DWord'
+      Del-Val 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\GameDVR' 'AllowGameDVR'
+
+      # Notificações.
+      Set-Val 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\PushNotifications' 'ToastEnabled' 1 'DWord'
+
+      # Telemetria: remove a política para o Windows voltar ao padrão.
+      Del-Val 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection' 'AllowTelemetry'
+
+      # Restauração do Sistema.
+      try { Enable-ComputerRestore -Drive $env:SystemDrive -ErrorAction SilentlyContinue } catch {}
+
+      # Ajustes de mouse que versões antigas gravaram.
+      Del-Val 'HKCU:\Control Panel\Mouse' 'MouseSensitivity'
+      Del-Val 'HKCU:\Control Panel\Mouse' 'SmoothMouseXCurve'
+      Del-Val 'HKCU:\Control Panel\Mouse' 'SmoothMouseYCurve'
+      Set-Val 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management' 'LargeSystemCache' 0 'DWord'
+
+      if ($av.Count) { Write-Output ("religado: " + ($av -join ', ')) } else { Write-Output 'nada pendente' }
+`,
   },
   'Defender Off': {
     tag: 'tweaks', title: 'Religar o Windows Defender', btn: 'Religar',
@@ -2878,10 +2933,56 @@ async function revertAction(name) {
   return { success: false, error: 'sem backup' };
 }
 
+// Script do "UWP Removidos", com a guarda X3D do GDZ.
+//
+// Num Ryzen X3D de dois CCDs, o driver da AMD usa o Xbox Game Bar para escolher qual
+// CCD roda o jogo. Remover Xbox.TCUI/XboxGamingOverlay tira essa escolha e o jogo pode
+// cair no CCD errado — o cliente perde o ganho que pagou.
+//
+// Depois de remover, remenda os protocolos ms-gamebar*: sem isso o Windows fica
+// tentando abrir um app que nao existe e mostra erro ao abrir um jogo.
+function uwpScript(caps) {
+  const UWP = [
+    '*Microsoft.549981C3F5F10*', '*Microsoft.BingWeather*', '*Microsoft.WindowsMaps*',
+    '*Microsoft.ZuneVideo*', '*Microsoft.YourPhone*',
+    '*Microsoft.XboxGamingOverlay*', '*Microsoft.XboxApp*',
+    '*Microsoft.GetHelp*', '*Microsoft.Getstarted*',
+    '*Microsoft.MicrosoftSolitaireCollection*',
+  ];
+  const x3dDual = !!(caps && caps.x3dDual);
+  const lista = x3dDual ? UWP.filter((a) => !/Xbox\.TCUI|XboxGamingOverlay/.test(a)) : UWP;
+
+  const partes = [];
+  partes.push('$n = 0');
+  const nomes = lista.map((a) => "'" + a + "'").join(',');
+  partes.push('foreach ($a in @(' + nomes + ')) {');
+  partes.push('  foreach ($x in @(Get-AppxPackage -Name $a -ErrorAction SilentlyContinue)) {');
+  partes.push('    Remove-AppxPackage -Package $x.PackageFullName -ErrorAction SilentlyContinue; $n++');
+  partes.push('  }');
+  partes.push('}');
+  // Protocolos: so quando o Game Bar foi removido (no X3D ele fica para o driver AMD).
+  if (!x3dDual) {
+    const prot = "'ms-gamebar','ms-gamebarservices','ms-gamingoverlay'";
+    partes.push('foreach ($p in @(' + prot + ')) { Remove-Item ("HKCU:\\Software\\Classes\\$p") -Recurse -Force -ErrorAction SilentlyContinue }');
+  }
+  partes.push('Write-Output "removed=$n"');
+  return partes.join('\n');
+}
+
 async function runOnce(name) {
   const o = ONCES[name];
   if (!o) return { success: false, error: 'ação desconhecida' };
-  const r = await ps(o.run, 180000);
+
+  // Ações cuja receita depende da ficha do PC (ex.: UWP no X3D de dois CCDs).
+  let script = o.run;
+  if (o.scriptDinamico === 'uwpScript') {
+    let caps = null;
+    try { caps = await getCaps(); } catch (err) { caps = null; }
+    if (!caps) return { success: false, error: 'não consegui ler a ficha deste PC agora. Tente de novo em alguns segundos.' };
+    script = uwpScript(caps);
+  }
+
+  const r = await ps(script, 180000);
   const v = resultadoPs(r, r.out);
   // Conferência extra: os scripts de serviço ("Serviços Desativados", "Desativar
   // Atualizações Windows") diziam "concluído" sem ter mudado nada sem admin.
@@ -3121,19 +3222,55 @@ const CHECKS = {
       }
       $o = @{ level = $level; title = $title; lines = $lines }; Write-Output (Json $o)`,
   },
+  // O `encoder` é resolvido em JS (encoderCheck), não por script: depende da ficha
+  // do PC (nvidia / amdGpu / gpus / obsExe), igual ao GDZ. Antes era um script que
+  // devolvia level:'ok' e duas linhas genéricas para qualquer PC.
   encoder: {
     title: 'Configuração do OBS',
-    run: `
-      $g = (Get-CimInstance Win32_VideoController | Select-Object -First 1).Name
-      $enc = if ($g -match 'NVIDIA') { 'NVENC (NVIDIA)' } elseif ($g -match 'AMD') { 'AMF (AMD)' } elseif ($g -match 'Intel') { 'QSV (Intel)' } else { 'x264' }
-      $lines = @("Encoder recomendado: $enc.", 'Preset de qualidade, 6000 kbps para 1080p60.')
-      $o = @{ level = 'ok'; title = 'OBS'; lines = $lines }; Write-Output (Json $o)`,
+    js: 'encoderCheck',
   },
 };
+
+// Configuração de encoder para live — copiada do GDZ (encoderCheck).
+//
+// O GDZ não usa script aqui: usa a ficha do PC. NVIDIA/AMD/Intel/nenhum, cada um
+// com o encoder certo e os ajustes de transmissão. As mensagens são as dele.
+function encoderCheck(caps) {
+  const c = caps || {};
+  const linhas = [];
+  const gpus = Array.isArray(c.gpus) ? c.gpus : [];
+
+  if (c.nvidia) {
+    linhas.push('Encoder: NVIDIA NVENC. Use H.264 na Twitch; no YouTube, AV1 ou HEVC se a placa suportar.');
+    linhas.push('Preset P5 (P6 se sobrar GPU), Ajuste: Alta qualidade, Controle de taxa: CBR, Intervalo de keyframe: 2 s.');
+  } else if (c.amdGpu) {
+    linhas.push('Encoder: AMD AMF (H.264 na Twitch; AV1 no YouTube nas RX 7000 ou mais novas).');
+    linhas.push('Predefinição: Qualidade, Controle de taxa: CBR, Intervalo de keyframe: 2 s.');
+  } else if (gpus.some((g) => String(g && g.vendor).toLowerCase() === 'intel')) {
+    linhas.push('Encoder: Intel QuickSync (QSV). Predefinição: Qualidade, CBR, keyframe 2 s.');
+  } else {
+    linhas.push('Sem encoder de hardware detectado: use x264 com a predefinição "veryfast" e 720p.');
+  }
+
+  linhas.push('Bitrate na Twitch: 6000 kbps para 1080p60 ou 4500 kbps para 720p60. Teste a sua velocidade de upload antes.');
+  linhas.push(c.obsExe ? 'OBS encontrado. Use também o card "OBS Prioritário".' : 'OBS Studio não encontrado neste PC.');
+
+  return { level: 'info', title: 'Configuração recomendada para a live', lines: linhas };
+}
 
 async function runCheck(name) {
   const c = CHECKS[name];
   if (!c) return { success: false, error: 'verificação desconhecida' };
+
+  // Checks que dependem da ficha do PC não são script: são função JS.
+  // (O GDZ faz exatamente isto para o `encoder`.)
+  if (c.js === 'encoderCheck') {
+    let caps = null;
+    try { caps = await getCaps(); } catch (err) { caps = null; }
+    if (!caps) return { success: false, error: 'não consegui ler a ficha deste PC agora. Tente de novo em alguns segundos.' };
+    return Object.assign({ success: true }, encoderCheck(caps));
+  }
+
   const r = await ps(c.run, 60000);
   if (!r.ok) return { success: false, error: await erroDePermissao(r.err || 'falha') };
   let dado = null;

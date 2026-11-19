@@ -2753,7 +2753,19 @@
 
           </div>
 
-          <div class="about-copy">© 2026 VL Optimizer · Todos os direitos reservados</div>
+          <!-- Versão instalada e revisão da telemetria (o GDZ tem os dois na aba Sobre). -->
+<div class="about-ver" id="about-ver"></div>
+
+<div class="about-pref" id="telemetria-pref">
+  <div>
+    <div class="about-pref-t">Ajudar a medir o ganho de FPS</div>
+    <div class="about-pref-s">Manda só o FPS médio e a ficha do PC, sem nada pessoal. Você pode desligar quando quiser.</div>
+  </div>
+  <div class="switch" id="telemetria-toggle" role="switch" aria-checked="false" tabindex="0">
+    <div class="knob"></div>
+  </div>
+</div>
+<div class="about-copy">© 2026 VL Optimizer · Todos os direitos reservados</div>
 
         </div>
 
@@ -5368,6 +5380,44 @@
   setTimeout(updAvisarSeHouver, 20000);
   setInterval(updAvisarSeHouver, 60 * 60 * 1000);
 
+
+// ── Aba Sobre: versão instalada e switch de telemetria ──────────────
+//
+// A versão vinha só como regra de CSS (about-ver) e nunca era escrita; a telemetria
+// era perguntada uma vez e não dava para rever. O GDZ tem os dois na aba Sobre.
+(function ligarSobre() {
+  const ver = document.getElementById('about-ver');
+  const tog = document.getElementById('telemetria-toggle');
+  if (!ver && !tog) return;
+
+  // Versão: o canal update-status devolve a versão do app.
+  if (ver && window.ipcRenderer) {
+    ipcRenderer.invoke('update-status').then((r) => {
+      if (r && r.version) ver.textContent = 'Versão ' + r.version;
+    }).catch(() => {});
+  }
+
+  // Telemetria: lê o estado atual e alterna pelo canal que já existe.
+  if (tog && window.ipcRenderer) {
+    const pinta = (on) => {
+      tog.classList.toggle('on', !!on);
+      tog.setAttribute('aria-checked', on ? 'true' : 'false');
+    };
+    ipcRenderer.invoke('telemetry-consent').then((r) => pinta(r && r.consent)).catch(() => {});
+    const alternar = () => {
+      const novo = !tog.classList.contains('on');
+      pinta(novo);
+      ipcRenderer.invoke('telemetry-consent-set', { on: novo }).catch(() => {});
+      if (typeof toast === 'function') {
+        toast(novo ? 'Telemetria ligada. Obrigado!' : 'Telemetria desligada.');
+      }
+    };
+    tog.addEventListener('click', alternar);
+    tog.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); alternar(); }
+    });
+  }
+})();
 </script>
 </body>
 
