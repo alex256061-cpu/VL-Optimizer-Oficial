@@ -40,13 +40,45 @@ const REMOVIDAS = [
     nome: '720p Boost Ativo',
     versao: '1.4.31',
     motivo: 'Escria uma DEVMODE truncada e podia deixar a tela preta em notebook. Só voltava reiniciando.',
-    liberado: false,
+    // REIMPLEMENTADA NA 1.4.61, com prova.
+    //
+    // O defeito era a struct: 6 inteiros (24 bytes) no lugar dos 156 da DEVMODEA. O
+    // driver recebia lixo em dmPelsWidth.
+    //
+    // Como ficou: struct DEVMODEA completa (156 bytes, conferida com
+    // Marshal.SizeOf em tempo de execução), CDS_TEST antes de aplicar (se a tela
+    // não aceitar 1280x720, nada muda), conferência da resolução real depois de
+    // aplicar e restauração automática se não mudou. A resolução anterior fica em
+    // HKCU\Software\VLOptimizer (chave nossa, não a do GDZ).
+    //
+    // Prova em 19/11/2026 nesta máquina: 1920x1080 -> 1280x720 aplicado, PrevResW
+    // gravada 1920, revert devolveu 1920x1080. CDS_TEST para 1280x720 = 0; para
+    // modo inválido = -2 (BADMODE), e a tela não mudou.
+    liberado: true,
   },
   {
     nome: 'Efeitos Visuais Off',
     versao: '1.4.31',
     motivo: 'O Windows ignora a chave quando o ajuste é por script: não fazia efeito, e o desfazer apagava a configuração que o cliente já tinha.',
-    liberado: false,
+    // REIMPLEMENTADA NA 1.4.61, com prova.
+    //
+    // O defeito era o desfazer: o revert do GDZ NÃO devolve o valor que o cliente
+    // tinha — ele grava uma máscara FIXA de fábrica (0x9E,0x1E,0x07,0x80,0x12) por
+    // cima do que estava lá. A nossa versão antiga copiou esse desfazer.
+    //
+    // Como ficou: as duas chaves (VisualFXSetting e UserPreferencesMask) estão em
+    // `regs`, então o runAction arquiva o valor atual antes de aplicar e o
+    // revertAction restaura o arquivado. A máscara ao aplicar é a do GDZ
+    // (0x90,0x12,0x03,0x80,0x10); o fallback sem backup usa a de fábrica do GDZ
+    // (0x9E,0x1E,0x07,0x80,0x12) e só roda quando o estado atual é exatamente o que
+    // a ação grava — se o cliente já tinha configurado por conta própria, o VL recusa
+    // o desfazer em vez de apagar a configuração dele.
+    //
+    // Prova em 19/11/2026 nesta máquina, partindo do estado do dono (VisualFXSetting=3
+    // e máscara 9E 1E 03 80 12 00 00 00): aplicar -> 2 e 90 12 03 80 10 00 00 00;
+    // desfazer -> 3 e 9E 1E 03 80 12 00 00 00, byte a byte. E desfazer SEM ter
+    // aplicado recusa e deixa a máscara do dono intacta.
+    liberado: true,
   },
   {
     nome: 'dlss-ind',
