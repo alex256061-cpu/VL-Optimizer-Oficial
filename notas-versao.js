@@ -10,7 +10,15 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
-  '1.4.58': {
+  '1.4.59': {
+    corrigido: [
+      'A aba VL Scaling agora usa o programa de escalonamento do VL, com o nome e o icone do VL na janela e na bandeja.',
+    ],
+    novo: [
+      'O VL Scaling ja vem junto com o programa: voce nao precisa ter outro programa instalado nem comprar nada. Ele abre, ajusta e fecha direto da tela do VL.',
+      'A pasta de configuracao do VL Scaling agora e a do VL, separada da de outros programas.',
+    ],
+  },  '1.4.58': {
     corrigido: [
       '"Limpar cache de shaders" nao funcionava e agora limpa de verdade.',
       '"Resgatar chave" nao funcionava. Corrigido.',
