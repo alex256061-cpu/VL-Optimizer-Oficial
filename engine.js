@@ -1149,6 +1149,24 @@ const ACTIONS = {
       $cur = $cur -replace 'SwapEffectUpgradeEnable=\d;', ''
       Set-ItemProperty -LiteralPath $k -Name DirectXUserGlobalSettings -Value ($cur + 'SwapEffectUpgradeEnable=1;') -Type String -Force
       Write-Output 'ok'`,
+    // Estava sem detect: a ação aplicava e o card continuava apagado para sempre,
+    // porque o actions-status só sabe o estado de quem declara detect.
+    detect: `$v = [string](Get-ItemProperty -LiteralPath '${HKCU}\\Software\\Microsoft\\DirectX\\UserGpuPreferences' -Name DirectXUserGlobalSettings -ErrorAction SilentlyContinue).DirectXUserGlobalSettings
+      if ($v -match 'SwapEffectUpgradeEnable=1') { Write-Output '1' } else { Write-Output '0' }`,
+    // Desfazer: tira só o SwapEffectUpgradeEnable, preservando o resto do valor (pode ter
+    // outras preferências por jogo/GPU). O GDZ não tem este revert; sem ele o interruptor
+    // ligava e o clique seguinte respondia "sem backup".
+    revert: `$k = '${HKCU}\\Software\\Microsoft\\DirectX\\UserGpuPreferences'
+      $cur = [string](Get-ItemProperty -LiteralPath $k -Name DirectXUserGlobalSettings -ErrorAction SilentlyContinue).DirectXUserGlobalSettings
+      if (-not $cur) { Write-Output 'ok'; exit }
+      $novo = $cur -replace 'SwapEffectUpgradeEnable=\\d;', ''
+      if ($novo -eq $cur) { Write-Output 'ok'; exit }
+      if ($novo) {
+        Set-ItemProperty -LiteralPath $k -Name DirectXUserGlobalSettings -Value $novo -Type String -Force
+      } else {
+        Remove-ItemProperty -LiteralPath $k -Name DirectXUserGlobalSettings -ErrorAction SilentlyContinue
+      }
+      Write-Output 'ok'`,
   },  // 'Efeitos Visuais Off' REMOVIDO: o GDZ não tem esse ajuste.
   //
   // Medido: o Explorer IGNORA VisualFXSetting — a chave mudava mas nada na tela
@@ -1246,6 +1264,12 @@ const ACTIONS = {
         exit
       }
       Write-Output 'ok'`,
+    // Sem detect, o card nunca acendia: a ação dizia "ligado" e o interruptor voltava
+    // sozinho para desligado porque o actions-status não tinha como saber o estado.
+    // Neste PC o Windows JÁ gerencia o paginado de fábrica: antes de existir este
+    // detect, o card mostrava desligado e o clique parecia não fazer nada.
+    detect: `$cs = Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue
+      if ($cs -and $cs.AutomaticManagedPagefile) { Write-Output '1' } else { Write-Output '0' }`,
   },
   // ══════════════════════════════════════════════════════════════════════════
   // Ações do catálogo do GDZ que NÃO têm card (nem lá nem aqui)
