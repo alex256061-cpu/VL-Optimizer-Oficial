@@ -10,6 +10,16 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.63': {
+    corrigido: [
+      'Dois cartoes ligavam o ajuste mas o interruptor voltava para desligado: "Memoria virtual gerenciada pelo Windows" e "Jogos em janela com o modo moderno". Agora eles mostram o estado certo (no seu PC a memoria virtual ja vem gerenciada pelo Windows, entao aparece LIGADO).',
+      'Cartoes que so existem no Windows 11 apareciam como interruptor normal e nao ligavam sem explicar: "Finalizar tarefa pela barra de tarefas", "Menu do botao direito completo" e "Barra de tarefas a esquerda". Agora o cartao mostra o motivo e o interruptor ja vem desabilitado.',
+    ],
+    novo: [
+      'O ajuste "Jogos em janela" ganhou desfazer: ele tira so a marca do DirectX e preserva o resto da configuracao. Antes, ligar e clicar de novo dava "sem backup".',
+    ],
+  },
+
   '1.4.62': {
     corrigido: [
       'O instalador levava junto a pasta de imagens de outra marca de revendedor (2,2 MB que nao apareciam na tela, mas nao deviam viajar no seu produto). O instalador ficou 2,2 MB menor.',

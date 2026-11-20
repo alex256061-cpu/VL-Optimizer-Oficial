@@ -128,8 +128,9 @@
       blurb: 'Uso de RAM, cache da memória e memória virtual.',
       groups: [
         { name: 'Memória', icon: IC.ram, blurb: 'Para o jogo não fechar sozinho por falta de memória.', items: [
-          A('Pagefile Automático', { title: 'Memória virtual gerenciada pelo Windows', rec: true, restart: 'reboot', tags: ['Estabilidade'],
-            desc: 'Volta o arquivo de paginação para o automático. Otimizadores que desligam ou fixam esse arquivo fazem jogos pesados, como o GTA, fecharem do nada.' }),
+          A('Pagefile Automático', { title: 'Memória virtual gerenciada pelo Windows', rec: true, restart: 'reboot', semVolta: true, tags: ['Estabilidade'],
+            desc: 'Volta o arquivo de paginação para o automático. Otimizadores que desligam ou fixam esse arquivo fazem jogos pesados, como o GTA, fecharem do nada.',
+            note: 'Não tem como voltar: depois de aplicar, o Windows passa a cuidar do arquivo de paginação. É assim de propósito — fixar um tamanho é o que causa o problema.' }),
         ] },
       ] },
 
@@ -315,7 +316,15 @@
           : pa.motivo;
         return { title: it.title || t.title, desc: it.desc || t.desc, note: t.note, tags: t.tags, rec: t.rec, restart: t.restart, blocked: rotulo, on: false };
       }
-      return { title: it.title || t.title, desc: it.desc || t.desc, note: t.note, tags: t.tags, rec: t.rec, restart: t.restart, blocked: t.blocked, on: t.on };
+      // Bloqueio por versão do Windows: o motivo vem do get-caps em
+      // blocked['Tweak: <id>'] (é a mesma chave que o motor usa no applyTweak).
+      //
+      // Antes o payload do tweaks-status não trazia motivo nenhum, então "Finalizar
+      // tarefa pela barra de tarefas", "Menu do botão direito completo" e "Barra de
+      // tarefas à esquerda" apareciam como interruptor normal no Windows 10. O cliente
+      // clicava, o motor recusava, e a tela não dizia por quê — parecia bug do app.
+      const motivoCaps = st.blocked && st.blocked['Tweak: ' + it.id];
+      return { title: it.title || t.title, desc: it.desc || t.desc, note: t.note, tags: t.tags, rec: t.rec, restart: t.restart, blocked: motivoCaps || t.blocked, on: t.on };
     }
     if (it.kind === 'tool') return { ...TOOLS[it.id], ...it };
     const blocked = (it.kind === 'act' || it.kind === 'once') && Object.prototype.hasOwnProperty.call(st.blocked, it.act) ? st.blocked[it.act] : null;
@@ -521,6 +530,14 @@
     // Bloqueado mas já ligado (aplicado antes ou por fora) continua podendo ser desligado.
     sw.disabled = busy || (!!d.blocked && !d.on);
     sw.title = d.blocked && !d.on ? d.blocked : d.on ? 'Ligado — clique para voltar como estava' : 'Desligado — clique para aplicar';
+    // Ação de UMA VIA. É o caso do arquivo de paginação: o motor devolve o gerenciamento
+    // para o Windows e não existe "valor anterior" para restaurar, então o revertAction
+    // responderia "sem backup". Com o interruptor clicável, o cliente ligava e o próximo
+    // clique dava erro — exatamente o tipo de coisa que parece bug do app.
+    if (it.semVolta && d.on) {
+      sw.disabled = true;
+      sw.title = 'Ligado. Este ajuste não tem como voltar: a partir daqui o Windows gerencia o arquivo de paginação.';
+    }
   }
 
   function dnsRow() {
