@@ -929,11 +929,10 @@ function sessaoRecusada(info) {
     };
   }
   if (i.motivo === 'other_device') {
-    // Duas situações diferentes, com soluções diferentes (mesma distinção do GDZ):
-    //   pcBound true  -> o PC desta licença saiu (formatou/trocou): renova o PC no site
-    //   pcBound false -> a conta está em outro PC: sair lá ou falar no suporte
-    // A mensagem antiga ("Seu plano está sendo usado em outro PC.") não dizia o que fazer
-    // e a tela caía num texto genérico quando o campo faltava.
+    // REGRA DO PRODUTO: uma chave/plano vale para UM PC. Não existe "sair no outro PC":
+    // o vínculo só sai quando o suporte pede o reset da chave. Antes a mensagem mandava
+    // "saia no outro PC" (falso) e "use Renovar PC no site" (função que não existe).
+    // As duas situações mudam só a explicação, a saída é a mesma: falar no suporte.
     return {
       valid: false,
       motivo: 'other_device',
@@ -942,8 +941,8 @@ function sessaoRecusada(info) {
       email: i.email || null,
       nome: i.nome || null,
       message: i.pcBound
-        ? 'Este PC não é o PC liberado na sua conta. Se você formatou ou trocou de PC, abra o site e use "Renovar PC".'
-        : 'Sua conta já está em uso em outro PC. Cada conta vale para 1 PC por vez: saia no outro PC ou fale com o suporte.',
+        ? 'Este PC não é o PC liberado nesta chave. Cada chave vale para 1 PC: para liberar aqui, peça o reset da chave no suporte.'
+        : 'Esta chave já está liberada em outro PC. Cada chave vale para 1 PC: para usar em outro computador, peça o reset da chave no suporte.',
     };
   }
   if (i.motivo === 'expired') {

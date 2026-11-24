@@ -57,7 +57,7 @@ A conta com feature `*` libera tudo.
 
 Duas telas, com os textos do GDZ:
 - `pcBound: true` → "PC novo: renovar" (formatou/trocou)
-- `pcBound: false` → "Plano em outro PC"
+- `pcBound: false` → "chave em outro PC; reset no suporte"
 
 ### 5. HWID ✅
 **Base:** constante `HWID_SCRIPT` recuperada do código do GDZ.

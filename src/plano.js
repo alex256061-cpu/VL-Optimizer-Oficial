@@ -97,7 +97,7 @@
       return 'Plano até ' + new Date(user.licenseExpiresAt).toLocaleDateString('pt-BR', ms > 300 * DAY ? { day: '2-digit', month: '2-digit', year: '2-digit' } : { day: '2-digit', month: '2-digit' });
     }
     if (user.reason === 'expired') return 'Plano vencido';
-    if (user.reason === 'other_device') return user.pcBound ? 'PC novo: renovar' : 'Plano em outro PC';
+    if (user.reason === 'other_device') return user.pcBound ? 'PC diferente: pedir reset' : 'Chave em outro PC';
     return 'Plano grátis';
   }
 
@@ -214,15 +214,14 @@
     document.getElementById('plan-upsell')?.remove();
     document.getElementById('plan-nudge')?.remove();
     const trigger = opts.trigger || 'cadeado';
-    // Licença do PC em outro PC = este Windows é outro (formatou ou trocou de PC): renova pelo mesmo preço.
-    const renew = !!(user && user.reason === 'other_device' && user.pcBound);
-    const otherPc = !!(user && user.reason === 'other_device' && !renew);
+    // REGRA DO PRODUTO: a chave vale para UM PC. Trocar de PC exige o RESET DA CHAVE feito
+    // pelo suporte — não existe "sair no outro PC" nem comprar de novo que mova sozinho.
+    // (Antes daqui saía texto de "renove pelo mesmo preço", que não é como o produto funciona.)
+    const casoPc = !!(user && user.reason === 'other_device');
     const pro = !!(user && user.plan === 'pro');
-    const why = opts.text || (renew
-      ? 'A sua Licença do PC ficou no Windows de antes. Ela vale até formatar: se você formatou ou trocou de PC, compre de novo pelo mesmo preço (ou passe para o vitalício, que continua depois de formatar) e ela vem para este PC.'
-      : otherPc
-        ? 'O seu plano pago está ligado a outro PC. Para usar aqui, fale com o suporte no Discord.'
-        : user && user.reason === 'expired'
+    const why = opts.text || (casoPc
+      ? 'Esta chave já está liberada em outro PC. Cada chave vale para 1 PC. Se você formatou, trocou de PC ou está em outra máquina, peça o reset da chave no suporte (Discord) e ela passa a valer neste PC.'
+      : user && user.reason === 'expired'
           ? 'O seu plano venceu. Compre de novo (mensal ou vitalício) para liberar tudo; o que você já aplicou continua podendo ser desfeito.'
           : pro
             ? 'Nada renova sozinho. Comprando de novo, os dias se somam aos que ainda faltam.'
@@ -238,7 +237,7 @@
         <div class="plan-promo" hidden></div>
         <div class="plan-opts" hidden></div>
         <div class="plan-upsell-btns">
-          <button class="qo-btn" data-a="planos">${renew ? 'Renovar a licença' : pro ? 'Renovar' : 'Ver planos'}</button>
+          <button class="qo-btn" data-a="${casoPc ? 'suporte' : 'planos'}">${casoPc ? 'Pedir reset da chave no suporte' : pro ? 'Renovar' : 'Ver planos'}</button>
           <button class="ghost-btn" data-a="recheck">Já comprei</button>
           <button class="ghost-btn" data-a="close">Agora não</button>
         </div>
@@ -252,7 +251,7 @@
     box.querySelector('.plan-upsell-title').textContent = opts.title || `${PAGE_NAME[page] || 'Este recurso'} faz parte do plano pago`;
     box.querySelector('.plan-upsell-text').textContent = why;
     // Plano em outro PC é caso de suporte: sem preço, o botão leva para a conta.
-    const paintPlans = () => { if (!otherPc) fillPlans(box); };
+    const paintPlans = () => { if (!casoPc) fillPlans(box); };
     paintPlans();
     loadOffers().then(() => { if (document.body.contains(box)) paintPlans(); });
     // vindo de um aviso, quem conta a aparição é o aviso (offer_view)
@@ -267,7 +266,12 @@
       }
       if (a === 'planos') {
         track('upsell_click', trigger);
-        ipcRenderer.invoke('open-site', { page: otherPc ? 'conta' : 'planos' });
+        ipcRenderer.invoke('open-site', { page: 'planos' });
+      }
+      // Reset da chave (chave presa em outro PC) é caso de suporte: abre o Discord.
+      if (a === 'suporte') {
+        track('upsell_click', trigger);
+        ipcRenderer.invoke('open-site', { page: 'suporte' });
       }
       if (a === 'copy') {
         const code = e.target.closest('button').dataset.code;

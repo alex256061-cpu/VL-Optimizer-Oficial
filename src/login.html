@@ -194,7 +194,14 @@ function acaoDoMotivo(motivo, pcBound) {
     b.textContent = texto;
     b.onclick = () => { try { ipc.invoke('open-site', { page: pagina }); } catch (e) { } };
   };
-  if (motivo === 'other_device') return ir(pcBound ? 'conta' : 'conta', pcBound ? 'Abrir o site para renovar o PC' : 'Abrir o site (minha conta)');
+  // other_device: a chave está presa em outro PC e SÓ o suporte tira (reset da chave).
+  // Não existe "sair no outro PC" nem "renovar PC" na tela — o botão leva ao Discord.
+  if (motivo === 'other_device') {
+    b.hidden = false;
+    b.textContent = 'Pedir reset da chave no suporte (Discord)';
+    b.onclick = () => { try { ipc.invoke('open-site', { page: 'suporte' }); } catch (e) { } };
+    return;
+  }
   if (motivo === 'expired') return ir('planos', 'Abrir o site e renovar');
   b.hidden = true;
   b.onclick = null;
@@ -207,7 +214,7 @@ function mensagemDeLogin(r) {
   if (r && r.message) return r.message;
   const m = r && (r.motivo || r.reason || r.error);
   const porMotivo = {
-    other_device: 'Sua conta está ligada a outro PC. Cada conta vale para 1 PC por vez.',
+    other_device: 'Esta chave já está liberada em outro PC. Cada chave vale para 1 PC: para usar neste computador, peça o reset da chave no suporte.',
     expired: 'Sua licença venceu. Renove no site para continuar.',
     relogio: 'O relógio do Windows está atrasado. Acerte a data e hora ou conecte à internet.',
     offline: 'Sem conexão com o servidor. Conecte à internet e tente de novo.',
@@ -233,7 +240,7 @@ function mensagemDeLogin(r) {
       'sem-config': 'A conexão com o servidor não está configurada. Fale com o suporte.',
       'sem-sessao': 'Sua sessão expirou. Entre de novo.',
       'rede': 'Não foi possível falar com o servidor. Verifique sua internet e tente de novo.',
-      'other_device': 'Sua conta está em uso em outro PC. Cada conta vale para 1 PC por vez: saia no outro PC ou libere este no site.',
+      'other_device': 'Esta chave já está liberada em outro PC. Cada chave vale para 1 PC: para usar neste computador, peça o reset da chave no suporte.',
       'expired': 'Sua licença venceu. Renove no site para aplicar ajustes novos (o que já está aplicado continua).',
       'offline': 'O servidor não respondeu e o prazo de uso sem internet venceu. Conecte-se e entre de novo.',
     }[m] || 'Não foi possível validar sua sessão. Entre de novo.';

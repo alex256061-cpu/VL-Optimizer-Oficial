@@ -10,6 +10,14 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.71': {
+    corrigido: [
+      'A mensagem de "chave em outro PC" nao mente mais: cada chave vale para 1 PC e para trocar de computador e preciso pedir o reset da chave no suporte. Antes ela mandava sair no outro PC, o que nao libera nada.',
+      'Quando a chave esta presa em outro PC, o botao do aviso abre o suporte (Discord) para pedir o reset.',
+    ],
+    novo: [],
+  },
+
   '1.4.70': {
     corrigido: [
       'Corrigido: em uma instalacao nova (ou depois de sair da conta) o botao Entrar nao funcionava - o proprio app bloqueava o login e mostrava "Nao foi possivel entrar". Quem ja tinha sessao nao era afetado, mas ninguem conseguia entrar pela primeira vez. Agora entra normalmente.',

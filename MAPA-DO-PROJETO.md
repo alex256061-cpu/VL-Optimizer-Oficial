@@ -12,7 +12,7 @@
 - [x] HWID: ProcessorId + serial placa-mãe + MachineGuid (igual GDZ)
 - [x] Limite de PC por conta (max_devices)
 - [x] PAGE_FEATURE: bloqueio por página (igual GDZ)
-- [x] Tela "PC novo: renovar" e "Plano em outro PC"
+- [x] Aviso de chave presa em outro PC -> reset da chave no suporte (Discord)
 - [x] Versão 1.3.1 publicada no GitHub
 
 ### Site (Cloudflare Pages)
