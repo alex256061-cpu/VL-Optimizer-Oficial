@@ -55,20 +55,21 @@
     // A pausa com a janela sem foco é do fundo.js (.gy-paused no body), junto com a do fundo.
   }
 
-  // ── Em equilíbrio: com tudo aplicado, os aros param alinhados e só o conjunto balança ──
-  // Cada aro sai de onde estava no giro e vai até a pose alinhada; o resto é do giroscopio.css (.gy-done).
+  // ── Em equilíbrio: com tudo aplicado, o anel NÃO para mais ──
+  // 1.4.68: o dono pediu o visual antigo. Antes esta função travava os aros alinhados
+  // (animation: none + pose parada) e o CSS trocava a paleta para dourado, então o
+  // painel "de tudo aplicado" ficava com o anel parado e amarelado — parecia bug e dava
+  // a impressão de que mudava conforme o plano. Agora só registramos o estado (o selo
+  // verde do card continua dizendo "tudo aplicado") e limpamos qualquer trava deixada
+  // por uma versão anterior; o giro vermelho continua igual em qualquer plano.
   let balanced = null;
   function setBalanced(on) {
     if (!gyro || on === balanced) return;
     balanced = on;
     gyro.querySelectorAll('.gy-ring').forEach((ring) => {
       ring.getAnimations().forEach((a) => { if (a.id === 'gy-lock') a.cancel(); });
-      if (!on) { ring.style.animation = ''; ring.style.transform = ''; return; }
-      const from = getComputedStyle(ring).transform;
-      ring.style.animation = 'none';
-      ring.style.transform = 'none';
-      if (noFx() || from === 'none') return;
-      ring.animate([{ transform: from }, { transform: 'none' }], { duration: 1600, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' }).id = 'gy-lock';
+      ring.style.animation = '';
+      ring.style.transform = '';
     });
     gyro.classList.toggle('gy-done', on);
   }

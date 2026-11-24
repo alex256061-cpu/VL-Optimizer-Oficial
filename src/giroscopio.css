@@ -77,34 +77,28 @@
 @keyframes gyRock { from { transform: translateZ(20px) rotateY(-30deg) rotateX(10deg); } to { transform: translateZ(20px) rotateY(30deg) rotateX(-8deg); } }
 @keyframes gyPulse { from { opacity: 0.65; transform: scale(0.94); } to { opacity: 1; transform: scale(1.06); } }
 
-/* ── Em equilíbrio (.gy-done): tudo aplicado ──
-   O dash-v3.js leva cada aro até ficar alinhado com os outros; daí em diante quem se mexe é o
-   conjunto inteiro, devagar, e os aros de fora passam do roxo para o volt. O primeiro e o último
-   quadro são a pose parada do cardã, então a animação entra e sai sem tranco. */
-.gy-done { --gy-a: #ff1f2e; --gy-a2: #e9ffb0; --gy-b: #ffffff; --gy-b2: #ff1f2e; --gy-glow: rgba(255,31,46,0.20); }
- [data-theme="light"] .gy-done { --gy-a: #e0101f; --gy-a2: #ff5560; --gy-b: #e0101f; --gy-b2: #ff9aa2; --gy-c: #e0101f; --gy-c2: #ff5560; --gy-glow: rgba(224,16,31,0.34); }
-.gy-done .gy-gimbal { animation: gyCalm 11s ease-in-out infinite; }
-@keyframes gyCalm {
-  0%, 100% { transform: rotateX(-18deg) rotateZ(22deg); }
-  30% { transform: rotateX(-34deg) rotateY(26deg) rotateZ(22deg); }
-  68% { transform: rotateX(-6deg) rotateY(-30deg) rotateZ(22deg); }
-}
-
+/* ── Em equilíbrio (tudo aplicado): os aros NÃO mudam mais ──
+   1.4.68: o dono pediu o visual antigo de volta. Antes, quando todos os recomendados
+   estavam ligados, o dash-v3.js travava os aros alinhados e esta regra trocava a paleta
+   para dourado (--gy-a2: #e9ffb0), deixando o anel parado e amarelado — parecia bug e
+   ainda confundia com "versão grátis". Agora o anel continua vermelho e girando sempre;
+   quem diz "tudo aplicado" é o selo verde do card. A classe .gy-done segue existindo
+   (o dash-v3.js mantém o estado), mas sem efeito visual. */
 
 
 /* ── Parado: janela sem foco, "reduzir movimento" no Windows ou Efeitos visuais desligado ── */
 .gy-paused :is(.gy-ring, .gy-core, .gy-glow, .gy-gimbal) { animation-play-state: paused; }
 [data-fx="off"] :is(.gy-ring, .gy-core, .gy-glow, .gy-gimbal) { animation: none; }
 [data-fx="off"] .gy-tilt { transition: none; transform: none; }
-[data-fx="off"] .gy:not(.gy-done) .gy-r1 { transform: rotateY(38deg); }
-[data-fx="off"] .gy:not(.gy-done) .gy-r2 { transform: rotateX(62deg); }
-[data-fx="off"] .gy:not(.gy-done) .gy-r3 { transform: rotateY(-48deg); }
+[data-fx="off"] .gy .gy-r1 { transform: rotateY(38deg); }
+[data-fx="off"] .gy .gy-r2 { transform: rotateX(62deg); }
+[data-fx="off"] .gy .gy-r3 { transform: rotateY(-48deg); }
 @media (prefers-reduced-motion: reduce) {
   :is(.gy-ring, .gy-core, .gy-glow, .gy-gimbal) { animation: none; }
   .gy-tilt { transition: none; transform: none; }
-  .gy:not(.gy-done) .gy-r1 { transform: rotateY(38deg); }
-  .gy:not(.gy-done) .gy-r2 { transform: rotateX(62deg); }
-  .gy:not(.gy-done) .gy-r3 { transform: rotateY(-48deg); }
+  .gy .gy-r1 { transform: rotateY(38deg); }
+  .gy .gy-r2 { transform: rotateX(62deg); }
+  .gy .gy-r3 { transform: rotateY(-48deg); }
   .gy-core { transform: rotateY(-18deg) rotateX(6deg); }
 }
 

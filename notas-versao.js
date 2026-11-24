@@ -10,6 +10,13 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.68': {
+    corrigido: [
+      'O anel do Painel voltou ao visual antigo: continua vermelho e girando mesmo quando todos os ajustes recomendados estao aplicados. Antes ele travava alinhado e mudava a cor para dourado nesse estado, o que parecia defeito.',
+    ],
+    novo: [],
+  },
+
   '1.4.67': {
     corrigido: [
       'O plano gratis agora libera o que o plano gratis da referencia libera: medidor de FPS, gargalo, verificacao do hardware, inicializacao, jogos e Otimizacao Rapida. Antes o servidor mandava uma lista curta e o app trancava ate essas paginas: o cliente gratis nao conseguia nem medir o FPS nem rodar a Otimizacao Rapida.',
