@@ -82,7 +82,8 @@
   },
   "nsis": {
     "include": "instalador-tarefa.nsh",
-    "oneClick": true,
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": false,
     "perMachine": false,
     "allowElevation": true,
     "createDesktopShortcut": true,

@@ -10,6 +10,13 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.73': {
+    corrigido: [
+      'Tela de instalacao com a cara do VL: boas-vindas com a arte da marca (fundo preto e vermelho, logo e anel), cabecalho VL na tela de instalacao e a pagina generica do Windows removida. Antes era o assistente padrao cinza.',
+    ],
+    novo: [],
+  },
+
   '1.4.72': {
     corrigido: [
       'Instalacao mais rapida: o instalador esperava ate 60 segundos por uma etapa que nao acontece quando o Windows nao mostra o pedido de administrador (era o caso das atualizacoes). Agora ela e pulada e a instalacao termina em segundos.',

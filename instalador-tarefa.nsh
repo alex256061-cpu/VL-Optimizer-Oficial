@@ -1,3 +1,34 @@
+; ═══════════════════════════════════════════════════════════════════════════
+; VISUAL DO INSTALADOR (1.4.73)
+;
+; O electron-builder monta o instalador "assistido" com o MUI do NSIS, que por
+; padrao e' cinza e careta. Estas linhas (que entram ANTES do installer.nsi e,
+; por isso, antes das paginas serem declaradas) fazem:
+;   - installerSidebar.bmp (preto/vermelho, 164x314) nas telas de boas-vindas e
+;     de conclusao  -> electron-builder liga isso a MUI_WELCOMEFINISHPAGE_BITMAP
+;   - installerHeader.bmp (150x57) no topo da tela de instalacao
+;     -> MUI_HEADERIMAGE / MUI_HEADERIMAGE_BITMAP
+;   - uma pagina de boas-vindas com texto nosso
+;   - a pagina generica "para todos os usuarios / apenas para mim" e' PULADA:
+;     customInstallmode poe =1 e a funcao da pagina da
+;     Abort(), entao ela nem aparece. A instalacao continua por usuario (sem UAC).
+; ═══════════════════════════════════════════════════════════════════════════
+
+!define MUI_WELCOMEPAGE_TITLE "Bem-vindo ao VL Optimizer"
+!define MUI_WELCOMEPAGE_TEXT "Este assistente instala o VL Optimizer no seu PC.$\r$\n$\r$\nA instalacao e' rapida: copia o programa, cria o atalho e registra a abertura automatica. Depois e' so entrar com a sua conta."
+!define MUI_ABORTWARNING
+!define MUI_FINISHPAGE_TITLE "VL Optimizer instalado"
+!define MUI_FINISHPAGE_TEXT "O VL Optimizer esta pronto para usar. Abra pelo atalho da area de trabalho ou pelo menu Iniciar."
+!define MUI_INSTFILESPAGE_COLORS "FFFFFF 000000"
+
+!macro customWelcomePage
+  !insertmacro MUI_PAGE_WELCOME
+!macroend
+
+; Pula a pagina padrao "escolha uma opcao de instalacao".
+!macro customInstallmode
+  StrCpy $isForceCurrentInstall "1"
+!macroend
 ; instalador-tarefa.nsh - registra a tarefa agendada que abre o VL Optimizer elevado sem UAC.
 ;
 ; Por que no instalador: criar uma tarefa com RunLevel HighestAvailable exige administrador.
