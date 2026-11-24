@@ -180,10 +180,26 @@ const SUPABASE = (() => {
   async function recuperar(email) {
     const r = await pedir('/auth/v1/recover', {
       method: 'POST',
-      body: JSON.stringify({ email: String(email).trim() }),
+      body: JSON.stringify({
+        email: String(email).trim(),
+        // O link do e-mail tem que cair na página que pede a senha nova. Sem isto o
+        // Supabase manda para a home e a pessoa não tem onde digitar a senha nova
+        // (era o caso antes de existir /redefinir).
+        redirect_to: location.origin + '/redefinir',
+      }),
     });
     if (!r.ok) return { success: false, message: traduzir(r.dados && (r.dados.msg || r.dados.message), r.status) };
     return { success: true, message: 'Enviamos um link de redefinição para o seu e-mail.' };
+  }
+
+  // Salva a senha nova. `token` é o access_token do link de recuperação; sem ele usa a
+  // sessão atual (serve para "trocar a senha" com a conta logada).
+  async function definirSenha(token, senha) {
+    return await pedir('/auth/v1/user', {
+      method: 'PUT',
+      token: token || undefined,
+      body: JSON.stringify({ password: String(senha) }),
+    });
   }
 
   function sair() {
@@ -191,5 +207,5 @@ const SUPABASE = (() => {
     try { sessionStorage.removeItem(CHAVE_SESSAO); } catch (e) { }
   }
 
-  return { entrar, criarConta, sessao, sessaoValida, perfil, meusPcs, recuperar, sair, URL, KEY };
+  return { entrar, criarConta, sessao, sessaoValida, perfil, meusPcs, recuperar, definirSenha, traduzir, sair, URL, KEY };
 })();

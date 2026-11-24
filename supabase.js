@@ -1030,7 +1030,13 @@ async function recuperar(email) {
   if (!configurado()) return { success: false, message: 'Login ainda não configurado neste app.' };
   const r = await pedir('/auth/v1/recover', {
     method: 'POST',
-    body: JSON.stringify({ email: String(email).trim() }),
+    body: JSON.stringify({
+      email: String(email).trim(),
+      // O e-mail de recuperação tem que abrir a página que pede a senha nova
+      // (site/redefinir.html). Sem redirect_to o Supabase manda para a home e o cliente
+      // fica sem onde digitar a senha — foi assim que o dono perdeu a senha em 24/11.
+      redirect_to: (MARCA.site || 'https://vl-optimizer.pages.dev').replace(/\/$/, '') + '/redefinir',
+    }),
   });
   if (!r.ok) return { success: false, message: traduzir(r.dados && (r.dados.msg || r.dados.message), r.status) };
   return { success: true, message: 'Enviamos um link de redefinição para o seu e-mail.' };

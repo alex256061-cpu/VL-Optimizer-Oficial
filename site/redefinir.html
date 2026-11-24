@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Redefinir senha · VL Optimizer</title>
+<meta name="description" content="Crie uma senha nova para a sua conta do VL Optimizer.">
+<meta name="robots" content="noindex">
+<link rel="icon" href="assets/icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="conta.css">
+</head>
+<body>
+
+<div class="auth-wrap">
+
+  <section class="auth-lado">
+    <a class="auth-marca" href="/">
+      <img src="assets/icon.png" alt="">
+      <b>VL <span>Optimizer</span></b>
+    </a>
+
+    <div class="auth-centro">
+      <h1>Uma senha<br><em>nova</em></h1>
+      <p>Escolha a senha que você vai usar no site e no aplicativo. É a mesma conta.</p>
+
+      <ul class="auth-lista">
+        <li><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg> Mínimo de 6 caracteres</li>
+        <li><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg> Vale para o site e para o app</li>
+        <li><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg> Ninguém da equipe vê a sua senha</li>
+      </ul>
+    </div>
+
+    <div class="auth-rodape">VL Optimizer · Windows 10 e 11</div>
+  </section>
+
+  <section class="auth-painel">
+    <div class="auth-abas">
+      <span class="auth-aba on" style="cursor:default">Redefinir senha</span>
+      <a class="auth-aba" href="/entrar" style="text-align:center;text-decoration:none;line-height:1.4">Entrar</a>
+    </div>
+
+    <div class="auth-aviso" id="aviso"></div>
+
+    <!-- 1) link válido: pede a senha nova -->
+    <form id="form-senha" hidden>
+      <div class="auth-campo">
+        <label for="senha">Senha nova</label>
+        <input id="senha" name="senha" type="password" placeholder="mínimo 6 caracteres" autocomplete="new-password" minlength="6" required>
+      </div>
+      <div class="auth-campo">
+        <label for="senha2">Repita a senha</label>
+        <input id="senha2" name="senha2" type="password" placeholder="a mesma senha" autocomplete="new-password" minlength="6" required>
+      </div>
+      <button class="auth-btn auth-btn-principal" id="btn-salvar" type="submit">Salvar senha</button>
+    </form>
+
+    <!-- 2) sem token (link expirado, aberto direto, ou já usou): pede o e-mail -->
+    <form id="form-pedir" hidden>
+      <p class="auth-dica">Para criar uma senha nova, mandamos um link para o seu e-mail. Abra o link e escolha a senha.</p>
+      <div class="auth-campo">
+        <label for="email">E-mail da conta</label>
+        <input id="email" name="email" type="email" placeholder="seu@email.com" autocomplete="username" required>
+      </div>
+      <button class="auth-btn auth-btn-principal" id="btn-enviar" type="submit">Enviar link</button>
+    </form>
+
+    <!-- 3) sucesso -->
+    <div id="pronto" hidden style="text-align:center;padding:8px 0 0">
+      <p class="auth-dica" style="margin-bottom:18px">Senha alterada. Agora é só entrar com a senha nova.</p>
+      <a class="auth-btn auth-btn-principal" href="/entrar" style="display:block;line-height:44px;text-decoration:none">Ir para entrar</a>
+    </div>
+
+    <div class="auth-sep">ou</div>
+    <div class="auth-pe">
+      Não tem conta? <a href="/criar-conta">Criar agora</a>
+    </div>
+  </section>
+
+</div>
+
+<script src="supabase-client.js"></script>
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// Página de redefinir senha.
+//
+// POR QUE ELA EXISTE (achado de 24/11/2026): o "Esqueci a senha" do site e do app
+// chamava o /auth/v1/recover do Supabase e mandava o e-mail, mas o e-mail apontava
+// para a home — NÃO existia página para trocar a senha. O cliente recebia o link,
+// clicava e não conseguia fazer nada (e o próprio dono ficou sem a senha da conta).
+//
+// O link do Supabase (fluxo implícito) chega no #fragmento:
+//   /redefinir#access_token=...&refresh_token=...&type=recovery&expires_in=3600
+// Aqui lemos o fragmento, pedimos a senha nova e chamamos PUT /auth/v1/user.
+// Sem token (link expirado/já usado/aberto direto), oferecemos mandar outro link.
+// ─────────────────────────────────────────────────────────────────────────────
+const $ = (id) => document.getElementById(id);
+const aviso = $('aviso');
+
+function mostrar(msg, tipo) {
+  aviso.textContent = msg || '';
+  aviso.className = 'auth-aviso' + (msg ? ' ' + (tipo || 'erro') : '');
+}
+
+function carregando(id, on, texto) {
+  const b = $(id);
+  if (!b) return;
+  b.disabled = on;
+  if (on) { b._t = b.textContent; b.innerHTML = '<span class="auth-spin"></span>'; }
+  else b.textContent = texto || b._t || 'Salvar senha';
+}
+
+// ── token de recuperação no fragmento da URL ──
+function tokenDoLink() {
+  const h = String(location.hash || '').replace(/^#/, '');
+  if (!h) return null;
+  const p = new URLSearchParams(h);
+  const t = p.get('access_token');
+  if (!t) return null;
+  // expirado? (o Supabase põe expires_in em segundos)
+  const exp = Number(p.get('expires_in') || 3600);
+  const quando = Number(sessionStorage.getItem('vl-recovery-at') || 0);
+  if (quando && Date.now() - quando > exp * 1000) return null;
+  return { token: t, tipo: p.get('type') };
+}
+
+const link = tokenDoLink();
+let tokenDaSessao = null;
+if (link && link.token) {
+  // guarda o instante em que o link chegou: se a pessoa recarregar depois de 1 h, o
+  // fragmento continua na URL mas o token morreu; o formulário volta para "pedir link".
+  if (!sessionStorage.getItem('vl-recovery-at')) sessionStorage.setItem('vl-recovery-at', String(Date.now()));
+  $('form-senha').hidden = false;
+  sessionStorage.setItem('vl-recovery-token', link.token);
+  // limpa o fragmento da barra de endereços (o token não fica no histórico nem em print)
+  try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { }
+} else if (sessionStorage.getItem('vl-recovery-token')) {
+  // recarregou a página: usa o token guardado (a URL já foi limpa)
+  $('form-senha').hidden = false;
+} else {
+  // Sem link de recuperação: se já está logado, deixa TROCAR a senha com a sessão atual.
+  // (serve para quem quer mudar a senha sem passar pelo e-mail)
+  try {
+    const s = SUPABASE.sessao();
+    if (s && s.access_token) { tokenDaSessao = s.access_token; $('form-senha').hidden = false; }
+  } catch (e) { }
+  if (!$('form-senha').hidden) {
+    const dica = document.createElement('p');
+    dica.className = 'auth-dica';
+    dica.style.marginBottom = '14px';
+    dica.textContent = 'Você está conectado. Digite a senha nova para trocá-la.';
+    $('form-senha').prepend(dica);
+  } else {
+    $('form-pedir').hidden = false;
+  }
+}
+
+// token do link de recuperação; na falta dele, o da sessão atual (trocar senha logado)
+function tokenAtual() { return sessionStorage.getItem('vl-recovery-token') || tokenDaSessao || ''; }
+
+$('form-senha').onsubmit = async (e) => {
+  e.preventDefault();
+  const s1 = $('senha').value;
+  const s2 = $('senha2').value;
+  if (s1.length < 6) { mostrar('A senha precisa ter pelo menos 6 caracteres.'); return; }
+  if (s1 !== s2) { mostrar('As duas senhas não são iguais.'); return; }
+  carregando('btn-salvar', true);
+  try {
+    const r = await SUPABASE.definirSenha(tokenAtual(), s1);
+    carregando('btn-salvar', false, 'Salvar senha');
+    if (r && r.ok) {
+      sessionStorage.removeItem('vl-recovery-token');
+      sessionStorage.removeItem('vl-recovery-at');
+      $('form-senha').hidden = true;
+      $('pronto').hidden = false;
+      mostrar('Senha alterada. Use a senha nova para entrar.', 'ok');
+    } else {
+      const m = (r && r.dados && (r.dados.msg || r.dados.message)) || '';
+      if (/expired|invalid|token/i.test(m + ' ' + ((r && r.status) || ''))) {
+        sessionStorage.removeItem('vl-recovery-token');
+        $('form-senha').hidden = true;
+        $('form-pedir').hidden = false;
+        mostrar('Este link expirou. Peça um link novo abaixo.');
+      } else if (/at least|password/i.test(m)) {
+        mostrar('A senha precisa de pelo menos 6 caracteres.');
+      } else {
+        mostrar(m ? SUPABASE.traduzir ? SUPABASE.traduzir(m) : m : 'Não foi possível salvar a senha. Tente de novo.');
+      }
+    }
+  } catch (err) {
+    carregando('btn-salvar', false, 'Salvar senha');
+    mostrar('Falha de conexão: ' + (err && err.message ? err.message : err));
+  }
+};
+
+$('form-pedir').onsubmit = async (e) => {
+  e.preventDefault();
+  const email = $('email').value.trim();
+  if (!email) { mostrar('Digite o e-mail da conta.'); return; }
+  carregando('btn-enviar', true);
+  try {
+    const r = await SUPABASE.recuperar(email);
+    carregando('btn-enviar', false, 'Enviar link');
+    if (r && r.success) {
+      mostrar('Se este e-mail tiver conta, o link chegou na caixa de entrada (confira o spam).', 'ok');
+    } else {
+      mostrar((r && r.message) || 'Não foi possível enviar o link agora.');
+    }
+  } catch (err) {
+    carregando('btn-enviar', false, 'Enviar link');
+    mostrar('Falha de conexão: ' + (err && err.message ? err.message : err));
+  }
+};
+</script>
+</body>
+</html>

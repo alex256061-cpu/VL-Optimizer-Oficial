@@ -10,6 +10,13 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.69': {
+    corrigido: [
+      'Esqueci a senha agora funciona de verdade: o e-mail de recuperacao abre uma pagina para criar a senha nova (antes o link caia na home e nao tinha onde digitar a senha). Quem ja esta logado tambem consegue trocar a senha por essa pagina.',
+    ],
+    novo: [],
+  },
+
   '1.4.68': {
     corrigido: [
       'O anel do Painel voltou ao visual antigo: continua vermelho e girando mesmo quando todos os ajustes recomendados estao aplicados. Antes ele travava alinhado e mudava a cor para dourado nesse estado, o que parecia defeito.',
