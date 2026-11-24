@@ -414,6 +414,7 @@ async function entrar(email, senha) {
       motivo: v.reason,
       licenca: s.licenca || null,
       email: (p && p.email) || (s.user && s.user.email) || null,
+      nome: (p && p.name) || null,
       plan: (p && p.plan) || 'free',
       pcBound: !!v.pcBound,
     }));
@@ -928,17 +929,21 @@ function sessaoRecusada(info) {
     };
   }
   if (i.motivo === 'other_device') {
-    // Mesmo motivo que o main.js já mostrava (conta-plano › outraMaquina).
+    // Duas situações diferentes, com soluções diferentes (mesma distinção do GDZ):
+    //   pcBound true  -> o PC desta licença saiu (formatou/trocou): renova o PC no site
+    //   pcBound false -> a conta está em outro PC: sair lá ou falar no suporte
+    // A mensagem antiga ("Seu plano está sendo usado em outro PC.") não dizia o que fazer
+    // e a tela caía num texto genérico quando o campo faltava.
     return {
       valid: false,
       motivo: 'other_device',
       outraMaquina: true,
       pcBound: !!i.pcBound,
       email: i.email || null,
-      nome: i.plan || null,
+      nome: i.nome || null,
       message: i.pcBound
-        ? 'Seu plano está ligado a outro PC. Se você formatou ou trocou de PC, renove o PC no site.'
-        : 'Seu plano está sendo usado em outro PC.',
+        ? 'Este PC não é o PC liberado na sua conta. Se você formatou ou trocou de PC, abra o site e use "Renovar PC".'
+        : 'Sua conta já está em uso em outro PC. Cada conta vale para 1 PC por vez: saia no outro PC ou fale com o suporte.',
     };
   }
   if (i.motivo === 'expired') {
@@ -946,7 +951,7 @@ function sessaoRecusada(info) {
       valid: false,
       motivo: 'expired',
       expirada: true,
-      message: 'Sua licença venceu. Renove para voltar a usar o plano completo.',
+      message: 'Sua licença venceu. Renove no site para aplicar ajustes novos; o que já está aplicado continua funcionando.',
     };
   }
   // 'sem_licenca' / 'sem_offline' / 'licenca': sem resposta e sem licença guardada.

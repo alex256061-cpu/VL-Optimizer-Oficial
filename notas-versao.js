@@ -10,6 +10,14 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.70': {
+    corrigido: [
+      'Corrigido: em uma instalacao nova (ou depois de sair da conta) o botao Entrar nao funcionava - o proprio app bloqueava o login e mostrava "Nao foi possivel entrar". Quem ja tinha sessao nao era afetado, mas ninguem conseguia entrar pela primeira vez. Agora entra normalmente.',
+      'As mensagens de recusa agora dizem o motivo certo: conta em outro PC, licenca vencida, relogio atrasado, sem internet. Quando a solucao esta no site aparece um botao para abrir a sua conta.',
+    ],
+    novo: [],
+  },
+
   '1.4.69': {
     corrigido: [
       'Esqueci a senha agora funciona de verdade: o e-mail de recuperacao abre uma pagina para criar a senha nova (antes o link caia na home e nao tinha onde digitar a senha). Quem ja esta logado tambem consegue trocar a senha por essa pagina.',

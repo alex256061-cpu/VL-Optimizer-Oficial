@@ -114,7 +114,16 @@ $('form-entrar').onsubmit = async (e) => {
       const voltar = new URLSearchParams(location.search).get('voltar');
       setTimeout(() => { location.href = voltar || '/conta'; }, 500);
     } else {
-      mostrar(r.message || 'Não foi possível entrar.');
+      // Antes qualquer recusa caía no genérico. Agora tem mensagem por motivo.
+      const porMotivo = {
+        other_device: 'Sua conta está ligada a outro PC. Cada conta vale para 1 PC por vez.',
+        expired: 'Sua licença venceu. Renove no site para continuar.',
+        relogio: 'O relógio do Windows está atrasado. Acerte a data e hora.',
+        offline: 'Sem conexão com o servidor. Conecte à internet e tente de novo.',
+        rede: 'Não foi possível falar com o servidor. Verifique sua internet.',
+      };
+      const m = r && (r.motivo || r.reason);
+      mostrar((r && r.message) || (m && porMotivo[m]) || 'Não foi possível entrar. Confira o e-mail e a senha e tente de novo.');
     }
   } catch (err) {
     carregando('btn-entrar', false, 'Entrar');

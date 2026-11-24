@@ -649,7 +649,14 @@ function temFeature(perfil, feat) {
 }
 
 async function canalPermitido(nome, arg) {
-  if (CANAIS_SEMPRE_LIVRES.has(nome)) return { ok: true };
+  // BUG CORRIGIDO (1.4.70): esta checagem só olhava CANAIS_SEMPRE_LIVRES, e o `login`
+  // (e `register`) está em CANAIS_LIVRES, não naquela lista. Resultado: sem sessão o
+  // planoAtual() era null e o canal de LOGIN era recusado com "Faça login para usar
+  // esta função." — o cliente abria o app, digitava e-mail e senha e via "Não foi
+  // possível entrar." sem nunca chegar no servidor. Ninguém conseguia entrar nem criar
+  // conta em uma instalação nova; quem já tinha sessão só era afetado ao deslogar.
+  // A união das duas listas garante que canal livre é livre nos dois gates.
+  if (CANAIS_SEMPRE_LIVRES.has(nome) || CANAIS_LIVRES.has(nome)) return { ok: true };
   const p = await planoAtual();
   if (!p) return { ok: false, error: 'Faça login para usar esta função.', code: 'no_session' };
   if (temFeature(p, '*')) return { ok: true };

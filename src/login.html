@@ -40,6 +40,11 @@
   .aviso { display: none; padding: 11px 13px; border-radius: 9px; font-size: 12.5px; line-height: 1.5; margin-bottom: 16px; }
   .aviso.erro { display: block; background: rgba(255,60,60,.1); border: 1px solid rgba(255,60,60,.28); color: #ff9a9a; }
   .aviso.ok { display: block; background: rgba(60,220,130,.1); border: 1px solid rgba(60,220,130,.28); color: #7ee6a8; }
+  /* Botão que acompanha o aviso quando a solução está no site (renovar PC / plano) */
+  .aviso-acao { display: block; width: 100%; margin: -8px 0 16px; padding: 10px 13px; border-radius: 9px;
+    background: rgba(255,31,46,.14); border: 1px solid rgba(255,31,46,.38); color: #ffb3b8;
+    font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; transition: background .15s, border-color .15s; }
+  .aviso-acao:hover { background: rgba(255,31,46,.22); border-color: rgba(255,31,46,.55); color: #fff; }
 
   .campo { margin-bottom: 14px; }
   .campo label { display: block; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .07em; color: #6f6a82; margin-bottom: 7px; }
@@ -112,6 +117,8 @@
   </div>
 
   <div class="aviso" id="aviso"></div>
+  <!-- Ação para recusas que se resolvem no site (renovar PC, renovar plano) -->
+  <button class="aviso-acao" id="aviso-acao" type="button" hidden></button>
 
   <!-- entrar -->
   <form id="p-entrar" autocomplete="on">
@@ -177,6 +184,42 @@ function mostrar(msg, tipo) {
   aviso.className = 'aviso' + (msg ? ' ' + (tipo || 'erro') : '');
 }
 
+// Ação extra embaixo do aviso: para o que se resolve NO SITE (renovar PC ou plano).
+// Sem isso o cliente só via "não foi possível entrar" e não tinha para onde ir.
+function acaoDoMotivo(motivo, pcBound) {
+  const b = $('aviso-acao');
+  if (!b) return;
+  const ir = (pagina, texto) => {
+    b.hidden = false;
+    b.textContent = texto;
+    b.onclick = () => { try { ipc.invoke('open-site', { page: pagina }); } catch (e) { } };
+  };
+  if (motivo === 'other_device') return ir(pcBound ? 'conta' : 'conta', pcBound ? 'Abrir o site para renovar o PC' : 'Abrir o site (minha conta)');
+  if (motivo === 'expired') return ir('planos', 'Abrir o site e renovar');
+  b.hidden = true;
+  b.onclick = null;
+}
+
+// Mensagem de erro do login. O servidor pode recusar por vários motivos; antes qualquer
+// motivo sem `message` caía no genérico "Não foi possível entrar.", que não diz nada
+// (foi o que aconteceu quando a conta estava presa em outro PC).
+function mensagemDeLogin(r) {
+  if (r && r.message) return r.message;
+  const m = r && (r.motivo || r.reason || r.error);
+  const porMotivo = {
+    other_device: 'Sua conta está ligada a outro PC. Cada conta vale para 1 PC por vez.',
+    expired: 'Sua licença venceu. Renove no site para continuar.',
+    relogio: 'O relógio do Windows está atrasado. Acerte a data e hora ou conecte à internet.',
+    offline: 'Sem conexão com o servidor. Conecte à internet e tente de novo.',
+    offline_vencido: 'Sem conexão com o servidor e o prazo offline venceu. Conecte-se e entre de novo.',
+    rede: 'Não foi possível falar com o servidor. Verifique sua internet e tente de novo.',
+    no_session: 'Sua sessão expirou. Entre de novo.',
+    sem_config: 'A conexão com o servidor não está configurada. Fale com o suporte.',
+  };
+  if (m && porMotivo[m]) return porMotivo[m];
+  return 'Não foi possível entrar. Confira o e-mail e a senha e tente de novo.';
+}
+
 // O main manda o motivo quando recusa a sessão. Sem isto a tela de entrada
 // aparecia em branco, sem explicar nada — foi o que aconteceu quando o app passou
 // a falhar fechado. Motivos que chegam: sem-config, sem-sessao, rede, e os do
@@ -190,11 +233,14 @@ function mostrar(msg, tipo) {
       'sem-config': 'A conexão com o servidor não está configurada. Fale com o suporte.',
       'sem-sessao': 'Sua sessão expirou. Entre de novo.',
       'rede': 'Não foi possível falar com o servidor. Verifique sua internet e tente de novo.',
-      'other_device': 'Esta licença está ativa em outro PC. Entre com a mesma conta no PC certo ou fale com o suporte.',
-      'expired': 'Sua licença venceu. Renove para voltar a usar.',
+      'other_device': 'Sua conta está em uso em outro PC. Cada conta vale para 1 PC por vez: saia no outro PC ou libere este no site.',
+      'expired': 'Sua licença venceu. Renove no site para aplicar ajustes novos (o que já está aplicado continua).',
       'offline': 'O servidor não respondeu e o prazo de uso sem internet venceu. Conecte-se e entre de novo.',
     }[m] || 'Não foi possível validar sua sessão. Entre de novo.';
-    setTimeout(() => mostrar(txt, 'erro'), 80);
+    setTimeout(() => {
+      mostrar(txt, 'erro');
+      try { acaoDoMotivo(m, q.get('pcBound') === '1'); } catch (e) { }
+    }, 80);
   } catch (e) { }
 })();
 
@@ -248,7 +294,8 @@ $('p-entrar').onsubmit = async (e) => {
       mostrar('Login realizado! Abrindo...', 'ok');
       setTimeout(() => { window.location.href = 'dashboard.html'; }, 450);
     } else {
-      mostrar((r && r.message) || 'Não foi possível entrar.');
+      mostrar(mensagemDeLogin(r));
+      acaoDoMotivo(r && (r.motivo || r.reason), r && r.pcBound);
     }
   } catch (err) {
     carregando('btn-login', false, 'Entrar');
