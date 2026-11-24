@@ -10,6 +10,16 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.72': {
+    corrigido: [
+      'Instalacao mais rapida: o instalador esperava ate 60 segundos por uma etapa que nao acontece quando o Windows nao mostra o pedido de administrador (era o caso das atualizacoes). Agora ela e pulada e a instalacao termina em segundos.',
+      'Instalador menor (130 MB em vez de 137): o app leva so o idioma portugues, em vez de 55 idiomas do Windows.',
+    ],
+    novo: [
+      'Tela de instalacao com a cara do VL: janela propria com o icone e a barra de progresso, sem o assistente padrao do Windows.',
+    ],
+  },
+
   '1.4.71': {
     corrigido: [
       'A mensagem de "chave em outro PC" nao mente mais: cada chave vale para 1 PC e para trocar de computador e preciso pedir o reset da chave no suporte. Antes ela mandava sair no outro PC, o que nao libera nada.',

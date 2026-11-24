@@ -24,6 +24,13 @@
 !define VL_ELEV_FLAG "--elevated-from-task"
 
 !macro customInstall
+  ; INSTALACAO SILENCIOSA = atualizacao automatica (/S). Aqui NAO existe janela para o
+  ; UAC aparecer: o ExecShell "runas" era negado na hora e o laco abaixo esperava os
+  ; 85 x 700 ms (~60 s) por um marcador que nunca ia chegar. Era ISSO que fazia a
+  ; instalacao parecer travada (72,7 s medidos com /S; a copia dos 448 MB leva ~12 s).
+  ; Na atualizacao a tarefa ja existe desde a primeira instalacao, entao pular e' seguro.
+  IfSilent vl_fim
+
   DetailPrint "Registrando a tarefa de administrador (abrir sem UAC)..."
 
   ; Conta atual no formato DOMINIO\USUARIO.
@@ -73,7 +80,7 @@
   StrCpy $3 0
 
   vl_esperar:
-    Sleep 700
+    Sleep 500
     ClearErrors
     FileOpen $1 "$0\concluido.txt" r
     FileRead $1 $2
@@ -81,7 +88,7 @@
     StrCmp $2 "ok" vl_ok
     StrCmp $2 "falhou" vl_falhou
     IntOp $3 $3 + 1
-    IntCmp $3 85 vl_sem_marcador vl_esperar vl_sem_marcador
+    IntCmp $3 24 vl_sem_marcador vl_esperar vl_sem_marcador
 
   vl_ok:
     DetailPrint "Tarefa criada: o VL abre como administrador sem pedir UAC."

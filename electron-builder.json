@@ -18,6 +18,9 @@
     "onlyLoadAppFromAsar": true
   },
   "npmRebuild": false,
+  "electronLanguages": [
+    "pt-BR"
+  ],
   "files": [
     "package.json",
     "main.js",
@@ -79,10 +82,9 @@
   },
   "nsis": {
     "include": "instalador-tarefa.nsh",
-    "oneClick": false,
+    "oneClick": true,
     "perMachine": false,
     "allowElevation": true,
-    "allowToChangeInstallationDirectory": true,
     "createDesktopShortcut": true,
     "createStartMenuShortcut": true,
     "shortcutName": "VL Optimizer",
@@ -92,7 +94,12 @@
     ],
     "language": "1046",
     "runAfterFinish": false,
-    "deleteAppDataOnUninstall": false
+    "deleteAppDataOnUninstall": false,
+    "installerIcon": "assets/icon.ico",
+    "uninstallerIcon": "assets/icon.ico",
+    "installerHeaderIcon": "assets/icon.ico",
+    "installerHeader": "instalador/installerHeader.bmp",
+    "installerSidebar": "instalador/installerSidebar.bmp"
   },
   "artifactName": "Instalar-VL-Optimizer-${version}.${ext}"
 }
