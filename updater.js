@@ -61,6 +61,9 @@ let state = {
   percent: 0,
   downloaded: false,
   conferindo: false,
+  // Fase legível ('checking' | 'idle' | 'available' | 'downloading' | 'conferindo' |
+  // 'ready' | 'error'). Quem calcula é faseAtual(); aqui é o valor inicial.
+  status: 'checking',
   assinatura: null, // null | 'conferida' | 'sem-chave' | 'nao-conferida' | 'reprovada'
   error: null,
   notes: null,      // texto do release (o que mudou)
@@ -69,8 +72,9 @@ let timer = null;
 let listeners = [];   // funções avisadas quando o estado muda
 
 function emit() {
+  // `status` junto: é o campo que a barra da tela lê (ver faseAtual()).
   for (const fn of listeners) {
-    try { fn({ ...state }); } catch (e) { /* ouvinte quebrado não derruba o app */ }
+    try { fn({ ...state, status: faseAtual() }); } catch (e) { /* ouvinte quebrado não derruba o app */ }
   }
 }
 
@@ -163,9 +167,31 @@ function currentVersion() {
   catch (e) { return '0.0.0'; }
 }
 
+// Fase legível do estado. A TELA depende disto.
+//
+// BUG CORRIGIDO (1.4.65): este campo não existia. O estado tinha `downloading`,
+// `downloaded`, `conferindo` e `available`, mas src/plano.js monta a barra assim:
+//
+//     const phase = s.status === 'downloading' || s.status === 'ready' ? ... : null;
+//     if (!phase) { bar?.remove(); return; }
+//
+// Como `state.status` era SEMPRE undefined, a barra "Versão X pronta para instalar /
+// Reiniciar e atualizar" NUNCA era criada. O app baixava e conferia a atualização (o
+// cache em %LOCALAPPDATA%\<app>-updater\pending provava isso) e não avisava ninguém:
+// o cliente ficava na versão antiga para sempre, só atualizando se reinstalasse à mão.
+function faseAtual() {
+  if (state.conferindo) return 'conferindo';
+  if (state.downloading) return 'downloading';
+  if (state.downloaded) return 'ready';
+  if (state.error) return 'error';
+  if (state.available) return 'available';
+  return state.checked ? 'idle' : 'checking';
+}
+
 function status() {
   return {
     ...state,
+    status: faseAtual(),
     currentVersion: currentVersion(),
     repo: UPDATE_URL,
     site: SITE,

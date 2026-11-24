@@ -12,7 +12,7 @@ const INVOKE = [
   'games-scan', 'games-status', 'set-auto-mode', 'game-clean', 'shader-clean',
   'ram-clean', 'ram-status', 'ram-auto-set',
   'startup-list', 'startup-set', 'get-recommendations',
-  'clean-scan', 'clean-run', 'disk-drives', 'disk-scan', 'disk-scan-status', 'disk-scan-cancel', 'disk-open',
+  'clean-scan', 'clean-status', 'clean-run', 'disk-drives', 'disk-scan', 'disk-scan-status', 'disk-scan-cancel', 'disk-open',
   'apps-list', 'apps-extra', 'apps-uninstall', 'apps-exists', 'apps-leftovers', 'apps-remove-leftovers',
   'tweaks-status', 'tweak-set', 'tweak-dns', 'tweak-tool', 'actions-status',
   'fps-status', 'fps-set-target', 'fps-record', 'fps-clear', 'fps-overlay-set', 'fps-base-mark', 'fps-base-clear',

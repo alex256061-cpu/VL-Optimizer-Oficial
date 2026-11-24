@@ -81,17 +81,22 @@
     cl.polling = true;
     while (cl.polling) {
       await new Promise((r) => setTimeout(r, 800));
-      const st = await invoke('clean-status');
-      if (!st || !st.success) continue;
-      cl.cats = st.cats;
-      cl.measure = { measuring: !!st.measuring, index: st.index || 0, total: st.total || st.cats.length };
-      const usableNow = st.cats.filter((c) => !c.open && c.bytes > 0);
-      if (!st.measuring) {
-        if (!cl.sel.size) cl.sel = new Set(usableNow.filter((c) => c.on).map((c) => c.id));
-        else cl.sel = new Set([...cl.sel].filter((id) => usableNow.some((c) => c.id === id)));
+      // try/catch: o canal já faltou uma vez (clean-status não estava no preload nem no
+      // main) e a rejeição matava a função com cl.polling preso em true — depois disso o
+      // "Medindo X/Y" nunca mais voltava a andar naquela sessão.
+      let st = null;
+      try { st = await invoke('clean-status'); } catch (e) { st = null; }
+      if (st && st.success) {
+        cl.cats = st.cats;
+        cl.measure = { measuring: !!st.measuring, index: st.index || 0, total: st.total || st.cats.length };
+        const usableNow = st.cats.filter((c) => !c.open && c.bytes > 0);
+        if (!st.measuring) {
+          if (!cl.sel.size) cl.sel = new Set(usableNow.filter((c) => c.on).map((c) => c.id));
+          else cl.sel = new Set([...cl.sel].filter((id) => usableNow.some((c) => c.id === id)));
+        }
+        render();
+        if (!st.measuring) { cl.polling = false; break; }
       }
-      render();
-      if (!st.measuring) { cl.polling = false; break; }
     }
     cl.polling = false;
   }

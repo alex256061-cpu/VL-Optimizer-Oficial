@@ -1,8 +1,8 @@
-version: 1.4.64
+version: 1.4.65
 files:
-  - url: Instalar-VL-Optimizer-1.4.64.exe
-    sha512: EQKwVxtvHr/GtjNzmfY6IRZuMabc6DdCCZ+e0rmlJJC3dvmAWoY9jY7JdH099JRiUsni91uyPJSzQiMNh0KfAg==
-    size: 144208732
-path: Instalar-VL-Optimizer-1.4.64.exe
-sha512: EQKwVxtvHr/GtjNzmfY6IRZuMabc6DdCCZ+e0rmlJJC3dvmAWoY9jY7JdH099JRiUsni91uyPJSzQiMNh0KfAg==
-releaseDate: '2026-11-24T20:31:29.705Z'
+  - url: Instalar-VL-Optimizer-1.4.65.exe
+    sha512: 0WHsRa8vQaj1rMG4e8IAjiJYO/n7zzb81b/q9BcGa5s+CvPUOLxxADIXwn7VljphymQUlxdHYOA012PiaiffOA==
+    size: 144209795
+path: Instalar-VL-Optimizer-1.4.65.exe
+sha512: 0WHsRa8vQaj1rMG4e8IAjiJYO/n7zzb81b/q9BcGa5s+CvPUOLxxADIXwn7VljphymQUlxdHYOA012PiaiffOA==
+releaseDate: '2026-11-24T21:02:33.401Z'

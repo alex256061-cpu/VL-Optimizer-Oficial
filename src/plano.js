@@ -422,7 +422,11 @@
   // pelo main.js, oferece reiniciar. "Ocultar"/"Depois" vale só para a fase em que foi clicado.
   let updateHiddenFor = null;
   function showUpdate(s) {
-    const phase = s && (s.status === 'downloading' || s.status === 'ready') ? `${s.status}:${s.version}` : null;
+    // Fases que mostram a barra. 'conferindo' entrou junto com a correção do updater.js
+    // (1.4.65): depois do download o app confere a assinatura de ~140 MB, e sem esta fase
+    // a barra sumia no meio e voltava — parecia travamento.
+    const FASES = ['downloading', 'conferindo', 'ready'];
+    const phase = s && FASES.includes(s.status) ? `${s.status}:${s.version}` : null;
     let bar = document.getElementById('update-bar');
     if (!phase || updateHiddenFor === phase) { bar?.remove(); return; }
     if (!bar) {
@@ -445,13 +449,16 @@
     const later = document.createElement('button');
     later.className = 'ghost-btn';
     later.onclick = () => { updateHiddenFor = phase; bar.remove(); };
-    if (s.status === 'downloading') {
-      txt.textContent = `Baixando a versão ${s.version}… ${s.percent || 0}%`;
+    if (s.status === 'downloading' || s.status === 'conferindo') {
+      const conferindo = s.status === 'conferindo';
+      txt.textContent = conferindo
+        ? `Conferindo a assinatura da versão ${s.version}…`
+        : `Baixando a versão ${s.version}… ${s.percent || 0}%`;
       const track = document.createElement('div');
       track.className = 'update-track';
       const fill = document.createElement('div');
       fill.className = 'update-fill';
-      fill.style.width = `${s.percent || 0}%`;
+      fill.style.width = `${conferindo ? 100 : (s.percent || 0)}%`;
       track.append(fill);
       later.textContent = 'Ocultar';
       bar.append(txt, track, later);

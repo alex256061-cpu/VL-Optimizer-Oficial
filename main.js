@@ -937,6 +937,10 @@ H('get-recommendations', async () => {
 });
 
 H('clean-scan', () => ex.cleanScan());
+// O ex.cleanStatus() sempre existiu em engine-extras.js, mas o canal nunca foi ligado:
+// sem este handler (e sem a permissão no preload) o `invoke('clean-status')` da página
+// de Limpeza era recusado e o "Medindo X/Y" nunca andava.
+H('clean-status', () => ex.cleanStatus());
 H('clean-run', ({ ids }) => ex.cleanRun(ids || []));
 H('disk-drives', () => ex.diskDrives());
 H('disk-scan', ({ drive }) => ex.diskStart(drive));
@@ -1413,6 +1417,20 @@ app.whenReady().then(async () => {
   feat.ramStart();
   // Auto-update pelo GitHub Releases: consulta em segundo plano, baixa sozinho e deixa a
   // instalação para o usuário. Falha aqui nunca impede o app de abrir.
+  //
+  // O onChange abaixo é o que AVISA A TELA a cada mudança de fase (baixando / conferindo /
+  // pronto). Sem ele a barra "Versão X pronta para instalar — Reiniciar e atualizar" só
+  // aparecia se a página fosse carregada depois do download já concluído; como o download
+  // começa 8 s depois de abrir e leva minutos, na prática o cliente NUNCA via o aviso e
+  // ficava preso na versão antiga — com o instalador baixado e assinado esperando em
+  // %LOCALAPPDATA%\<app>-updater\pending, sem ninguém saber.
+  try {
+    updater.onChange((s) => {
+      try {
+        if (win && !win.isDestroyed()) win.webContents.send('update-status', s);
+      } catch (e) { }
+    });
+  } catch (e) { }
   try { updater.start(); } catch (e) {}
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });

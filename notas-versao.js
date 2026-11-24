@@ -10,6 +10,14 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.65': {
+    corrigido: [
+      'O aviso de atualizacao nunca aparecia: o app baixava a versao nova em segundo plano, conferia a assinatura e nao avisava ninguem. O cliente ficava na versao antiga sem saber que havia atualizacao pronta. Agora a barra "Versao X pronta para instalar - Reiniciar e atualizar" aparece sozinha, mostrando o download e a conferencia.',
+      'A pagina Limpeza: o progresso "Medindo X/Y" nao andava porque o canal que a tela consulta nunca foi ligado.',
+    ],
+    novo: [],
+  },
+
   '1.4.64': {
     corrigido: [
       'Depois de um desligamento forcado do PC, o app pedia login de novo sem explicar: o arquivo que guarda a sessao ficava corrompido (o PC do dono teve um desligamento inesperado as 05:07 e o arquivo ficou com 2533 bytes, todos zero). Agora a sessao e gravada de forma segura e tem uma copia de seguranca - se o arquivo principal vier corrompido, a copia devolve o login. Sair continua apagando as duas.',
