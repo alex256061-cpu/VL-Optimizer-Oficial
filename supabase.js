@@ -48,6 +48,23 @@ const SESSAO = path.join(DIR_SESSAO, 'sessao.json');
 const AUTH_PRINCIPAL = path.join(DIR_SESSAO, 'auth.bin');
 const AUTH_ALTERNATIVO = path.join(DIR_SESSAO, 'sessao.bin');
 
+// Cópia de segurança do arquivo de sessão principal.
+//
+// POR QUE EXISTE (caso real de 24/11/2026)
+//   O PC do dono teve um desligamento forçado (Windows, evento 6008: "desligamento às
+//   05:07:26 não era esperado"). O auth.bin tinha 2533 bytes e TODOS os bytes zero: o
+//   NTFS atualizou tamanho/mtime no journal, mas os clusters de dados nunca foram
+//   gravados — o arquivo ficou "oco". No boot seguinte o app não conseguia decifrar,
+//   tratava como "sem sessão" e pedia login, sem explicar nada.
+//
+//   Gravar direto no auth.bin (fs.writeFileSync no destino final) tem exatamente essa
+//   janela de risco: se a máquina cair no meio da gravação, o arquivo do login vira
+//   lixo. Agora a gravação é atômica (arquivo temporário + rename) e o conteúdo
+//   anterior fica numa cópia .bak. Um tombo no meio da gravação deixa OU o arquivo
+//   antigo OU o novo, nunca os dois quebrados; e se o principal abrir com problema a
+//   cópia salva o login.
+const AUTH_BACKUP = AUTH_PRINCIPAL + '.bak';
+
 // Tolerância do anti-rollback, literal do GDZ (refreshEntitlement).
 const CLOCK_ROLLBACK_TOLERANCE_MS = 600000;
 
@@ -74,6 +91,11 @@ function safeStorageElectron() {
 
 // Grava cifrado onde der. Devolve { caminho, cifrado }.
 // Mesma regra de ordem do GDZ (loadAuth): sem cifra disponível, não há sessão cifrada.
+//
+// A gravação é ATÔMICA: escreve num temporário e renomeia por cima. `rename` no mesmo
+// volume é atômico no NTFS, então uma queda de energia no meio deixa o arquivo antigo
+// intacto em vez de um auth.bin pela metade. Depois de gravar o principal, guarda a
+// mesma cifra em AUTH_BACKUP (ver comentário em AUTH_BACKUP).
 function gravarCifrado(texto) {
   const ss = safeStorageElectron();
   if (!ss) return { caminho: null, cifrado: false };
@@ -82,7 +104,17 @@ function gravarCifrado(texto) {
   for (const alvo of [AUTH_PRINCIPAL, AUTH_ALTERNATIVO]) {
     try {
       fs.mkdirSync(DIR_SESSAO, { recursive: true });
-      fs.writeFileSync(alvo, buf);
+      const temporario = alvo + '.tmp';
+      fs.writeFileSync(temporario, buf);
+      fs.renameSync(temporario, alvo);
+      // Cópia de segurança só do principal (o alternativo já é o plano B).
+      if (alvo === AUTH_PRINCIPAL) {
+        try {
+          const temporarioBak = AUTH_BACKUP + '.tmp';
+          fs.writeFileSync(temporarioBak, buf);
+          fs.renameSync(temporarioBak, AUTH_BACKUP);
+        } catch (e) { }
+      }
       return { caminho: alvo, cifrado: true };
     } catch (e) { }
   }
@@ -104,15 +136,35 @@ function lerCifrado(alvo) {
   return null;
 }
 
-function lerSessao() {
-  for (const alvo of [AUTH_PRINCIPAL, AUTH_ALTERNATIVO]) {
-    const j = lerCifrado(alvo);
-    if (j && j.access_token) return j;
+// Lê a sessão, com a cópia de segurança como plano B.
+//
+// O arquivo pode estar ilegível por queda de energia no meio da gravação (caso real:
+// auth.bin inteiro zerado) ou por ter sido cifrado em outra conta do Windows. Se o
+// principal não abrir mas o .bak abrir, o login do cliente é preservado — e o principal
+// é reescrito a partir dele, para a próxima abertura ser rápida.
+function lerSessaoCifrada() {
+  const j = lerCifrado(AUTH_PRINCIPAL);
+  if (j && j.access_token) return j;
+  const b = lerCifrado(AUTH_BACKUP);
+  if (b && b.access_token) {
+    try {
+      fs.copyFileSync(AUTH_BACKUP, AUTH_PRINCIPAL);
+    } catch (e) { }
+    return b;
   }
+  return j === undefined ? undefined : null;
+}
+
+function lerSessao() {
+  // Principal -> cópia de segurança (.bak) -> alternativo. Ver lerSessaoCifrada().
+  const j = lerSessaoCifrada();
+  if (j && j.access_token) return j;
+  const alt = lerCifrado(AUTH_ALTERNATIVO);
+  if (alt && alt.access_token) return alt;
   // Arquivo antigo, em texto puro.
   try {
-    const j = JSON.parse(fs.readFileSync(SESSAO, 'utf8'));
-    if (j && j.access_token) return j;
+    const t = JSON.parse(fs.readFileSync(SESSAO, 'utf8'));
+    if (t && t.access_token) return t;
   } catch (e) { }
   return null;
 }
@@ -155,7 +207,9 @@ function gravarSessao(s) {
   try {
     fs.mkdirSync(DIR_SESSAO, { recursive: true });
     if (!s) {
-      for (const alvo of [AUTH_PRINCIPAL, AUTH_ALTERNATIVO, SESSAO]) {
+      // Inclui a cópia .bak: sem isso, "sair" apagaria o principal e a próxima abertura
+      // ressuscitaria a sessão a partir do backup — o oposto de sair.
+      for (const alvo of [AUTH_PRINCIPAL, AUTH_BACKUP, AUTH_ALTERNATIVO, SESSAO]) {
         try { if (fs.existsSync(alvo)) fs.unlinkSync(alvo); } catch (e) { }
       }
       return;
@@ -1005,5 +1059,7 @@ module.exports = {
   verificarPc, enviarHardware, resgatarChave, CONFIG,
   // proteções: expostas para teste e para a tela mostrar a data do modo offline
   CLOCK_ROLLBACK_TOLERANCE_MS, DIAS_OFFLINE, offlineUntilDe, licencaOffline, copiaLicenca,
+  // arquivo de sessão: expostos para teste da gravação atômica e da cópia .bak
+  gravarCifrado, lerCifrado, lerSessao, gravarSessao, AUTH_PRINCIPAL, AUTH_BACKUP,
   telemetriaPedir,
 };

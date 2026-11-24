@@ -10,6 +10,13 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.64': {
+    corrigido: [
+      'Depois de um desligamento forcado do PC, o app pedia login de novo sem explicar: o arquivo que guarda a sessao ficava corrompido (o PC do dono teve um desligamento inesperado as 05:07 e o arquivo ficou com 2533 bytes, todos zero). Agora a sessao e gravada de forma segura e tem uma copia de seguranca - se o arquivo principal vier corrompido, a copia devolve o login. Sair continua apagando as duas.',
+    ],
+    novo: [],
+  },
+
   '1.4.63': {
     corrigido: [
       'Dois cartoes ligavam o ajuste mas o interruptor voltava para desligado: "Memoria virtual gerenciada pelo Windows" e "Jogos em janela com o modo moderno". Agora eles mostram o estado certo (no seu PC a memoria virtual ja vem gerenciada pelo Windows, entao aparece LIGADO).',
