@@ -10,6 +10,13 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.66': {
+    corrigido: [
+      'Melhorias internas de estabilidade e preparo da telemetria.',
+    ],
+    novo: [],
+  },
+
   '1.4.65': {
     corrigido: [
       'O aviso de atualizacao nunca aparecia: o app baixava a versao nova em segundo plano, conferia a assinatura e nao avisava ninguem. O cliente ficava na versao antiga sem saber que havia atualizacao pronta. Agora a barra "Versao X pronta para instalar - Reiniciar e atualizar" aparece sozinha, mostrando o download e a conferencia.',
