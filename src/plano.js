@@ -11,7 +11,25 @@
   // Nossa regra (a mesma do texto do app): medir é grátis, aplicar é pago.
   //   Grátis: Painel, Gargalo, Informações do PC, Verificar hardware, Sobre, VL Scaling
   //   Pago:   as páginas de otimização
+  // Página -> feature exigida. Cópia do mapa do GDZ (src_plano.js) + as nossas páginas
+  // pagas.
+  //
+  // O que o GDZ libera no plano grátis (conferido no código dele):
+  //   dashboard(painel), jogos, fps, gargalo, hardware, pcinfo(hardware),
+  //   inicializacao e sobre
+  // Página FORA do mapa = trancada (o `allowed` devolve false), então as pagas podem
+  // ficar sem entrada: desempenho, inputlag, memoria, limpeza, programas, live, tweaks,
+  // opti e scaling. Antes as três grátis (fps, jogos, inicializacao) estavam mapeadas
+  // para 'otimizar' e o cliente grátis via cadeado nelas — o inverso do GDZ.
   const PAGE_FEATURE = {
+    dashboard: 'painel',
+    jogos: 'jogos',
+    fps: 'fps',
+    gargalo: 'gargalo',
+    hardware: 'hardware',
+    pcinfo: 'hardware',
+    inicializacao: 'inicializacao',
+    sobre: 'sobre',
     desempenho: 'otimizar',
     inputlag: 'otimizar',
     memoria: 'otimizar',
@@ -19,10 +37,7 @@
     programas: 'otimizar',
     live: 'otimizar',
     tweaks: 'otimizar',
-    inicializacao: 'otimizar',
-    jogos: 'otimizar',
     opti: 'otimizar',
-    fps: 'otimizar',
   };
   const PAGE_NAME = {
     desempenho: 'Desempenho', inputlag: 'Mouse e teclado', memoria: 'Memória', limpeza: 'Limpeza', programas: 'Programas', live: 'Internet e live',

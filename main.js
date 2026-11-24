@@ -1,6 +1,7 @@
 // main.js — VL Optimizer (Electron)
 const { app, BrowserWindow, ipcMain, shell, screen, nativeTheme, globalShortcut, Notification, dialog } = require('electron');
 
+
 // Rastreio de janelas — SÓ para desenvolvimento.
 //
 // Já foi incondicional: o app do cliente escrevia um log em C:\VLTemp e
@@ -600,6 +601,28 @@ const CANAL_FEATURE = {
   'games-status': 'jogos',
   'game-clean': 'jogos',
   'shader-clean': 'jogos',
+  // Canais que MUDAM o PC e pertencem a páginas pagas. No GDZ eles simplesmente não
+  // estão na lista de canais livres, então um cliente grátis não passa. Aqui o mapa
+  // antigo só tinha os 19 de medição: dava para aplicar tweak, limpar RAM, rodar a
+  // limpeza e desinstalar programa direto por IPC sem plano. O que é leitura/desfazer
+  // (tweaks-status, actions-status, ram-status, revert-action, restore-all, get-backups)
+  // continua livre — é a mesma escolha do GDZ.
+  'tweak-set': 'otimizar',
+  'tweak-dns': 'otimizar',
+  'tweak-tool': 'otimizar',
+  'ram-clean': 'otimizar',
+  'ram-auto-set': 'otimizar',
+  'set-auto-mode': 'otimizar',
+  'clean-run': 'otimizar',
+  'apps-uninstall': 'otimizar',
+  'apps-remove-leftovers': 'otimizar',
+  'opti-install': 'otimizar',
+  'opti-uninstall': 'otimizar',
+  'opti-config': 'otimizar',
+  'opti-download': 'otimizar',
+  'opti-browse': 'otimizar',
+  'opti-analyze': 'otimizar',
+  'fivem-gfx-apply': 'otimizar',
 };
 
 const MSG_PLANO = 'Isso faz parte do plano pago. Abra "Sobre" e clique em "Ver os planos".';
@@ -631,13 +654,17 @@ async function canalPermitido(nome, arg) {
   if (!p) return { ok: false, error: 'Faça login para usar esta função.', code: 'no_session' };
   if (temFeature(p, '*')) return { ok: true };
 
-  // Ação avulsa: "Otimização Rápida" é liberada no plano de entrada, como no GDZ.
+  // Ação avulsa: no GDZ o handler do main é
+  //   if (canal === "run-action") return acao === "Otimização Rápida" && hasFeature("quick-opt");
+  // ou seja: SÓ a Otimização Rápida passa no plano grátis; qualquer outra ação é paga.
+  // Antes o nosso devolvia { ok: true } para todas as outras — um cliente grátis podia
+  // rodar as 21 ações chamando o canal direto.
   if (nome === 'run-action' || nome === 'run-once') {
     const acao = arg && (arg.action || arg.nome || arg);
     if (acao === 'Otimização Rápida') {
       return temFeature(p, 'quick-opt') ? { ok: true } : { ok: false, error: MSG_PLANO, code: 'plan' };
     }
-    return { ok: true };
+    return { ok: false, error: MSG_PLANO, code: 'plan' };
   }
 
   const feat = CANAL_FEATURE[nome];
@@ -745,7 +772,19 @@ H('open-site', (a) => {
 // REGRA: sem sessao valida NAO e premium. Antes, banco sem chaves, usuario deslogado e
 // falha de rede devolviam plan 'pro' com ['*'] — ou seja, quem se deslogava ganhava o
 // plano completo. Agora esses tres casos caem em gratis e a tela de login abre.
-const PLANO_GRATIS = { plan: 'free', features: ['painel'], lifetime: false, licenseExpiresAt: null, expirada: false };
+// REGRA: sem sessao valida NAO e premium. Antes, banco sem chaves, usuario deslogado e
+// falha de rede devolviam plan 'pro' com ['*'] — ou seja, quem se deslogava ganhava o
+// plano completo. Agora esses tres casos caem em gratis e a tela de login abre.
+//
+// A lista de features do plano grátis é a MESMA do GDZ (ver FEATURES_GRATIS em
+// supabase.js): painel, jogos, fps, gargalo, hardware, inicializacao, sobre e quick-opt.
+// Antes era só ['painel'] e o cliente grátis não conseguia nem medir FPS nem rodar a
+// Otimização Rápida.
+const PLANO_GRATIS = {
+  plan: 'free',
+  features: (conta.FEATURES_GRATIS || ['painel']).slice(),
+  lifetime: false, licenseExpiresAt: null, expirada: false,
+};
 
 H('conta-plano', async () => {
   if (!conta.configurado()) return { ...PLANO_GRATIS, semLogin: true, semBanco: true };

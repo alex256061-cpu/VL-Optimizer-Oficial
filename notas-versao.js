@@ -10,6 +10,14 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.67': {
+    corrigido: [
+      'O plano gratis agora libera o que o plano gratis da referencia libera: medidor de FPS, gargalo, verificacao do hardware, inicializacao, jogos e Otimizacao Rapida. Antes o servidor mandava uma lista curta e o app trancava ate essas paginas: o cliente gratis nao conseguia nem medir o FPS nem rodar a Otimizacao Rapida.',
+      'Aplicar ajuste, limpar RAM, rodar a limpeza, desinstalar programa e instalar as ferramentas agora exigem plano pago tambem no processo principal (antes so a tela trancava).',
+    ],
+    novo: [],
+  },
+
   '1.4.66': {
     corrigido: [
       'Melhorias internas de estabilidade e preparo da telemetria.',

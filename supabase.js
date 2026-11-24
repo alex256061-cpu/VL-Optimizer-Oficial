@@ -32,6 +32,37 @@ const DIR = MARCA.dirDados;
 const DIR_SESSAO = process.env.LOPT_DATA_DIR ? path.resolve(process.env.LOPT_DATA_DIR) : DIR;
 const SESSAO = path.join(DIR_SESSAO, 'sessao.json');
 
+// ── o que o plano GRÁTIS libera (copiado do GDZ) ───────────────────────────
+//
+// No GDZ cada página/canal pede uma feature e o plano grátis recebe uma LISTA de
+// features do servidor. Do código dele (src_plano.js + main.js):
+//   páginas: dashboard=painel, jogos, fps, gargalo, hardware, pcinfo=hardware,
+//            inicializacao, sobre           (todas as outras são do plano pago)
+//   canais:  fps-*, measure-bottleneck/bn-*, run-check/pcinfo-*, startup-*,
+//            games-*/game-clean/shader-clean
+//   run-action: SÓ "Otimização Rápida" com a feature quick-opt; qualquer outra → pago
+//   e o texto do upsell dele: "O plano grátis inclui o medidor de FPS, o gargalo, a
+//   verificação do hardware, a inicialização, os jogos e a Otimização Rápida."
+//
+// O QUE ESTAVA ERRADO AQUI: o banco manda features ["painel"] para conta grátis e o
+// app usava só isso. Com a lista curta, filtro de páginas e canal derrubavam FPS,
+// gargalo, hardware, inicialização, jogos e a própria Otimização Rápida — ou seja, o
+// plano grátis não fazia NADA do que o próprio texto promete.
+//
+// Completar aqui é melhor que esperar SQL rodar em cada cliente: um app antigo
+// continua limitado, mas a lista do plano grátis é propriedade do app (como no GDZ, que
+// aplica as features que o servidor manda). O banco pode mandar mais; nunca menos que isto.
+const FEATURES_GRATIS = ['painel', 'jogos', 'fps', 'gargalo', 'hardware', 'inicializacao', 'sobre', 'quick-opt'];
+
+// Lista final de features de uma conta. Plano pago ('*') fica como veio; grátis/vencido
+// recebe a união do que o servidor mandou com o conjunto do plano grátis.
+function completarFeatures(plan, lista) {
+  const l = Array.isArray(lista) ? lista.filter((x) => typeof x === 'string' && x) : [];
+  if (l.includes('*')) return l;
+  if (plan === 'pro') return l.length ? l : FEATURES_GRATIS.slice();
+  return Array.from(new Set([...l, ...FEATURES_GRATIS]));
+}
+
 // ── arquivo de sessão cifrado (mesmo esquema do GDZ: auth.bin + safeStorage) ─
 //
 // O GDZ grava a sessão em auth.bin cifrado com o safeStorage do Electron (DPAPI no
@@ -538,7 +569,7 @@ function anotarLicenca(s, v) {
     // servidor acabou de negar.
     const guardada = Object.assign({}, anterior || {}, {
       ok: false, reason: v.reason || null, pcBound: !!v.pcBound,
-      plan: v.plan || 'free', features: Array.isArray(v.features) ? v.features : ['painel'],
+      plan: v.plan || 'free', features: completarFeatures(v.plan || 'free', v.features),
       licenseExpiresAt: v.licenseExpiresAt || null,
       offlineUntil: 0, okAt: Date.now(),
     });
@@ -560,7 +591,7 @@ function anotarLicenca(s, v) {
     okAt: Date.now(),
     validadeRef,
     plan: v.plan,
-    features: Array.isArray(v.features) ? v.features.slice() : ['painel'],
+    features: completarFeatures(v.plan, v.features),
     lifetime: !!v.lifetime,
     licenseExpiresAt: v.licenseExpiresAt || null,
     reason: v.reason || null,
@@ -639,7 +670,7 @@ async function verificarPc(s) {
   const v = {
     success: !!d.success,
     plan: d.plan || 'free',
-    features: Array.isArray(d.features) ? d.features : ['painel'],
+    features: completarFeatures(d.plan || 'free', d.features),
     lifetime: !!d.lifetime,
     licenseExpiresAt: d.licenseExpiresAt || null,
     reason: d.reason || null,
@@ -759,7 +790,7 @@ async function perfil(s) {
   // ['*'] libera tudo. Licenca vencida volta para gratuito.
   const vencida = !!(p.license_expires_at && new Date(p.license_expires_at) <= new Date());
   const planoValido = p.plan === 'pro' && !vencida;
-  const features = planoValido ? (Array.isArray(p.features) ? p.features : []) : ['painel'];
+  const features = completarFeatures(planoValido ? (p.plan || 'free') : 'free', planoValido ? p.features : null);
 
   // Mesmos campos que o userFromClaims do GDZ devolve, sem inventar nada.
   //
@@ -1059,6 +1090,8 @@ module.exports = {
   verificarPc, enviarHardware, resgatarChave, CONFIG,
   // proteções: expostas para teste e para a tela mostrar a data do modo offline
   CLOCK_ROLLBACK_TOLERANCE_MS, DIAS_OFFLINE, offlineUntilDe, licencaOffline, copiaLicenca,
+  // plano grátis: a lista do GDZ e a função que completa o que o servidor mandar
+  FEATURES_GRATIS, completarFeatures,
   // arquivo de sessão: expostos para teste da gravação atômica e da cópia .bak
   gravarCifrado, lerCifrado, lerSessao, gravarSessao, AUTH_PRINCIPAL, AUTH_BACKUP,
   telemetriaPedir,
