@@ -27,6 +27,9 @@ export function emailConfigurado(env) {
   // (sem domínio): SMTP2GO (1.000/mês), Elastic Email (100/dia).
   // Depois: Mailjet (6.000/mês, bloqueado para conta nova), SendGrid (100/dia),
   // Brevo (300/dia) e Resend (3.000/mês, exige domínio verificado).
+  if (env.APPS_SCRIPT_URL && env.APPS_SCRIPT_TOKEN) {
+    return { ok: true, provedor: 'appsscript', remetente: remetente || 'conta do Gmail' };
+  }
   if (env.SMTP2GO_API_KEY && remetente) return { ok: true, provedor: 'smtp2go', remetente };
   if (env.ELASTICEMAIL_API_KEY && remetente) return { ok: true, provedor: 'elasticemail', remetente };
   if (env.MAILJET_API_KEY && env.MAILJET_SECRET_KEY && remetente) return { ok: true, provedor: 'mailjet', remetente };
@@ -37,7 +40,7 @@ export function emailConfigurado(env) {
     ok: false,
     provedor: null,
     remetente,
-    precisa: ['SMTP2GO_API_KEY (ou ELASTICEMAIL_API_KEY / SENDGRID_API_KEY)', 'EMAIL_REMETENTE'],
+    precisa: ['APPS_SCRIPT_URL + APPS_SCRIPT_TOKEN (ou SMTP2GO_API_KEY / ELASTICEMAIL_API_KEY / SENDGRID_API_KEY)', 'EMAIL_REMETENTE'],
   };
 }
 
@@ -153,6 +156,26 @@ export async function enviar(env, para, assunto, html, texto) {
   }
   const remetenteNome = String(env.EMAIL_NOME || 'VL Optimizer').trim();
   try {
+    if (conf.provedor === 'appsscript') {
+      const r = await fetch(String(env.APPS_SCRIPT_URL), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: String(env.APPS_SCRIPT_TOKEN),
+          para,
+          assunto,
+          html,
+          texto,
+        }),
+      });
+      let j = null;
+      try { j = await r.json(); } catch (e) { j = null; }
+      if (!r.ok || !j || j.ok !== true) {
+        console.error('Apps Script falhou:', r.status, JSON.stringify(j || {}).slice(0, 300));
+        return { ok: false, erro: 'O envio pelo Gmail recusou (' + r.status + ').' };
+      }
+      return { ok: true, provedor: 'appsscript' };
+    }
     if (conf.provedor === 'smtp2go') {
       const r = await fetch('https://api.smtp2go.com/v3/email/send', {
         method: 'POST',
