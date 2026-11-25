@@ -529,3 +529,18 @@ body.adm::before {
   .adm-cards { grid-template-columns: repeat(2, 1fr); }
   .adm-card-n { font-size: 25px; }
 }
+
+
+/* ── extras do painel (admin-extra.js): busca, CSV, atualizar, KPIs, contadores ── */
+.adm-cabeca{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+.adm-tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-left:auto}
+.adm-tools input[type=search]{background:rgba(255,255,255,.045);border:1px solid var(--adm-line);border-radius:9px;padding:9px 12px;color:var(--adm-txt);font-size:12.5px;font-family:inherit;outline:none;transition:.16s;min-width:180px}
+.adm-tools input[type=search]:focus{border-color:var(--adm-line2)}
+.adm-tools .adm-btn.pequeno{padding:8px 12px;font-size:12px}
+.adm-tools .adm-btn.ghost{background:transparent;border-color:var(--adm-line);color:var(--adm-dim)}
+.adm-tools .adm-btn.ghost:hover{color:var(--adm-txt);border-color:var(--adm-line2)}
+.adm-atualizado{font-size:10.5px;color:var(--adm-dim2);font-family:'JetBrains Mono',monospace;white-space:nowrap}
+.adm-cards-kpi{margin-top:14px}
+.adm-count{margin-left:6px;font-size:10px;font-weight:800;background:rgba(255,255,255,.08);border-radius:6px;padding:1px 6px;color:var(--adm-txt)}
+.adm-sem-resultado{display:none;text-align:center;color:var(--adm-dim2);font-size:12.5px;padding:16px;font-family:'JetBrains Mono',monospace}
+@media(max-width:640px){.adm-tools{width:100%;margin-left:0}.adm-tools input[type=search]{flex:1;min-width:0}}
