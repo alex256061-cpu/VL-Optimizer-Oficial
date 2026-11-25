@@ -47,13 +47,13 @@ export function emailConfigurado(env) {
 export function montarEmail(modelo, perfil, env) {
   const nome = String((perfil && (perfil.name || perfil.email)) || 'jogador').split('@')[0].slice(0, 40);
   const email = (perfil && perfil.email) || '';
-  const expira = perfil && perfil.license_expires_at ? dataBR(perfil.license_expires_at) : '—';
+  const expira = perfil && perfil.license_expires_at
+    ? new Date(perfil.license_expires_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    : '—';
   const dias = (() => {
     if (!perfil || !perfil.license_expires_at) return 7;
-    const d = Math.ceil((new Date(perfil.license_expires_at).getTime() - Date.now()) / 86400000);
-    return Math.max(0, d);
+    return Math.max(0, Math.ceil((new Date(perfil.license_expires_at).getTime() - Date.now()) / 86400000));
   })();
-  const remetenteNome = String(env.EMAIL_NOME || 'VL Optimizer').trim();
 
   let assunto;
   let titulo;
@@ -61,92 +61,54 @@ export function montarEmail(modelo, perfil, env) {
   if (modelo === 'vence1') {
     assunto = 'Último aviso: sua licença do VL Optimizer vence ' + (dias <= 0 ? 'hoje' : 'amanhã');
     titulo = 'Sua licença vence ' + (dias <= 0 ? 'hoje' : 'amanhã');
-    linhaPrazo = 'Ela expira em <b>' + expira + '</b>' + (dias <= 0 ? ' (hoje).' : ' (amanhã).');
+    linhaPrazo = 'Ela expira em ' + expira + (dias <= 0 ? ' (hoje).' : ' (amanhã).');
   } else if (modelo === 'boasvindas') {
     assunto = 'Bem-vindo ao VL Optimizer';
     titulo = 'Bem-vindo ao VL Optimizer';
-    linhaPrazo = 'Seu acesso está ativo. Qualquer dúvida, chama no Discord.';
+    linhaPrazo = 'Seu acesso está ativo. Qualquer dúvida, fale com a gente no Discord.';
   } else {
     assunto = 'Sua licença do VL Optimizer vence em ' + dias + ' dia' + (dias === 1 ? '' : 's');
     titulo = 'Sua licença vence em ' + dias + ' dia' + (dias === 1 ? '' : 's');
-    linhaPrazo = 'Ela expira em <b>' + expira + '</b>.';
+    linhaPrazo = 'Ela expira em ' + expira + '.';
   }
 
-  const html = `<!doctype html>
-<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${assunto}</title></head>
-<body style="margin:0;padding:0;background:#07030a;color:#f5f2f7;font-family:Arial,Helvetica,sans-serif">
-  <div style="max-width:560px;margin:0 auto;padding:32px 22px">
-    <div style="font-size:20px;font-weight:bold;letter-spacing:-0.3px;color:#ffffff;margin-bottom:22px">
-      <span style="color:#ff1f2e">VL</span> Optimizer
-    </div>
-    <div style="background:#130b16;border:1px solid #2a1a30;border-radius:14px;padding:26px 24px">
-      <h1 style="margin:0 0 14px;font-size:22px;line-height:1.3;color:#ffffff">${titulo}</h1>
-      <p style="margin:0 0 14px;font-size:15px;line-height:1.65;color:#c9bfd2">Olá, ${nome}!</p>
-      <p style="margin:0 0 14px;font-size:15px;line-height:1.65;color:#c9bfd2">${linhaPrazo}</p>
-      <p style="margin:0 0 20px;font-size:15px;line-height:1.65;color:#c9bfd2">Para continuar com os ajustes, o medidor de FPS e o scaling, é só renovar — leva 2 minutos:</p>
-      <p style="margin:0 0 8px"><a href="${SITE}/#precos" style="display:inline-block;background:#ff1f2e;color:#ffffff;text-decoration:none;font-weight:bold;padding:13px 22px;border-radius:10px;font-size:15px">Renovar meu acesso</a></p>
-      <p style="margin:14px 0 0;font-size:13px;line-height:1.6;color:#8d8397">Mensal ${PRECO_MENSAL} · Vitalício ${PRECO_VITAL} (pagamento único). Se você já renovou, ignore este e-mail.</p>
-    </div>
-    <p style="margin:20px 0 0;font-size:13px;line-height:1.7;color:#8d8397">
-      Precisa de ajuda? Fale com a gente no <a href="${DISCORD}" style="color:#ff8a90">Discord</a>.<br>
-      Suporte VL Optimizer · <a href="${SITE}" style="color:#c9bfd2">vl-optimizer.pages.dev</a><br>
-      <span style="font-size:11px;color:#6d6377">Este aviso é enviado porque você tem uma licença ativa. Não responda este e-mail.</span>
-    </p>
-  </div>
-</body></html>`;
-
+  // Texto puro (sem HTML): formato que o Gmail entrega na caixa de entrada.
   const texto = [
-    remetenteNome,
-    '',
-    titulo,
-    '',
     'Olá, ' + nome + '!',
-    linhaPrazo.replace(/<[^>]+>/g, ''),
-    'Para continuar com os ajustes, o medidor de FPS e o scaling, é só renovar:',
-    SITE + '/#precos',
-    'Mensal ' + PRECO_MENSAL + ' · Vitalício ' + PRECO_VITAL + ' (pagamento único).',
+    '',
+    titulo + '.',
+    linhaPrazo,
+    '',
+    'Para renovar, acesse: ' + SITE + '/#precos',
+    '',
     'Se você já renovou, ignore este e-mail.',
     '',
     'Precisa de ajuda? Discord: ' + DISCORD,
-    'Suporte VL Optimizer · ' + SITE,
-    'Não responda este e-mail.',
+    'Equipe VL Optimizer',
+    SITE,
   ].join('\n');
 
-  return { modelo: modelo || 'vence7', assunto, html, texto, para: email, nome, dias, expira };
+  return { modelo: modelo || 'vence7', assunto, html: '', texto, para: email, nome, dias, expira };
 }
 
-/** E-mail de recuperação de senha (link do Supabase Auth, enviado pelo Brevo/Resend). */
 export function montarEmailRecuperacao(link, nome, env) {
   const primeiro = String(nome || '').split(' ')[0].replace(/@.*/, '').slice(0, 30) || 'jogador';
-  const remetenteNome = String(env.EMAIL_NOME || 'VL Optimizer').trim();
   const assunto = 'Criar nova senha · VL Optimizer';
-  const html = `<!doctype html>
-<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${assunto}</title></head>
-<body style="margin:0;padding:0;background:#07030a;color:#f5f2f7;font-family:Arial,Helvetica,sans-serif">
-  <div style="max-width:560px;margin:0 auto;padding:32px 22px">
-    <div style="font-size:20px;font-weight:bold;color:#ffffff;margin-bottom:22px"><span style="color:#ff1f2e">VL</span> Optimizer</div>
-    <div style="background:#130b16;border:1px solid #2a1a30;border-radius:14px;padding:26px 24px">
-      <h1 style="margin:0 0 14px;font-size:22px;line-height:1.3;color:#ffffff">Criar nova senha</h1>
-      <p style="margin:0 0 14px;font-size:15px;line-height:1.65;color:#c9bfd2">Olá, ${primeiro}!</p>
-      <p style="margin:0 0 20px;font-size:15px;line-height:1.65;color:#c9bfd2">Recebemos um pedido para redefinir a senha da sua conta no VL Optimizer. Clique no botão para criar uma senha nova.</p>
-      <p style="margin:0 0 8px"><a href="${link}" style="display:inline-block;background:#ff1f2e;color:#ffffff;text-decoration:none;font-weight:bold;padding:13px 22px;border-radius:10px;font-size:15px">Criar nova senha</a></p>
-      <p style="margin:14px 0 0;font-size:13px;line-height:1.6;color:#8d8397">O link expira em 1 hora e só pode ser usado uma vez. Se não foi você, ignore este e-mail — sua senha continua a mesma.</p>
-      <p style="margin:10px 0 0;font-size:11px;line-height:1.6;color:#6d6377;word-break:break-all">Se o botão não abrir: ${link}</p>
-    </div>
-    <p style="margin:20px 0 0;font-size:13px;line-height:1.7;color:#8d8397">Precisa de ajuda? Fale com a gente no <a href="${DISCORD}" style="color:#ff8a90">Discord</a>.<br>Suporte VL Optimizer · <a href="${SITE}" style="color:#c9bfd2">vl-optimizer.pages.dev</a></p>
-  </div>
-</body></html>`;
   const texto = [
-    remetenteNome, '', 'Criar nova senha', '',
     'Olá, ' + primeiro + '!',
+    '',
     'Recebemos um pedido para redefinir a senha da sua conta no VL Optimizer.',
-    'Abra este link para criar uma senha nova (expira em 1 hora, uso único):',
-    link, '',
+    'Para criar uma senha nova, acesse o link abaixo (expira em 1 hora e só pode ser usado uma vez):',
+    '',
+    link,
+    '',
     'Se não foi você, ignore este e-mail — sua senha continua a mesma.',
+    '',
     'Precisa de ajuda? Discord: ' + DISCORD,
-    'Suporte VL Optimizer · ' + SITE,
+    'Equipe VL Optimizer',
+    SITE,
   ].join('\n');
-  return { assunto, html, texto, para: null };
+  return { assunto, html: '', texto, para: null };
 }
 
 export async function enviar(env, para, assunto, html, texto) {

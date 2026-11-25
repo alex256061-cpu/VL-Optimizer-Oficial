@@ -97,10 +97,14 @@ export async function onRequestPost(context) {
     if (modelo === 'recuperacao') {
       const site = String(env.SITE_URL || 'https://vl-optimizer.pages.dev').replace(/\/+$/, '');
       const mail = montarEmailRecuperacao(site + '/redefinir', 'Cliente Exemplo', env);
-      return responder({ ok: true, modelo, assunto: mail.assunto, html: mail.html, texto: mail.texto });
+      const esc2 = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const htmlPrevRec = mail.html || '<pre style="white-space:pre-wrap;padding:18px;font:15px Arial,Helvetica,sans-serif;color:#222;background:#fff">' + esc2(mail.texto) + '</pre>';
+      return responder({ ok: true, modelo, assunto: mail.assunto, html: htmlPrevRec, texto: mail.texto });
     }
     const mail = montarEmail(modelo, exemplo, env);
-    return responder({ ok: true, modelo: mail.modelo, assunto: mail.assunto, html: mail.html, texto: mail.texto });
+    const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const htmlPreview = mail.html || '<pre style="white-space:pre-wrap;padding:18px;font:15px Arial,Helvetica,sans-serif;color:#222;background:#fff">' + esc(mail.texto) + '</pre>';
+    return responder({ ok: true, modelo: mail.modelo, assunto: mail.assunto, html: htmlPreview, texto: mail.texto }); // PREVIA_TEXTO
   }
 
   const conf = emailConfigurado(env);
@@ -137,6 +141,22 @@ export async function onRequestPost(context) {
         plan: 'pro',
         license_expires_at: new Date(Date.now() + 7 * 86400000).toISOString(),
       };
+      // modelo "simples": texto puro, sem link, para testar entregabilidade
+      if (String(corpo.modelo || '') === 'simples') {
+        const assunto = 'Teste de e-mail VL Optimizer';
+        const texto = [
+          'Olá!',
+          '',
+          'Este é um teste simples de envio de e-mail do VL Optimizer.',
+          'Se esta mensagem chegou na caixa de entrada, o envio está funcionando.',
+          '',
+          'Equipe VL',
+        ].join('\n');
+        const envioSimples = await enviar(env, para, assunto, '', texto);
+        if (!envioSimples.ok) return responder({ ok: false, erro: envioSimples.erro }, 502);
+        await registrarAuditoria(base, svc, admin.perfil, 'email_teste', para, 'modelo simples');
+        return responder({ ok: true, enviado: true, para, assunto, modelo: 'simples', provedor: envioSimples.provedor });
+      }
     }
 
     const mail = montarEmail(acao === 'teste' ? String(corpo.modelo || 'vence7') : 'vence7', perfil, env);
