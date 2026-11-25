@@ -281,3 +281,115 @@ if (y) y.textContent = new Date().getFullYear();
   window.addEventListener('resize', atualiza);
   atualiza();
 })();
+
+/* ─────────────────────────────────────────────────────────────
+   UPGRADE: progresso de leitura, painel do medidor animado,
+   números dos jogos contando, carrossel dos relatos automático.
+   ───────────────────────────────────────────────────────────── */
+
+/* barra de progresso da página */
+(function scrollProgress() {
+  const bar = document.querySelector('.scroll-progress');
+  if (!bar) return;
+  let raf = null;
+  const atualiza = () => {
+    const max = document.documentElement.scrollHeight - window.innerHeight;
+    const p = max > 0 ? Math.min(1, Math.max(0, window.scrollY / max)) : 0;
+    bar.style.width = (p * 100).toFixed(2) + '%';
+  };
+  window.addEventListener('scroll', () => {
+    if (raf) cancelAnimationFrame(raf);
+    raf = requestAnimationFrame(atualiza);
+  }, { passive: true });
+  window.addEventListener('resize', atualiza);
+  atualiza();
+})();
+
+/* painel do medidor no hero: FPS conta de 0 até o valor, gráfico desenha */
+(function medidorAnimado() {
+  const painel = document.querySelector('.medidor');
+  if (!painel) return;
+  const num = painel.querySelector('#fpsNum');
+  const reduzir = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const alvo = parseInt((num && num.dataset.fps) || '30', 10) || 30;
+  if (!num) return;
+  if (reduzir) { num.textContent = String(alvo); return; }
+  let iniciou = false;
+  const anima = () => {
+    if (iniciou) return;
+    iniciou = true;
+    const t0 = performance.now();
+    const dur = 1200;
+    const passo = (t) => {
+      const p = Math.min(1, (t - t0) / dur);
+      const suave = 1 - Math.pow(1 - p, 3);
+      num.textContent = String(Math.round(alvo * suave));
+      if (p < 1) requestAnimationFrame(passo);
+      else num.textContent = String(alvo);
+    };
+    requestAnimationFrame(passo);
+  };
+  if ('IntersectionObserver' in window) {
+    new IntersectionObserver((ents) => { ents.forEach((e) => { if (e.isIntersecting) anima(); }); }, { threshold: 0.4 }).observe(painel);
+  } else anima();
+  setTimeout(anima, 900);
+})();
+
+/* números dos jogos contam quando a grade aparece (52% -> 0..52%) */
+(function gamesCountUp() {
+  const grid = document.querySelector('.games-grid');
+  if (!grid) return;
+  const nums = [...grid.querySelectorAll('.game-ganho b')].map((el) => {
+    const txt = el.textContent.trim();
+    const m = txt.match(/(\d+)/);
+    return { el, alvo: m ? parseInt(m[1], 10) : 0, sufixo: '%' };
+  }).filter((x) => x.alvo > 0);
+  if (!nums.length) return;
+  const reduzir = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduzir) return;
+  nums.forEach((n) => { n.el.textContent = '+0%'; });
+  let feito = false;
+  const anima = () => {
+    if (feito) return;
+    feito = true;
+    const t0 = performance.now();
+    const dur = 1100;
+    const passo = (t) => {
+      const p = Math.min(1, (t - t0) / dur);
+      const suave = 1 - Math.pow(1 - p, 3);
+      nums.forEach((n) => { n.el.textContent = '+' + Math.round(n.alvo * suave) + n.sufixo; });
+      if (p < 1) requestAnimationFrame(passo);
+      else nums.forEach((n) => { n.el.textContent = '+' + n.alvo + n.sufixo; });
+    };
+    requestAnimationFrame(passo);
+  };
+  if ('IntersectionObserver' in window) {
+    new IntersectionObserver((ents) => { ents.forEach((e) => { if (e.isIntersecting) anima(); }); }, { threshold: 0.25 }).observe(grid);
+  } else anima();
+})();
+
+/* carrossel dos relatos: avança sozinho devagar, pausa no hover/foco */
+(function reviewsAuto() {
+  const track = document.getElementById('revTrack');
+  if (!track) return;
+  const reduzir = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduzir) return;
+  const cards = [...track.querySelectorAll('.review-card')];
+  if (cards.length < 2) return;
+  const passo = () => (cards[0] ? cards[0].getBoundingClientRect().width + 16 : 320);
+  const maxScroll = () => Math.max(0, track.scrollWidth - track.clientWidth);
+  let parado = false;
+  const avanca = () => {
+    if (parado) return;
+    const p = passo();
+    if (track.scrollLeft >= maxScroll() - 4) track.scrollTo({ left: 0, behavior: 'smooth' });
+    else track.scrollBy({ left: p, behavior: 'smooth' });
+  };
+  const timer = setInterval(avanca, 5200);
+  const pausa = () => { parado = true; };
+  const volta = () => { parado = false; };
+  ['mouseenter', 'focusin', 'pointerdown'].forEach((ev) => track.addEventListener(ev, pausa, { passive: true }));
+  ['mouseleave', 'focusout'].forEach((ev) => track.addEventListener(ev, volta, { passive: true }));
+  document.addEventListener('visibilitychange', () => { parado = document.hidden; });
+  window.addEventListener('pagehide', () => clearInterval(timer));
+})();
