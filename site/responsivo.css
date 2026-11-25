@@ -71,3 +71,26 @@
   .hero-copy h1 { font-size: 26px; }
   .hero-copy .lead { font-size: 14px; }
 }
+
+
+/* ─────────────────────────────────────────────
+   PALCO DO HERO — correção do card espremido
+   O @media (min-width:1440px) acima deixa .hero-art com justify-self:end,
+   então ele encolhia até a largura do card do medidor (o texto quebrava letra
+   por letra em telas largas). Aqui ele volta a ocupar a coluna inteira.
+   ───────────────────────────────────────────── */
+.hero-art{
+  width:auto !important;
+  min-width:0 !important;
+  max-width:none !important;
+  justify-self:stretch !important;
+}
+@media (min-width:1440px){
+  .hero-art{ width:620px !important; max-width:620px !important; justify-self:end !important; }
+}
+@media (min-width:1200px) and (max-width:1439px){
+  .hero-art{ width:100% !important; max-width:480px !important; justify-self:end !important; min-width:0 !important; }
+}
+@media (max-width:980px){
+  .hero-art{ width:auto !important; max-width:100% !important; justify-self:stretch !important; }
+}
