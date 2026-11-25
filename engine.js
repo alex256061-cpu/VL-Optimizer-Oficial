@@ -770,9 +770,67 @@ if ($gpus.Count -eq 0) { Write-Output '0' } else {
     cat: 'live', title: 'LSO da placa de rede desligado', tags: ['Live'],
     desc: 'Com o LSO (Large Send Offload) quem divide os envios grandes é a placa de rede, e não o processador. Alguns drivers (Intel I219/I225 e certos Realtek) fazem isso com defeito: upload lento, Discord e live engasgando ou a conexão caindo do nada. Desligar resolve nesses casos.',
     note: 'Só ative se você tem esse problema: não muda o ping nem o FPS do FiveM, e o processador trabalha um pouco mais em upload pesado. A internet cai por alguns segundos ao ligar e ao desligar.',
-    on: `Get-NetAdapter | Disable-NetAdapterLso -ErrorAction SilentlyContinue; Write-Output 'ok'`,
-    off: `Get-NetAdapter | Enable-NetAdapterLso -ErrorAction SilentlyContinue; Write-Output 'ok'`,
-    probe: `$l = @(Get-NetAdapterLso -ErrorAction SilentlyContinue | Where-Object { $_.Enabled }); if ($l.Count -eq 0) { Write-Output '1' } else { Write-Output '0' }`,
+    // REPLICADO DO GDZ (bundle, extraído linha por linha):
+    //
+    //   reg: nicLsoReg -> para cada placa de caps.nicLso:
+    //          [NIC_CLASS + "\\" + k, "*LsoV2IPv4", "String", "0", "1"]
+    //          (+ "*LsoV2IPv6" quando a placa declara o parâmetro)
+    //        ou seja: ON grava "0" e OFF grava "1" no REGISTRO do driver.
+    //   on/off: nicLsoRestart(caps, ...) -> reinicia a placa via Restart-NetAdapter
+    //           e avisa que a internet volta em alguns segundos.
+    //
+    // A nossa versão usava `Disable-NetAdapterLso`/`Enable-NetAdapterLso` + probe
+    // `Get-NetAdapterLso`. Em driver que só expõe a opção no registro (o caso que o
+    // GDZ cobre: Intel I219/I225 e alguns Realtek) o cmdlet não muda nada e o
+    // desfazer falhava — foi o único item que falhou na auditoria elevada.
+    // Agora é o registro + reinício, igual ao GDZ.
+    on: `$cls = 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Class\\{4d36e972-e325-11ce-bfc1-08002be10318}'
+      $fisicas = @(Get-NetAdapter -Physical -ErrorAction SilentlyContinue | ForEach-Object { [string]$_.InterfaceGuid })
+      $ids = @()
+      foreach ($k in @(Get-ChildItem -LiteralPath $cls -ErrorAction SilentlyContinue)) {
+        $np = Get-ItemProperty -LiteralPath $k.PSPath -Name NetCfgInstanceId -ErrorAction SilentlyContinue
+        if (-not $np -or ($fisicas -notcontains [string]$np.NetCfgInstanceId)) { continue }
+        if (-not (Test-Path -LiteralPath "$($k.PSPath)\\Ndi\\Params\\*LsoV2IPv4")) { continue }
+        Set-Val $k.PSPath '*LsoV2IPv4' '0' 'String'
+        if (Test-Path -LiteralPath "$($k.PSPath)\\Ndi\\Params\\*LsoV2IPv6") { Set-Val $k.PSPath '*LsoV2IPv6' '0' 'String' }
+        $ids += [string]$np.NetCfgInstanceId
+      }
+      foreach ($id in $ids) {
+        $a = @(Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { [string]$_.InterfaceGuid -eq $id }) | Select-Object -First 1
+        if ($a -and [string]$a.Status -ne 'Disabled') { Restart-NetAdapter -InputObject $a -Confirm:$false -ErrorAction SilentlyContinue }
+      }
+      Write-Output 'ok'`,
+    off: `$cls = 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Class\\{4d36e972-e325-11ce-bfc1-08002be10318}'
+      $fisicas = @(Get-NetAdapter -Physical -ErrorAction SilentlyContinue | ForEach-Object { [string]$_.InterfaceGuid })
+      $ids = @()
+      foreach ($k in @(Get-ChildItem -LiteralPath $cls -ErrorAction SilentlyContinue)) {
+        $np = Get-ItemProperty -LiteralPath $k.PSPath -Name NetCfgInstanceId -ErrorAction SilentlyContinue
+        if (-not $np -or ($fisicas -notcontains [string]$np.NetCfgInstanceId)) { continue }
+        if (-not (Test-Path -LiteralPath "$($k.PSPath)\\Ndi\\Params\\*LsoV2IPv4")) { continue }
+        Set-Val $k.PSPath '*LsoV2IPv4' '1' 'String'
+        if (Test-Path -LiteralPath "$($k.PSPath)\\Ndi\\Params\\*LsoV2IPv6") { Set-Val $k.PSPath '*LsoV2IPv6' '1' 'String' }
+        $ids += [string]$np.NetCfgInstanceId
+      }
+      foreach ($id in $ids) {
+        $a = @(Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { [string]$_.InterfaceGuid -eq $id }) | Select-Object -First 1
+        if ($a -and [string]$a.Status -ne 'Disabled') { Restart-NetAdapter -InputObject $a -Confirm:$false -ErrorAction SilentlyContinue }
+      }
+      Write-Output 'ok'`,
+    // Estado = os valores que o ajuste grava (`*LsoV2IPv4` = "0"). Mesma fonte do GDZ:
+    // o registro do driver, não o cmdlet.
+    probe: `$cls = 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Class\\{4d36e972-e325-11ce-bfc1-08002be10318}'
+      $fisicas = @(Get-NetAdapter -Physical -ErrorAction SilentlyContinue | ForEach-Object { [string]$_.InterfaceGuid })
+      $alvos = @()
+      foreach ($k in @(Get-ChildItem -LiteralPath $cls -ErrorAction SilentlyContinue)) {
+        $np = Get-ItemProperty -LiteralPath $k.PSPath -Name NetCfgInstanceId -ErrorAction SilentlyContinue
+        if (-not $np -or ($fisicas -notcontains [string]$np.NetCfgInstanceId)) { continue }
+        if (Test-Path -LiteralPath "$($k.PSPath)\\Ndi\\Params\\*LsoV2IPv4") { $alvos += $k.PSPath }
+      }
+      if ($alvos.Count -eq 0) { Write-Output '0' } else {
+        $on = 0
+        foreach ($p in $alvos) { if ([string](Get-Val $p '*LsoV2IPv4') -eq '0') { $on++ } }
+        if ($on -eq $alvos.Count) { Write-Output '1' } else { Write-Output '0' }
+      }`,
     // GDZ: `caps.nicLso.length ? null : "Nenhuma placa de rede deste PC tem LSO para desligar."`
     block: (caps) => caps.nicLso.length ? null : 'Nenhuma placa de rede deste PC tem LSO para desligar.',
   }),
@@ -1234,25 +1292,36 @@ const ACTIONS = {
     tag: 'desempenho', title: 'Serviços do Xbox desligados',
     desc: 'Desliga o login e a sincronização de saves do Xbox. Controles do Xbox continuam funcionando.',
     note: 'Jogos do Game Pass, Forza e Minecraft Bedrock deixam de abrir.',
-    // BUG CORRIGIDO (1.4.75): a lista de serviços era fixa (4) e o motor exigia que
-    // TODOS existissem. Em Windows onde parte deles não existe (esta máquina só tem o
-    // XboxGipSvc; vários debloats removem os outros), a ação respondia "este recurso
-    // não existe nesta versão do Windows" e ficava impossível de usar. Agora descobre
-    // em runtime e só age quando há serviços suficientes para fazer sentido (>= 2);
-    // com menos que isso, devolve uma explicação clara em vez de mexer só no GipSvc
-    // (que é o serviço do controle e não deve ser desligado sozinho).
-    run: `
-      $all = @('XblAuthManager','XblGameSave','XboxGipSvc','XboxNetApiSvc')
-      $ex = @($all | Where-Object { Get-Service -Name $_ -ErrorAction SilentlyContinue })
-      if ($ex.Count -lt 2) { Write-Output 'VL_ERRO: os servicos do Xbox nao existem neste Windows (foram removidos).'; exit }
-      foreach ($n in $ex) {
-        Svc $n 'Disabled'
-        $s = Get-Service -Name $n -ErrorAction SilentlyContinue
-        if ($s -and $s.StartType -ne 'Disabled') { Write-Output ('VL_ERRO: nao foi possivel desligar ' + $n + '. Abra o VL como administrador.'); exit }
+    // REPLICADO DO GDZ (bundle, extraído linha por linha):
+    //
+    //   const XBOX_SERVICES = "@('XblAuthManager','XblGameSave','XboxNetApiSvc')";
+    //   aplicar: foreach ($s in XBOX_SERVICES) {
+    //              Stop-Service $s -Force -ErrorAction SilentlyContinue
+    //              Set-Service $s -StartupType Disabled -ErrorAction SilentlyContinue
+    //            }
+    //   desfazer: foreach ($s in XBOX_SERVICES) { Set-Service $s -StartupType Manual -ErrorAction SilentlyContinue }
+    //   detect:  (@('XblAuthManager','XblGameSave','XboxNetApiSvc') | Where-Object { -not (GdzSvcOff $_) }).Count -eq 0
+    //            GdzSvcOff($n) = (-not $s) -or ([string]$s.StartType -eq 'Disabled')
+    //            -> serviço AUSENTE conta como desligado.
+    //
+    // Diferenças da nossa versão anterior (que inventava): eram 4 serviços (incluía o
+    // XboxGipSvc, que é o serviço do CONTROLE) e o motor exigia que todos existissem.
+    // Esta ação não usa `svcs`: o motor trataria serviço ausente como erro, e o GDZ
+    // considera ausente = desligado. Como o GDZ, o desfazer é melhor-esforço (Manual).
+    voltaSemConferir: true,
+    run: `foreach ($s in @('XblAuthManager','XblGameSave','XboxNetApiSvc')) {
+      Stop-Service $s -Force -ErrorAction SilentlyContinue
+      Set-Service $s -StartupType Disabled -ErrorAction SilentlyContinue
+    }
+    Write-Output 'ok'`,
+    detect: `$falta = 0
+      foreach ($s in @('XblAuthManager','XblGameSave','XboxNetApiSvc')) {
+        $sv = Get-Service -Name $s -ErrorAction SilentlyContinue
+        if ($sv -and [string]$sv.StartType -ne 'Disabled') { $falta++ }
       }
+      if ($falta -eq 0) { Write-Output '1' } else { Write-Output '0' }`,
+    revert: `foreach ($s in @('XblAuthManager','XblGameSave','XboxNetApiSvc')) { Set-Service $s -StartupType Manual -ErrorAction SilentlyContinue }
       Write-Output 'ok'`,
-    detect: `$all = @('XblAuthManager','XblGameSave','XboxGipSvc','XboxNetApiSvc'); $ex = 0; $d = 0; foreach ($n in $all) { $s = Get-Service -Name $n -ErrorAction SilentlyContinue; if ($s) { $ex++; if ($s.StartType -eq 'Disabled') { $d++ } } }; if ($ex -ge 2 -and $d -ge ($ex - 1)) { Write-Output '1' } else { Write-Output '0' }`,
-    revert: `foreach ($n in @('XblAuthManager','XblGameSave','XboxGipSvc','XboxNetApiSvc')) { if (Get-Service -Name $n -ErrorAction SilentlyContinue) { Svc $n 'Manual' } }; Write-Output 'ok'`,
   },
   'Game Bar Removido': {
     tag: 'desempenho', title: 'Xbox Game Bar desinstalado',
@@ -3648,7 +3717,12 @@ async function revertAction(name) {
     // O backup pode ter sido gravado com o ajuste JÁ aplicado (versões anteriores à
     // 1.4.75 faziam isso). Nesse caso restaurar não desliga nada: confere e força o
     // estado `off`. Era o "interruptor volta sozinho" de DVR / Game Bar.
-    if (await acaoEstaOn(name, a)) {
+    //
+    // `voltaSemConferir`: o GDZ tem ações cujo detect considera "recurso ausente" como
+    // desligado (ex.: Serviços Xbox sem os serviços). Nesse caso o desfazer do GDZ é
+    // melhor-esforço e NÃO se confere — senão uma máquina sem o recurso mostraria erro
+    // num desfazer que é inofensivo. Fica igual ao GDZ.
+    if (!a.voltaSemConferir && await acaoEstaOn(name, a)) {
       await desligaPeloAjuste(a);
       if (await acaoEstaOn(name, a)) {
         return { success: false, error: 'O Windows não voltou ao estado anterior. Se o ajuste continuar ligado, use "Reverter Tudo" e fale no suporte.' };
@@ -3678,7 +3752,7 @@ async function revertAction(name) {
     if (!r.ok || CARIMBO_SEM_PERMISSAO.test(String(r.err || '')) || CARIMBO_SEM_PERMISSAO.test(String(r.out || ''))) {
       return { success: false, error: await mensagemDeAcao(r.err || r.out || 'falha') };
     }
-    if (await acaoEstaOn(name, a)) {
+    if (!a.voltaSemConferir && await acaoEstaOn(name, a)) {
       await desligaPeloAjuste(a);
       if (await acaoEstaOn(name, a)) {
         return { success: false, error: 'O Windows não voltou ao estado anterior. Se o ajuste continuar ligado, fale no suporte.' };

@@ -10,6 +10,14 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.76': {
+    corrigido: [
+      'Auditoria com administrador: 29 de 29 ajustes e 15 de 16 acoes passaram. Corrigidos os dois que falharam, com o codigo copiado do GDZ, sem invencao:',
+      'Placa de rede (LSO): agora grava o valor no registro do driver (*LsoV2IPv4/*LsoV2IPv6) e reinicia a placa, como o GDZ; antes usava cmdlet que nao funciona em alguns drivers, e o desfazer falhava.',
+      'Servicos do Xbox: sao 3 servicos (o GDZ nao inclui o XboxGipSvc, que e o servico do controle) e servico ausente conta como desligado, igual ao GDZ.',
+    ],
+    novo: [],
+  },
   '1.4.75': {
     corrigido: [
       'Auditoria de TODOS os ajustes. Corrigidos tres defeitos que faziam o interruptor voltar sozinho: (1) ligar um ajuste que ja estava ligado gravava um backup do proprio estado ligado, e desligar restaurava esse estado; (2) o detector do "ja esta aplicado" comparava campos com nomes errados e nunca funcionava; (3) o DLSS recomendado da NVIDIA aplicava no driver e a tela continuava dizendo desligado.',
