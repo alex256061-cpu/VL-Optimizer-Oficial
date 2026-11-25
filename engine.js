@@ -1234,9 +1234,25 @@ const ACTIONS = {
     tag: 'desempenho', title: 'Serviços do Xbox desligados',
     desc: 'Desliga o login e a sincronização de saves do Xbox. Controles do Xbox continuam funcionando.',
     note: 'Jogos do Game Pass, Forza e Minecraft Bedrock deixam de abrir.',
-    svcs: ['XblAuthManager', 'XblGameSave', 'XboxGipSvc', 'XboxNetApiSvc'],
-    detect: `$all = @('XblAuthManager','XblGameSave','XboxGipSvc','XboxNetApiSvc'); $d = 0; foreach ($n in $all) { $s = Get-Service -Name $n -ErrorAction SilentlyContinue; if ($s -and $s.StartType -eq 'Disabled') { $d++ } }; if ($d -ge 3) { Write-Output '1' } else { Write-Output '0' }`,
-    revert: `Svc 'XblAuthManager' 'Manual'; Svc 'XblGameSave' 'Manual'; Svc 'XboxGipSvc' 'Manual'; Svc 'XboxNetApiSvc' 'Manual'; Write-Output 'ok'`,
+    // BUG CORRIGIDO (1.4.75): a lista de serviços era fixa (4) e o motor exigia que
+    // TODOS existissem. Em Windows onde parte deles não existe (esta máquina só tem o
+    // XboxGipSvc; vários debloats removem os outros), a ação respondia "este recurso
+    // não existe nesta versão do Windows" e ficava impossível de usar. Agora descobre
+    // em runtime e só age quando há serviços suficientes para fazer sentido (>= 2);
+    // com menos que isso, devolve uma explicação clara em vez de mexer só no GipSvc
+    // (que é o serviço do controle e não deve ser desligado sozinho).
+    run: `
+      $all = @('XblAuthManager','XblGameSave','XboxGipSvc','XboxNetApiSvc')
+      $ex = @($all | Where-Object { Get-Service -Name $_ -ErrorAction SilentlyContinue })
+      if ($ex.Count -lt 2) { Write-Output 'VL_ERRO: os servicos do Xbox nao existem neste Windows (foram removidos).'; exit }
+      foreach ($n in $ex) {
+        Svc $n 'Disabled'
+        $s = Get-Service -Name $n -ErrorAction SilentlyContinue
+        if ($s -and $s.StartType -ne 'Disabled') { Write-Output ('VL_ERRO: nao foi possivel desligar ' + $n + '. Abra o VL como administrador.'); exit }
+      }
+      Write-Output 'ok'`,
+    detect: `$all = @('XblAuthManager','XblGameSave','XboxGipSvc','XboxNetApiSvc'); $ex = 0; $d = 0; foreach ($n in $all) { $s = Get-Service -Name $n -ErrorAction SilentlyContinue; if ($s) { $ex++; if ($s.StartType -eq 'Disabled') { $d++ } } }; if ($ex -ge 2 -and $d -ge ($ex - 1)) { Write-Output '1' } else { Write-Output '0' }`,
+    revert: `foreach ($n in @('XblAuthManager','XblGameSave','XboxGipSvc','XboxNetApiSvc')) { if (Get-Service -Name $n -ErrorAction SilentlyContinue) { Svc $n 'Manual' } }; Write-Output 'ok'`,
   },
   'Game Bar Removido': {
     tag: 'desempenho', title: 'Xbox Game Bar desinstalado',
@@ -2565,6 +2581,41 @@ Write-Output (Json $__probes)`;
     }
   }
 
+  // ── Ajuste que só existe no driver da NVIDIA (DRS) ──
+  //
+  // BUG CORRIGIDO (1.4.75): o 'dlss-rec' tem SÓ `drs` (NVAPI), sem probe e sem
+  // registro. Cai aqui em `semProbe` e ficava `on = false` para sempre: o ajuste era
+  // aplicado de verdade no driver e a tela continuava mostrando DESLIGADO — o
+  // interruptor voltava sozinho, igual ao caso do plano de energia.
+  // O estado agora é lido do NVAPI com o mesmo drs.ps1 que grava.
+  const drsItems = customItems.filter((t) => !t.probe && Array.isArray(t.drs) && t.drs.length);
+  if (drsItems.length) {
+    try {
+      let baseDrs = '';
+      try { baseDrs = fs.readFileSync(path.join(__dirname, 'drs.ps1'), 'utf8'); } catch (e) { baseDrs = ''; }
+      if (baseDrs) {
+        const linhas = [baseDrs, '', 'if (-not (GdzDrsInit)) { Write-Output (Json @{}); exit }', '$o = @{}'];
+        drsItems.forEach((t) => {
+          const ids = (t.drs || []).map((d) => Number(d.id)).filter((x) => Number.isFinite(x));
+          const leituras = ids.map((id) => `$(try { [GDZ.Drs]::Get(${id}) } catch { '' })`).join(',');
+          linhas.push(`$o['${t.id}'] = @(${leituras})`);
+        });
+        linhas.push('Write-Output (Json $o)');
+        const rd = await ps(linhas.join('\n'), 60000);
+        if (rd.ok && rd.out) {
+          let valores = null;
+          try { valores = JSON.parse(rd.out); } catch (e) { valores = null; }
+          if (valores) {
+            drsItems.forEach((t) => {
+              const lidos = Array.isArray(valores[t.id]) ? valores[t.id] : (valores[t.id] != null ? [valores[t.id]] : []);
+              on[t.id] = (t.drs || []).every((d, i) => String(lidos[i] == null ? '' : lidos[i]).trim() === String(d.on));
+            });
+          }
+        }
+      }
+    } catch (e) { }
+  }
+
   // ── O interruptor não pode mentir ──
   //
   // `on` é "o valor do Windows JÁ é o valor de ligar" — e isso pode ser o padrão de
@@ -3251,23 +3302,63 @@ async function applyTweak(id, want) {
   // Antes perguntava ao probeTweak, que responde "está ligado?" — e nos ajustes em que
   // "ligado" é o valor de fábrica (bing, bsod-detail) o desfazer dizia ter falhado com
   // o Windows já restaurado, e o backup era jogado fora.
-  const depoisRev = regs.length ? await lerRegsAtuais(regs) : null;
-  const noLugar = restaurado || (await tweakNoAlvo(t, depoisRev || [], false));
-  if (noLugar) {
+  //
+  // BUG CORRIGIDO (1.4.75): `restaurado` (restoreBackup deu certo) era aceito como
+  // "está desligado". Quando o backup guardava o próprio estado LIGADO — o que versões
+  // até a 1.4.74 faziam ao aplicar um ajuste que já estava aplicado — restaurar
+  // "funcionava" e o ajuste continuava ligado: o interruptor voltava sozinho.
+  // Agora o estado é conferido pela mesma fonte da tela (tweaksStatus) e, se ainda
+  // estiver ligado, grava o `off` explícito (e apaga o DRS) antes de desistir.
+  const estaLigadoAgora = async () => {
+    try {
+      const stt = await tweaksStatus();
+      const m = Object.fromEntries((stt.tweaks || []).map((x) => [x.id, !!x.on]));
+      return !!m[t.id];
+    } catch (e) { return false; }
+  };
+  let desligado = !(await estaLigadoAgora());
+  if (!desligado) {
+    const offRegs = regs.filter((r) => !r.soBackup && r.off !== undefined);
+    if (offRegs.length) {
+      const lines = offRegs.map((r) => `Set-Val '${r.path}' '${r.name}' ${typeof r.off === 'string' ? `'${r.off}'` : r.off} '${r.type}'`);
+      try { await ps(lines.join('\n'), 60000); } catch (e) { }
+    }
+    if (t.off) { try { await ps(t.off, 60000); } catch (e) { } }
+    if (Array.isArray(t.drs) && t.drs.length) { try { await aplicaDrs(t.drs, false); } catch (e) { } }
+    desligado = !(await estaLigadoAgora());
+  }
+  if (desligado) {
     // O restoreBackup apaga o seu próprio backup. O que sobrou é do caso t.off/regs
     // e do caso "apagar viraria ligado", onde o backup não é mais utilizável.
-    if (!restaurado) descartaBackupOrfao(key);
+    descartaBackupOrfao(key);
     return { success: true, on: false };
   }
   return { success: false, on: true, error: 'nao foi possivel desfazer. ' + await erroDePermissao(t && t._ultimoErro) };
 }
 
 // Duas leituras de registro são o mesmo estado?
+//
+// BUG CORRIGIDO (1.4.75): as duas leituras usam formatos diferentes —
+//   lerAnterior()  -> { exists, value, kind }
+//   lerRegsAtuais()-> { existe, valor, texto }
+// Esta função comparava só `existe`/`texto`, que NÃO existem no primeiro formato:
+// `String(undefined)` !== "0", então ela dizia "mudou" para um ajuste que já estava
+// no alvo. Consequência: ligar um ajuste já ligado gravava um backup com o próprio
+// estado ligado, e o "desligar" restaurava esse estado — o interruptor voltava sozinho
+// (mesmo defeito do plano de energia, agora nos tweaks).
 function mesmaCoisa(a, b) {
   if (!a || !b || a.length !== b.length) return false;
+  const existe = (x) => !!(x && (x.existe !== undefined ? x.existe : x.exists));
+  const texto = (x) => {
+    if (!x) return '';
+    if (x.texto !== undefined) return String(x.texto);
+    const v = x.valor !== undefined ? x.valor : x.value;
+    if (v === null || v === undefined) return '';
+    return Array.isArray(v) ? v.join(',') : String(v);
+  };
   for (let i = 0; i < a.length; i++) {
-    if (!!a[i].existe !== !!b[i].existe) return false;
-    if (String(a[i].texto) !== String(b[i].texto)) return false;
+    if (existe(a[i]) !== existe(b[i])) return false;
+    if (texto(a[i]) !== texto(b[i])) return false;
   }
   return true;
 }
@@ -3338,7 +3429,37 @@ async function runAction(name) {
   }
   const regs = a.regs || [];
   const svcs = a.svcs || [];
-  if (regs.length || svcs.length) await psBackupState(name, regs, svcs);
+  // NÃO gravar backup com o ajuste JÁ aplicado.
+  //
+  // BUG CORRIGIDO (1.4.75): psBackupState() salvava "o estado de agora" mesmo quando
+  // esse estado já era o alvo. Exemplo real (DVR Desativado, Game Bar Desativado): a
+  // ação já estava ligada (0); ligar de novo gravava backup = 0/0; desligar restaurava
+  // 0/0 e NADA mudava — o interruptor voltava sozinho, igual ao bug do plano de energia.
+  // Só grava a foto quando há o que preservar (ajuste fora do alvo / primeiro uso).
+  if ((regs.length || svcs.length) && !loadBackups()[name]) {
+    let jaNoAlvo = false;
+    try {
+      const norm = (v) => (Array.isArray(v) ? v.join(',') : String(v == null ? '' : v));
+      if (regs.length && !svcs.length && !a.run) {
+        const conferir = regs.filter((r) => !r.soBackup && r.on !== undefined);
+        if (conferir.length) {
+          const atual = await lerAnterior(conferir);
+          jaNoAlvo = atual.reg.length === conferir.length
+            && conferir.every((r, i) => {
+              const x = atual.reg[i];
+              return x && x.exists && norm(x.value) === norm(r.on);
+            });
+        }
+      } else if (svcs.length && !regs.length && !a.run) {
+        jaNoAlvo = true;
+        for (const s of svcs) {
+          const c = await confereServico(s, 'Disabled');
+          if (!c.ok) { jaNoAlvo = false; break; }
+        }
+      }
+    } catch (e) { jaNoAlvo = false; }
+    if (!jaNoAlvo) await psBackupState(name, regs, svcs);
+  }
   const lines = [];
   for (const r of regs) {
     const v = typeof r.on === 'string' ? `'${r.on}'` : r.on;
@@ -3524,6 +3645,15 @@ async function revertAction(name) {
       // sair e entrar de novo no Windows para o driver pegar o valor.
       await ps(scriptComPre(a, 'revert') + a.revert, 90000);
     }
+    // O backup pode ter sido gravado com o ajuste JÁ aplicado (versões anteriores à
+    // 1.4.75 faziam isso). Nesse caso restaurar não desliga nada: confere e força o
+    // estado `off`. Era o "interruptor volta sozinho" de DVR / Game Bar.
+    if (await acaoEstaOn(name, a)) {
+      await desligaPeloAjuste(a);
+      if (await acaoEstaOn(name, a)) {
+        return { success: false, error: 'O Windows não voltou ao estado anterior. Se o ajuste continuar ligado, use "Reverter Tudo" e fale no suporte.' };
+      }
+    }
     return { success: true };
   }
   if (a.revert) {
@@ -3548,9 +3678,56 @@ async function revertAction(name) {
     if (!r.ok || CARIMBO_SEM_PERMISSAO.test(String(r.err || '')) || CARIMBO_SEM_PERMISSAO.test(String(r.out || ''))) {
       return { success: false, error: await mensagemDeAcao(r.err || r.out || 'falha') };
     }
+    if (await acaoEstaOn(name, a)) {
+      await desligaPeloAjuste(a);
+      if (await acaoEstaOn(name, a)) {
+        return { success: false, error: 'O Windows não voltou ao estado anterior. Se o ajuste continuar ligado, fale no suporte.' };
+      }
+    }
     return { success: true };
   }
+  // Sem backup e sem script de revert: ainda dá para desligar pelos valores `off`
+  // que o próprio ajuste conhece (é o que o tweak já fazia).
+  if ((a.regs || []).some((r) => !r.soBackup && r.off !== undefined)) {
+    await desligaPeloAjuste(a);
+    if (!(await acaoEstaOn(name, a))) return { success: true };
+    return { success: false, error: 'Nada a desfazer: este ajuste não tem backup.' };
+  }
   return { success: false, error: 'sem backup' };
+}
+
+// O ajuste está ligado AGORA? (roda o mesmo `detect` da tela)
+// Devolve false em caso de erro: quem chama usa isto só para decidir se insiste.
+async function acaoEstaOn(name, a) {
+  if (!a || !a.detect) return false;
+  try {
+    const r = await ps(`$r = @{}; try { $r['i'] = @( & { ${a.detect} } ) -join ' ' } catch { $r['i'] = '' }; Write-Output (Json $r)`, 60000);
+    if (!r.ok) return false;
+    let j = {};
+    try { j = JSON.parse(r.out || '{}'); } catch (e) { return false; }
+    const saida = String(j.i || '').trim();
+    if (!saida) return false;
+    if (/(^|\s)(1|active)($|\s)/i.test(saida)) return true;
+    const guid = PLANO_GUID[name];
+    if (guid && saida.toLowerCase().includes(guid.toLowerCase())) return true;
+    return false;
+  } catch (e) {
+    return false;
+  }
+}
+
+// Força o estado desligado: grava os valores `off` explícitos (quando existem) e roda
+// o script de revert do ajuste. Usado quando o backup não basta.
+async function desligaPeloAjuste(a) {
+  if (!a) return;
+  const regs = (a.regs || []).filter((r) => !r.soBackup && r.off !== undefined);
+  if (regs.length) {
+    const lines = regs.map((r) => `Set-Val '${r.path}' '${r.name}' ${typeof r.off === 'string' ? `'${r.off}'` : r.off} '${r.type}'`);
+    try { await ps(lines.join('\n'), 60000); } catch (e) { }
+  }
+  if (a.revert) {
+    try { await ps(scriptComPre(a, 'revert') + a.revert, 90000); } catch (e) { }
+  }
 }
 
 // Script do "UWP Removidos", com a guarda X3D do GDZ.

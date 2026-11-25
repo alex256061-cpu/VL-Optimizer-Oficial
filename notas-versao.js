@@ -10,6 +10,14 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.75': {
+    corrigido: [
+      'Auditoria de TODOS os ajustes. Corrigidos tres defeitos que faziam o interruptor voltar sozinho: (1) ligar um ajuste que ja estava ligado gravava um backup do proprio estado ligado, e desligar restaurava esse estado; (2) o detector do "ja esta aplicado" comparava campos com nomes errados e nunca funcionava; (3) o DLSS recomendado da NVIDIA aplicava no driver e a tela continuava dizendo desligado.',
+      'Os Servicos do Xbox deixavam de funcionar em Windows onde parte deles nao existe (bloat removido): agora so mexe nos que existem e explica quando nao da.',
+    ],
+    novo: [],
+  },
+
   '1.4.74': {
     corrigido: [
       'O ajuste "Plano de energia Desempenho Maximo" agora liga de verdade: a linha que ativava o plano estava comentada no codigo, entao ele salvava o backup e nao mudava nada - o interruptor voltava sozinho. Tambem passou a reaproveitar o plano em vez de criar uma copia a cada clique, e o desligar volta ao plano que estava antes.',
