@@ -104,6 +104,40 @@ export function montarEmail(modelo, perfil, env) {
   return { modelo: modelo || 'vence7', assunto, html, texto, para: email, nome, dias, expira };
 }
 
+/** E-mail de recuperação de senha (link do Supabase Auth, enviado pelo Brevo/Resend). */
+export function montarEmailRecuperacao(link, nome, env) {
+  const primeiro = String(nome || '').split(' ')[0].replace(/@.*/, '').slice(0, 30) || 'jogador';
+  const remetenteNome = String(env.EMAIL_NOME || 'VL Optimizer').trim();
+  const assunto = 'Criar nova senha · VL Optimizer';
+  const html = `<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${assunto}</title></head>
+<body style="margin:0;padding:0;background:#07030a;color:#f5f2f7;font-family:Arial,Helvetica,sans-serif">
+  <div style="max-width:560px;margin:0 auto;padding:32px 22px">
+    <div style="font-size:20px;font-weight:bold;color:#ffffff;margin-bottom:22px"><span style="color:#ff1f2e">VL</span> Optimizer</div>
+    <div style="background:#130b16;border:1px solid #2a1a30;border-radius:14px;padding:26px 24px">
+      <h1 style="margin:0 0 14px;font-size:22px;line-height:1.3;color:#ffffff">Criar nova senha</h1>
+      <p style="margin:0 0 14px;font-size:15px;line-height:1.65;color:#c9bfd2">Olá, ${primeiro}!</p>
+      <p style="margin:0 0 20px;font-size:15px;line-height:1.65;color:#c9bfd2">Recebemos um pedido para redefinir a senha da sua conta no VL Optimizer. Clique no botão para criar uma senha nova.</p>
+      <p style="margin:0 0 8px"><a href="${link}" style="display:inline-block;background:#ff1f2e;color:#ffffff;text-decoration:none;font-weight:bold;padding:13px 22px;border-radius:10px;font-size:15px">Criar nova senha</a></p>
+      <p style="margin:14px 0 0;font-size:13px;line-height:1.6;color:#8d8397">O link expira em 1 hora e só pode ser usado uma vez. Se não foi você, ignore este e-mail — sua senha continua a mesma.</p>
+      <p style="margin:10px 0 0;font-size:11px;line-height:1.6;color:#6d6377;word-break:break-all">Se o botão não abrir: ${link}</p>
+    </div>
+    <p style="margin:20px 0 0;font-size:13px;line-height:1.7;color:#8d8397">Precisa de ajuda? Fale com a gente no <a href="${DISCORD}" style="color:#ff8a90">Discord</a>.<br>Suporte VL Optimizer · <a href="${SITE}" style="color:#c9bfd2">vl-optimizer.pages.dev</a></p>
+  </div>
+</body></html>`;
+  const texto = [
+    remetenteNome, '', 'Criar nova senha', '',
+    'Olá, ' + primeiro + '!',
+    'Recebemos um pedido para redefinir a senha da sua conta no VL Optimizer.',
+    'Abra este link para criar uma senha nova (expira em 1 hora, uso único):',
+    link, '',
+    'Se não foi você, ignore este e-mail — sua senha continua a mesma.',
+    'Precisa de ajuda? Discord: ' + DISCORD,
+    'Suporte VL Optimizer · ' + SITE,
+  ].join('\n');
+  return { assunto, html, texto, para: null };
+}
+
 export async function enviar(env, para, assunto, html, texto) {
   const conf = emailConfigurado(env);
   if (!conf.ok) {

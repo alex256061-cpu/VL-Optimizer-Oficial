@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Recuperar acesso · VL Optimizer</title>
+<meta name="description" content="Esqueceu o e-mail da conta? Digite o código da sua chave e a gente localiza sua conta para redefinir a senha.">
+<meta name="robots" content="noindex">
+<link rel="icon" href="assets/icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="conta.css?v=2">
+</head>
+<body>
+
+<div class="auth-carregando" id="carregando"><div><span class="auth-spin"></span> Verificando sessão...</div></div>
+
+<div class="auth-wrap">
+
+  <section class="auth-lado">
+    <a class="auth-marca" href="/">
+      <img src="assets/icon.png" alt="">
+      <b>VL <span>Optimizer</span></b>
+    </a>
+
+    <div class="auth-centro">
+      <h1>Esqueceu o<br><em>e-mail?</em></h1>
+      <p>Se você tem o código da sua chave, a gente localiza a conta e envia o link de redefinição de senha para o e-mail cadastrado.</p>
+
+      <ul class="auth-lista">
+        <li><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg> Mostramos o e-mail mascarado (m***a@gmail.com)</li>
+        <li><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg> O link vai só para o e-mail cadastrado</li>
+        <li><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg> A chave não é senha: sozinha não entra na conta</li>
+      </ul>
+    </div>
+
+    <div class="auth-rodape">VL Optimizer · Windows 10 e 11</div>
+  </section>
+
+  <section class="auth-painel">
+    <div class="auth-aviso" id="aviso"></div>
+
+    <form id="form-busca" autocomplete="off">
+      <p style="font-size:13px;line-height:1.6;color:var(--muted);margin:0 0 16px">
+        Digite o código da sua chave (está no painel do aplicativo ou no e-mail de compra).
+      </p>
+      <div class="auth-campo">
+        <label for="codigo">Código da chave</label>
+        <input id="codigo" name="codigo" type="text" placeholder="VL-XXXX-XXXX-XXXX" autocapitalize="characters" spellcheck="false" required>
+      </div>
+      <button class="auth-btn auth-btn-principal" id="btn-buscar" type="submit">Buscar minha conta</button>
+    </form>
+
+    <div id="resultado" style="display:none;margin-top:18px">
+      <div class="auth-ok-box">
+        <p style="margin:0 0 6px;font-size:14px"><b>Encontramos sua conta.</b></p>
+        <p style="margin:0;font-size:14px">E-mail cadastrado: <b id="email-masc">—</b></p>
+        <p class="auth-dica" id="detalhe" style="margin:8px 0 0;font-size:12px"></p>
+      </div>
+      <button class="auth-btn auth-btn-principal" id="btn-enviar" type="button" style="margin-top:12px">Enviar link de redefinição de senha</button>
+      <p class="auth-dica" style="font-size:12px;margin:10px 0 0">O link chega no e-mail acima. Sem acesso a ele, fale com o suporte no Discord.</p>
+    </div>
+
+    <div class="auth-sep">ou</div>
+
+    <div class="auth-pe">
+      Lembrou? <a href="/entrar">Voltar para entrar</a>
+      <br><span style="opacity:.7">Perdeu o e-mail também? <a href="https://discord.gg/k8F3mvxam" target="_blank" rel="noopener">Fale no Discord</a></span>
+    </div>
+  </section>
+
+</div>
+
+<script src="supabase-client.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+const aviso = $('aviso');
+let codigoAtual = '';
+
+function mostrar(msg, tipo) {
+  aviso.textContent = msg || '';
+  aviso.className = 'auth-aviso' + (msg ? ' ' + (tipo || 'erro') : '');
+}
+function ocupado(id, on, texto) {
+  const b = $(id);
+  if (!b) return;
+  b.disabled = on;
+  if (on) { b._t = b.textContent; b.innerHTML = '<span class="auth-spin"></span>'; }
+  else b.textContent = texto || b._t || '';
+}
+function normalizar(v) {
+  return String(v || '').toUpperCase().replace(/[^A-Z0-9-]/g, '').replace(/-+/g, '-').replace(/^-|-$/g, '').trim();
+}
+
+async function chamar(acao, codigo) {
+  const r = await fetch('/api/recuperar-por-chave', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ acao, codigo }),
+  });
+  const j = await r.json().catch(() => ({ ok: false, erro: 'Resposta inválida.' }));
+  if (!r.ok || !j.ok) throw new Error(j.erro || 'Não foi possível agora. Tente de novo.');
+  return j;
+}
+
+$('form-busca').onsubmit = async (e) => {
+  e.preventDefault();
+  const codigo = normalizar($('codigo').value);
+  if (!/^VL-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(codigo)) {
+    mostrar('Código inválido. O formato é VL-XXXX-XXXX-XXXX.'); return;
+  }
+  mostrar('');
+  ocupado('btn-buscar', true);
+  try {
+    const d = await chamar('buscar', codigo);
+    codigoAtual = codigo;
+    $('email-masc').textContent = d.email_mascarado;
+    const partes = [];
+    if (d.nome) {
+      const nome = String(d.nome).split(' ')[0];
+      if (nome && !nome.includes('@')) partes.push('Olá, ' + nome + '!');
+    }
+    if (d.plano === 'vitalicio') partes.push('Licença vitalícia.');
+    else if (d.vence_em) partes.push('Licença ativa até ' + new Date(d.vence_em).toLocaleDateString('pt-BR') + '.');
+    $('detalhe').textContent = partes.join(' ');
+    $('resultado').style.display = 'block';
+    $('form-busca').style.display = 'none';
+  } catch (err) {
+    mostrar(err.message);
+  } finally {
+    ocupado('btn-buscar', false, 'Buscar minha conta');
+  }
+};
+
+$('btn-enviar').onclick = async () => {
+  mostrar('');
+  ocupado('btn-enviar', true);
+  try {
+    const d = await chamar('enviar', codigoAtual);
+    mostrar(d.mensagem || 'Link enviado. Confira o e-mail e o spam.', 'ok');
+    $('btn-enviar').disabled = true;
+    $('btn-enviar').textContent = 'Link enviado ✓';
+  } catch (err) {
+    mostrar(err.message);
+    ocupado('btn-enviar', false, 'Enviar link de redefinição de senha');
+  }
+};
+
+(async () => {
+  try {
+    const s = await SUPABASE.sessaoValida();
+    if (s) { location.href = '/conta'; return; }
+  } catch (e) { }
+  $('carregando').remove();
+  $('codigo').focus();
+})();
+</script>
+</body>
+</html>

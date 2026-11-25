@@ -1,3 +1,12 @@
+// vl-recovery-forward: se o link de recuperação cair em outra página, manda para /redefinir
+(() => {
+  try {
+    const h = String(location.hash || '');
+    if (!/type=recovery/.test(h) || !/access_token=/.test(h)) return;
+    if (location.pathname === '/redefinir' || location.pathname.startsWith('/redefinir')) return;
+    location.replace('/redefinir' + h);
+  } catch (e) { }
+})();
 /* VL Optimizer — landing page
    Edite CONFIG para mudar preço e link de checkout. */
 const CONFIG = {

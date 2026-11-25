@@ -225,6 +225,9 @@
     }
   }
 
+  // exposto para o admin-extra4 (busca pela chave abrir o histórico)
+  window.__vlAbrirHistorico = abrirHistorico;
+
   /* ══════════════════ PIX PENDENTES (aba Vendas) ══════════════════ */
 
   function montarBlocoPix() {

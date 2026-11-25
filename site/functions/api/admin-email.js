@@ -18,7 +18,7 @@
  */
 
 import { exigirAdmin, responder, metodoPermitido, lerCorpo, cabecalhosServico, registrarAuditoria } from './_admin.js';
-import { montarEmail, enviar, emailConfigurado, rodarLembretes, listarAvisosRecentes } from './_email.js';
+import { montarEmail, montarEmailRecuperacao, enviar, emailConfigurado, rodarLembretes, listarAvisosRecentes } from './_email.js';
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/;
 
@@ -94,6 +94,11 @@ export async function onRequestPost(context) {
       license_expires_at: new Date(Date.now() + 7 * 86400000).toISOString(),
       plan: 'pro',
     };
+    if (modelo === 'recuperacao') {
+      const site = String(env.SITE_URL || 'https://vl-optimizer.pages.dev').replace(/\/+$/, '');
+      const mail = montarEmailRecuperacao(site + '/redefinir', 'Cliente Exemplo', env);
+      return responder({ ok: true, modelo, assunto: mail.assunto, html: mail.html, texto: mail.texto });
+    }
     const mail = montarEmail(modelo, exemplo, env);
     return responder({ ok: true, modelo: mail.modelo, assunto: mail.assunto, html: mail.html, texto: mail.texto });
   }

@@ -100,6 +100,7 @@
         ? '<button class="adm-btn pequeno" data-l2="reativar">Reativar conta</button>'
         : '<button class="adm-btn pequeno perigo" data-l2="suspender">Suspender conta</button>') +
       '<button class="adm-btn pequeno ghost" data-l2="lembrete">Enviar lembrete por e-mail</button>' +
+      '<button class="adm-btn pequeno ghost" data-l2="email">Alterar e-mail</button>' +
       '</div>';
     const acoes = corpo.querySelector('.adm-drawer-acoes');
     if (acoes) acoes.insertAdjacentElement('afterend', div);
@@ -108,6 +109,7 @@
     div.querySelector('[data-l2="suspender"]')?.addEventListener('click', () => suspender(emailDrawer, true));
     div.querySelector('[data-l2="reativar"]')?.addEventListener('click', () => suspender(emailDrawer, false));
     div.querySelector('[data-l2="lembrete"]')?.addEventListener('click', () => enviarLembrete(emailDrawer));
+    div.querySelector('[data-l2="email"]')?.addEventListener('click', () => alterarEmail(emailDrawer));
   }
 
   async function carregarFichaDrawer(email) {
@@ -147,6 +149,27 @@
     }
   }
 
+
+  async function alterarEmail(emailAtual) {
+    const novo = prompt('Novo e-mail de login para ' + emailAtual + ':', '');
+    if (!novo) return;
+    const limpo = String(novo).trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(limpo)) { aviso('E-mail inválido.', 'erro'); return; }
+    if (!confirm('Trocar o login de ' + emailAtual + ' para ' + limpo + '?\n\nO cliente passa a entrar com o e-mail novo; a senha continua a mesma.')) return;
+    try {
+      await apiPost('/api/admin-alterar-email', { email_atual: emailAtual, email_novo: limpo });
+      aviso('E-mail alterado para ' + limpo);
+      emailDrawer = limpo;
+      const ident = porId('hist-ident');
+      if (ident) {
+        ident.innerHTML = ident.innerHTML.split(emailAtual).join(limpo);
+      }
+      fichaDrawer = null;
+      const antigo = porId('hist-extra');
+      if (antigo) antigo.remove();
+      carregarFichaDrawer(limpo);
+    } catch (e) { aviso('Não foi possível: ' + e.message, 'erro'); }
+  }
   async function enviarLembrete(email) {
     try {
       const r = await apiPost('/api/admin-email', { acao: 'enviar', email });
@@ -384,6 +407,8 @@
   }
 
   /* ══════════════════ ganchos ══════════════════ */
+
+  window.__vlAlterarEmail = alterarEmail;
 
   function iniciar() {
     guardar(observarDrawer);

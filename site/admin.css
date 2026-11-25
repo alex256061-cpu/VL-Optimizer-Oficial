@@ -634,3 +634,17 @@ body.adm-com-drawer{overflow:hidden}
 .adm-log-conteudo span{color:#ff8a90;font-size:12px}
 .adm-log-conteudo small{display:block;color:var(--adm-dim);font-size:11px;margin-top:2px;word-break:break-word}
 .adm-log-conteudo .adm-log-admin{opacity:.75}
+
+
+/* busca de cliente pela chave (aba Chaves) */
+.adm-busca-chave{display:flex;gap:8px;margin:12px 0}
+.adm-busca-chave input{flex:1;min-width:0;background:rgba(255,255,255,.04);border:1px solid var(--adm-line);border-radius:9px;color:var(--adm-txt);padding:9px 12px;font:inherit;font-size:13px;font-family:'JetBrains Mono',monospace;letter-spacing:.04em;text-transform:uppercase}
+.adm-busca-chave input:focus{outline:none;border-color:rgba(255,31,46,.55)}
+.adm-chave-card{border:1px solid var(--adm-line);border-radius:12px;padding:14px;background:rgba(255,255,255,.025);margin-top:10px}
+.adm-chave-topo{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.adm-chave-topo b{font-family:'JetBrains Mono',monospace;font-size:13px;letter-spacing:.05em}
+.adm-chave-dono b{font-size:14px}
+.adm-chave-dono small{display:block;color:var(--adm-dim);font-size:11px;margin-top:2px}
+.adm-chave-dados{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}
+.adm-chave-dados span{font-size:11px;border:1px solid var(--adm-line);border-radius:7px;padding:3px 8px;color:var(--adm-dim)}
+.adm-chave-acoes{display:flex;gap:6px;flex-wrap:wrap}
