@@ -7,23 +7,47 @@ mostra "NÃO CONFIGURADO" e a prévia do e-mail funciona normalmente.
 ## 1) Como o e-mail é enviado
 
 Não usamos SMTP nem servidor de e-mail próprio. A Cloudflare Pages Function
-(`/api/admin-email` e `/api/cron-vencimentos`) chama a API de um provedor por HTTPS:
+(`/api/admin-email` e `/api/cron-vencimentos`) chama a API de um provedor por HTTPS.
 
-- **Brevo** (recomendado: grátis até 300 e-mails/dia) — variável `BREVO_API_KEY`
-- **Resend** (alternativa) — variável `RESEND_API_KEY`
+### Qual provedor usar (ordem de facilidade)
+
+| Provedor | Grátis | Precisa de domínio? | Variáveis |
+|---|---|---|---|
+| **Mailjet** (recomendado) | 6.000/mês | **Não** — verifica só o e-mail remetente (Gmail) | `MAILJET_API_KEY` + `MAILJET_SECRET_KEY` |
+| SendGrid | 100/dia | **Não** — "Single Sender Verification" | `SENDGRID_API_KEY` |
+| Brevo | 300/dia | Não (verifica e-mail remetente) | `BREVO_API_KEY` |
+| Resend | 3.000/mês | Sim, precisa de domínio verificado | `RESEND_API_KEY` |
+
+O código aceita qualquer um dos quatro: usa o primeiro que estiver configurado, na
+ordem Mailjet → SendGrid → Brevo → Resend.
 
 E-mail sai de um endereço verificado no provedor (`EMAIL_REMETENTE`), ex.:
-`contato.vloptimizer@gmail.com`. No Brevo dá para verificar um **e-mail** (Gmail)
-sem precisar de domínio próprio.
+`contato.vloptimizer@gmail.com`.
 
 ### O que configurar na Cloudflare (Settings → Environment variables)
 
 | Variável | Exemplo | Para quê |
 |---|---|---|
-| `BREVO_API_KEY` | `xkeysib-...` | chave da API do Brevo (ou `RESEND_API_KEY`) |
+| `MAILJET_API_KEY` | `a1b2c3...` | API Key do Mailjet (recomendado) |
+| `MAILJET_SECRET_KEY` | `x9y8z7...` | Secret Key do Mailjet |
+| `SENDGRID_API_KEY` | `SG....` | alternativa (100/dia) |
+| `BREVO_API_KEY` | `xkeysib-...` | alternativa (300/dia) |
+| `RESEND_API_KEY` | `re_...` | alternativa (exige domínio) |
 | `EMAIL_REMETENTE` | `contato.vloptimizer@gmail.com` | remetente verificado no provedor |
 | `EMAIL_NOME` | `VL Optimizer` | nome que aparece no remetente (opcional) |
 | `CRON_KEY` | uma senha longa qualquer | protege a URL do cron automático |
+
+### Passo a passo do Mailjet (sem domínio, ~5 min)
+
+1. Acesse [mailjet.com](https://www.mailjet.com/) → **Create free account** (só e-mail e senha, sem cartão).
+2. Confirme o e-mail da conta.
+3. Menu **Sender domains & addresses** → **Add a sender address** → cadastre o Gmail que vai enviar (ex.: `contato.vloptimizer@gmail.com`) → o Mailjet manda um código para esse Gmail → confirme.
+4. Menu **API keys** (Configurações da conta) → copie a **API Key** e a **Secret Key**.
+5. Na Cloudflare → Settings → Environment variables: `MAILJET_API_KEY`, `MAILJET_SECRET_KEY`, `EMAIL_REMETENTE` (o Gmail verificado), `EMAIL_NOME=VL Optimizer` e `CRON_KEY`.
+6. Salvar e pedir um novo deploy (me avisa que eu publico).
+
+Depois disso, os botões "Enviar teste", "Enviar lembretes" e o link de recuperação
+por chave passam a enviar de verdade.
 
 ## 2) Quando o e-mail é enviado
 

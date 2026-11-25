@@ -23,13 +23,19 @@ const dataBR = (iso) => {
 
 export function emailConfigurado(env) {
   const remetente = String(env.EMAIL_REMETENTE || '').trim();
+  // Ordem de preferência: Mailjet (6.000/mês, verifica só o e-mail remetente),
+  // SendGrid (100/dia), Brevo (300/dia), Resend (3.000/mês, exige domínio).
+  if (env.MAILJET_API_KEY && env.MAILJET_SECRET_KEY && remetente) return { ok: true, provedor: 'mailjet', remetente };
+  if (env.SENDGRID_API_KEY && remetente) return { ok: true, provedor: 'sendgrid', remetente };
   if (env.BREVO_API_KEY && remetente) return { ok: true, provedor: 'brevo', remetente };
   if (env.RESEND_API_KEY && remetente) return { ok: true, provedor: 'resend', remetente };
   return {
     ok: false,
     provedor: null,
     remetente,
-    precisa: env.BREVO_API_KEY || env.RESEND_API_KEY ? ['EMAIL_REMETENTE'] : ['BREVO_API_KEY (ou RESEND_API_KEY)', 'EMAIL_REMETENTE'],
+    precisa: env.MAILJET_API_KEY || env.MAILJET_SECRET_KEY
+      ? ['MAILJET_API_KEY e MAILJET_SECRET_KEY', 'EMAIL_REMETENTE']
+      : ['MAILJET_API_KEY + MAILJET_SECRET_KEY (ou SENDGRID_API_KEY)', 'EMAIL_REMETENTE'],
   };
 }
 
@@ -145,6 +151,49 @@ export async function enviar(env, para, assunto, html, texto) {
   }
   const remetenteNome = String(env.EMAIL_NOME || 'VL Optimizer').trim();
   try {
+    if (conf.provedor === 'mailjet') {
+      const auth = btoa(String(env.MAILJET_API_KEY) + ':' + String(env.MAILJET_SECRET_KEY));
+      const r = await fetch('https://api.mailjet.com/v3.1/send', {
+        method: 'POST',
+        headers: { Authorization: 'Basic ' + auth, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          Messages: [{
+            From: { Email: conf.remetente, Name: remetenteNome },
+            To: [{ Email: para }],
+            Subject: assunto,
+            TextPart: texto,
+            HTMLPart: html,
+          }],
+        }),
+      });
+      if (!r.ok) {
+        const txt = await r.text();
+        console.error('Mailjet falhou:', r.status, txt.slice(0, 300));
+        return { ok: false, erro: 'O provedor de e-mail recusou o envio (' + r.status + ').' };
+      }
+      return { ok: true, provedor: 'mailjet' };
+    }
+    if (conf.provedor === 'sendgrid') {
+      const r = await fetch('https://api.sendgrid.com/v3/mail/send', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + String(env.SENDGRID_API_KEY), 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          personalizations: [{ to: [{ email: para }] }],
+          from: { email: conf.remetente, name: remetenteNome },
+          subject: assunto,
+          content: [
+            { type: 'text/plain', value: texto },
+            { type: 'text/html', value: html },
+          ],
+        }),
+      });
+      if (!r.ok) {
+        const txt = await r.text();
+        console.error('SendGrid falhou:', r.status, txt.slice(0, 300));
+        return { ok: false, erro: 'O provedor de e-mail recusou o envio (' + r.status + ').' };
+      }
+      return { ok: true, provedor: 'sendgrid' };
+    }
     if (conf.provedor === 'brevo') {
       const r = await fetch('https://api.brevo.com/v3/smtp/email', {
         method: 'POST',
