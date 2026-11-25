@@ -1,12 +1,11 @@
 /**
- * _admin.js — verificação de administrador para as Functions de admin.
+ * _admin.js — helpers das Functions de administração.
  *
- * O painel manda o token da sessão do usuário. Aqui:
- *   1. valida o token no Supabase Auth (auth/v1/user)
- *   2. lê o perfil e confere is_admin
- *   3. devolve também a URL e a service key para as consultas privilegiadas
- *
- * A service key NUNCA sai do servidor: só é usada aqui dentro.
+ * - exigirAdmin: token da sessão + is_admin no perfil (service key fica no servidor)
+ * - authAdmin: chamadas à Auth Admin API do Supabase (banir/desbanir, ler usuário)
+ * - storage*: bucket privado usado para o log de auditoria e para o controle de
+ *   e-mails já enviados (não precisamos de tabela nova para isso)
+ * - registrarAuditoria: grava uma linha no log (best-effort, nunca derruba a ação)
  */
 
 const sj = (o, status) =>
@@ -64,7 +63,7 @@ export async function exigirAdmin(request, env) {
   }
 }
 
-/** GET/HEAD apenas. */
+/** GET/HEAD/POST conforme a lista. */
 export function metodoPermitido(request, metodos) {
   const permitidos = metodos || ['GET', 'HEAD'];
   if (!permitidos.includes(request.method)) {
@@ -81,5 +80,116 @@ export async function lerCorpo(request) {
     return j && typeof j === 'object' ? j : {};
   } catch (e) {
     return null;
+  }
+}
+
+/* ── Auth Admin API ────────────────────────────────────────────────────── */
+
+export const authAdmin = (base, svc, metodo, caminho, corpo) =>
+  fetch(base + '/auth/v1/admin/' + caminho, {
+    method: metodo || 'GET',
+    headers: cabecalhosServico(svc),
+    body: corpo ? JSON.stringify(corpo) : undefined,
+  });
+
+/** Lê o usuário do Auth (traz banned_until, last_sign_in_at, metadata). */
+export async function lerUsuarioAuth(base, svc, id) {
+  try {
+    const r = await authAdmin(base, svc, 'GET', 'users/' + encodeURIComponent(id));
+    if (!r.ok) return null;
+    return await r.json();
+  } catch (e) {
+    return null;
+  }
+}
+
+/* ── Storage (bucket privado) ──────────────────────────────────────────── */
+
+export async function garantirBucket(base, svc, bucket) {
+  try {
+    const r = await fetch(base + '/storage/v1/bucket', {
+      method: 'POST',
+      headers: cabecalhosServico(svc),
+      body: JSON.stringify({ id: bucket, name: bucket, public: false, file_size_limit: 2097152 }),
+    });
+    // 200 = criou agora; 400/409 = já existe — os dois servem
+    return r.status < 500;
+  } catch (e) {
+    return false;
+  }
+}
+
+export async function storageGravar(base, svc, bucket, nome, obj) {
+  const r = await fetch(base + '/storage/v1/object/' + bucket + '/' + encodeURIComponent(nome), {
+    method: 'POST',
+    headers: Object.assign({}, cabecalhosServico(svc), { 'x-upsert': 'false' }),
+    body: JSON.stringify(obj),
+  });
+  return r.ok;
+}
+
+export async function storageListar(base, svc, bucket, prefixo, limite) {
+  try {
+    const r = await fetch(base + '/storage/v1/object/list/' + bucket, {
+      method: 'POST',
+      headers: cabecalhosServico(svc),
+      body: JSON.stringify({
+        prefix: prefixo || '',
+        limit: limite || 50,
+        sortBy: { column: 'created_at', order: 'desc' },
+      }),
+    });
+    if (!r.ok) return [];
+    const j = await r.json();
+    return Array.isArray(j) ? j : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+export async function storageLer(base, svc, bucket, nome) {
+  try {
+    const r = await fetch(base + '/storage/v1/object/' + bucket + '/' + encodeURIComponent(nome), {
+      headers: { apikey: svc, Authorization: 'Bearer ' + svc },
+    });
+    if (!r.ok) return null;
+    const t = await r.text();
+    try { return JSON.parse(t); } catch (e) { return null; }
+  } catch (e) {
+    return null;
+  }
+}
+
+export async function storageApagar(base, svc, bucket, prefixos) {
+  if (!prefixos || !prefixos.length) return true;
+  try {
+    const r = await fetch(base + '/storage/v1/object/' + bucket, {
+      method: 'DELETE',
+      headers: cabecalhosServico(svc),
+      body: JSON.stringify({ prefixes: prefixos }),
+    });
+    return r.ok;
+  } catch (e) {
+    return false;
+  }
+}
+
+/* ── auditoria ─────────────────────────────────────────────────────────── */
+
+export async function registrarAuditoria(base, svc, admin, acao, alvo, detalhe) {
+  try {
+    await garantirBucket(base, svc, 'auditoria');
+    const quando = new Date().toISOString();
+    const nome = quando.replace(/[:.]/g, '-') + '-' + Math.random().toString(36).slice(2, 8) + '.json';
+    return await storageGravar(base, svc, 'auditoria', nome, {
+      quando,
+      admin: (admin && (admin.email || admin.id)) || 'desconhecido',
+      admin_id: (admin && admin.id) || null,
+      acao: String(acao || '').slice(0, 80),
+      alvo: alvo == null ? null : String(alvo).slice(0, 160),
+      detalhe: detalhe == null ? null : String(detalhe).slice(0, 500),
+    });
+  } catch (e) {
+    return false; // auditoria é melhor-esforço: nunca derruba a ação
   }
 }

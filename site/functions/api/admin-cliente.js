@@ -2,13 +2,14 @@
  * admin-cliente.js — ficha completa de um cliente para o painel.
  *
  * GET /api/admin-cliente?email=cliente@email.com
- *   -> { ok, cliente, devices, vendas, chaves, hardware }
+ *   -> { ok, cliente, auth, devices, vendas, chaves, hardware, resumo }
  *
  * Só responde para administrador logado (token da sessão + is_admin no perfil).
  * A leitura é feita com a service key no servidor: o navegador nunca vê a chave.
+ * Cada abertura de ficha fica registrada no log de auditoria.
  */
 
-import { exigirAdmin, cabecalhosServico, responder, metodoPermitido } from './_admin.js';
+import { exigirAdmin, cabecalhosServico, responder, metodoPermitido, lerUsuarioAuth, registrarAuditoria } from './_admin.js';
 
 const sb = (base, svc, caminho) =>
   fetch(base + '/rest/v1/' + caminho, { headers: cabecalhosServico(svc) }).then((r) => (r.ok ? r.json() : []));
@@ -28,22 +29,23 @@ export async function onRequestGet(context) {
 
   const { base, svc } = admin;
   const emailQ = encodeURIComponent(email);
+  const CAMPOS = 'id,email,name,plan,features,license_expires_at,lifetime,max_devices,created_at,updated_at,is_admin';
 
-  // perfil (tenta exato, depois sem diferenciar maiúsculas)
-  let perfis = await sb(base, svc, 'profiles?email=eq.' + emailQ + '&select=id,email,name,plan,features,license_expires_at,lifetime,max_devices,created_at,updated_at,is_admin&limit=1');
+  let perfis = await sb(base, svc, 'profiles?email=eq.' + emailQ + '&select=' + CAMPOS + '&limit=1');
   if (!Array.isArray(perfis) || !perfis.length) {
-    perfis = await sb(base, svc, 'profiles?email=ilike.' + emailQ + '&select=id,email,name,plan,features,license_expires_at,lifetime,max_devices,created_at,updated_at,is_admin&limit=1');
+    perfis = await sb(base, svc, 'profiles?email=ilike.' + emailQ + '&select=' + CAMPOS + '&limit=1');
   }
   if (!Array.isArray(perfis) || !perfis.length) {
     return responder({ ok: false, erro: 'Nenhuma conta com este e-mail.' }, 404);
   }
   const cliente = perfis[0];
 
-  const [devices, vendas, chaves, hardware] = await Promise.all([
+  const [devices, vendas, chaves, hardware, authUser] = await Promise.all([
     sb(base, svc, 'devices?user_id=eq.' + encodeURIComponent(cliente.id) + '&select=id,hwid,board,device_name,first_seen,last_seen&order=last_seen.desc'),
     sb(base, svc, 'vendas?email=eq.' + encodeURIComponent(cliente.email || email) + '&select=id,pagamento_id,plano,valor,dias,metodo,status,criado_em&order=criado_em.desc&limit=50'),
     sb(base, svc, 'chaves?usado_por=eq.' + encodeURIComponent(cliente.id) + '&select=codigo,plano,dias,usado_em,cancelada,criado_em&order=usado_em.desc&limit=50'),
     sb(base, svc, 'hardware?user_id=eq.' + encodeURIComponent(cliente.id) + '&select=gpu,cpu,ram_gb,sistema,atualizado_em&limit=1'),
+    lerUsuarioAuth(base, svc, cliente.id),
   ]);
 
   const listaVendas = Array.isArray(vendas) ? vendas : [];
@@ -51,9 +53,27 @@ export async function onRequestGet(context) {
     .filter((v) => String(v.status || '').toLowerCase() === 'approved')
     .reduce((s, v) => s + Number(v.valor || 0), 0);
 
+  const bannedUntil = authUser && authUser.banned_until ? authUser.banned_until : null;
+  const suspenso = !!(bannedUntil && new Date(bannedUntil).getTime() > Date.now());
+  const meta = (authUser && authUser.user_metadata) || {};
+
+  // registra que o admin abriu a ficha (auditoria) sem segurar a resposta
+  try {
+    const tarefa = registrarAuditoria(base, svc, admin.perfil, 'ver_cliente', cliente.email, null);
+    if (context.waitUntil) context.waitUntil(tarefa); else await tarefa;
+  } catch (e) { }
+
   return responder({
     ok: true,
     cliente,
+    auth: {
+      suspenso,
+      banned_until: bannedUntil,
+      ban_reason: meta.ban_reason || null,
+      banned_at: meta.banned_at || null,
+      last_sign_in_at: (authUser && authUser.last_sign_in_at) || null,
+      email_confirmed: !!(authUser && (authUser.email_confirmed_at || authUser.confirmed_at)),
+    },
     devices: Array.isArray(devices) ? devices : [],
     vendas: listaVendas,
     chaves: Array.isArray(chaves) ? chaves : [],

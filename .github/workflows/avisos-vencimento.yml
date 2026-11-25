@@ -1,0 +1,20 @@
+# Avisos de vencimento por e-mail (roda 1x por dia)
+# Configure os secrets no GitHub: VL_AVISOS_URL e VL_CRON_KEY (veja AVISOS-EMAIL.md)
+name: Avisos de vencimento
+
+on:
+  schedule:
+    - cron: '0 12 * * *' # 12:00 UTC = 09:00 de Brasília
+  workflow_dispatch: {}
+
+jobs:
+  avisos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Chamar o cron do VL Optimizer
+        run: |
+          curl -fsS -X POST "${{ secrets.VL_AVISOS_URL }}" \
+            -H "x-cron-key: ${{ secrets.VL_CRON_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{}'

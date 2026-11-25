@@ -12,7 +12,7 @@
  * apagar; o e-mail, quando enviado, precisa bater com o dono.
  */
 
-import { exigirAdmin, cabecalhosServico, responder, metodoPermitido, lerCorpo } from './_admin.js';
+import { exigirAdmin, cabecalhosServico, responder, metodoPermitido, lerCorpo, registrarAuditoria } from './_admin.js';
 
 export async function onRequestPost(context) {
   const { request, env } = context;
@@ -70,6 +70,11 @@ export async function onRequestPost(context) {
     }
   } catch (e) {
     return responder({ ok: false, erro: 'Não consegui remover agora. Tente de novo.' }, 502);
+  }
+
+  {
+    const tarefa = registrarAuditoria(base, svc, admin.perfil, 'pc_desvinculado', dono ? dono.email : null, (device.device_name || '') + ' · hwid ' + String(device.hwid || '').slice(0, 18));
+    if (context.waitUntil) context.waitUntil(tarefa); else await tarefa;
   }
 
   return responder({
