@@ -287,6 +287,40 @@ async function api(url, opts) {
     ok('asset: ' + j.name + '  ' + Math.round(j.size / 1048576) + ' MB');
   }
 
+  // Blockmap: faz a atualização INCREMENTAL.
+  //
+  // O electron-updater usa este arquivo (gerado pelo electron-builder ao lado do .exe)
+  // para baixar só os pedaços que mudaram entre a versão instalada e a nova. Sem ele o
+  // updater baixa o instalador inteiro (~137 MB) em toda versão — verificado num teste
+  // real: "Cannot download differentially, fallback to full download: blockmap 404".
+  //
+  // É best-effort de propósito: se o envio falhar, a publicação continua (o cliente só
+  // perde o incremental daquela versão). Nunca derruba o release por causa disso.
+  try {
+    const bm = path.join(releaseDir, path.basename(setup) + '.blockmap');
+    if (!fs.existsSync(bm)) {
+      ok('AVISO: blockmap nao encontrado (a atualizacao sera completa)');
+    } else {
+      const nomeBm = path.basename(bm);
+      const atuais = await (await api('https://api.github.com/repos/' + REPO + '/releases/' + rel.id + '/assets')).json();
+      for (const a of atuais) {
+        if (a.name === nomeBm) await api('https://api.github.com/repos/' + REPO + '/releases/assets/' + a.id, { method: 'DELETE' });
+      }
+      const upBm = await fetch(
+        'https://uploads.github.com/repos/' + REPO + '/releases/' + rel.id + '/assets?name=' + encodeURIComponent(nomeBm),
+        { method: 'POST', headers: { Authorization: 'Bearer ' + tk, 'Content-Type': 'application/octet-stream' }, body: fs.readFileSync(bm) }
+      );
+      if (upBm.ok) {
+        const jb = await upBm.json();
+        ok('asset: ' + jb.name + '  ' + Math.round(jb.size / 1024) + ' KB');
+      } else {
+        ok('AVISO: blockmap nao enviado (' + upBm.status + ')');
+      }
+    }
+  } catch (e) {
+    ok('AVISO: blockmap nao enviado: ' + (e && e.message ? e.message : e));
+  }
+
   // ── 6. latest.yml para o site ───────────────────────────────────────────
   passo(6, 'Atualizando o manifesto do site');
   fs.mkdirSync(UPD, { recursive: true });

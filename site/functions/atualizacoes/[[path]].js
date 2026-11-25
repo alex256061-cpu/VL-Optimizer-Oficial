@@ -20,7 +20,11 @@
 const REPO = 'alex256061-cpu/VL-Optimizer-Oficial';
 
 // Só estes nomes podem passar. Impede que a função vire proxy aberto para qualquer URL.
-const PERMITIDO = /^Instalar-VL-Optimizer(-[\d.]+)?\.exe$/i;
+//
+// O `.blockmap` entrou junto: é o mapa de pedaços do instalador que faz o
+// electron-updater baixar só o que mudou entre a versão instalada e a nova
+// (atualização incremental). Sem ele, o app baixa os ~137 MB inteiros em cada versão.
+const PERMITIDO = /^Instalar-VL-Optimizer(-[\d.]+)?\.exe(\.blockmap)?$/i;
 
 // A tag do release NÃO é "latest": o electron-builder publica com a tag da versão
 // (v1.4.17, v1.4.16, ...). Antes esta função usava /download/latest/…, que responde 404 —
@@ -89,7 +93,11 @@ export async function onRequest(context) {
     return new Response('Método não permitido.', { status: 405, headers: { Allow: 'GET, HEAD' } });
   }
 
-  const tag = await descobrirTag(url.origin);
+  // O nome pode trazer a versão — é o caso do blockmap que o electron-updater pede da
+  // versão ANTIGA para baixar só os pedaços que mudaram. Nesse caso a tag é a da versão
+  // do próprio arquivo, não a mais nova (a release antiga continua no GitHub).
+  const comVersao = /^Instalar-VL-Optimizer-([\d.]+)\.exe(\.blockmap)?$/i.exec(nome);
+  const tag = comVersao ? 'v' + comVersao[1] : await descobrirTag(url.origin);
   if (!tag) {
     return new Response(
       'Não foi possível localizar a versão publicada agora. Tente de novo em alguns minutos.',
