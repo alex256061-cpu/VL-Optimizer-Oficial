@@ -391,3 +391,58 @@ section[id]{scroll-margin-top:88px}
 
 .review-badge{align-self:flex-start;font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);border:1px solid var(--line);background:rgba(255,255,255,.03);padding:4px 8px;border-radius:999px}
 .review .review-av{background:linear-gradient(135deg,#2a1420,#160a12);border:1px solid rgba(255,31,46,.4);color:var(--red3);font-size:12px;letter-spacing:.02em}
+
+/* ── avaliações v2: carrossel "direto do Discord" ── */
+.hero-social{display:inline-flex;align-items:center;gap:10px;margin-top:18px;color:var(--muted);font-size:13px;border:1px solid var(--line);background:rgba(12,7,16,.55);padding:8px 12px 8px 8px;border-radius:999px;transition:border-color .25s,background .25s;width:fit-content}
+.hero-social:hover{border-color:var(--line2);background:rgba(255,255,255,.04)}
+.hero-social b{color:var(--text);font-weight:800}
+.hero-social-ic{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;color:#fff;background:linear-gradient(135deg,#5865F2,#3a45c9);flex-shrink:0}
+.hero-social small{color:var(--muted2)}
+
+.reviews-top{display:grid;grid-template-columns:1fr auto;gap:28px;align-items:end}
+.reviews-intro h2{font-size:clamp(30px,4.4vw,52px);font-weight:900;letter-spacing:-.02em;line-height:1.04;margin:10px 0 12px}
+.reviews-intro h2 em{font-style:normal;background:linear-gradient(120deg,var(--red3),#fff 72%);-webkit-background-clip:text;background-clip:text;color:transparent}
+.reviews-intro p{color:var(--muted);font-size:15.5px;max-width:62ch}
+.reviews-proof{display:flex;flex-direction:column;gap:12px;align-items:flex-end}
+.reviews-live{display:flex;align-items:center;gap:16px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px 16px}
+.live-dot{width:9px;height:9px;border-radius:50%;background:#22c55e;box-shadow:0 0 0 4px rgba(34,197,94,.16);animation:livePulse 2.2s infinite;flex-shrink:0}
+.reviews-live b{display:block;font-size:20px;font-weight:900;letter-spacing:-.02em;line-height:1.1}
+.reviews-live small{display:block;color:var(--muted2);font-size:11px;margin-top:2px}
+.reviews-live-sep{width:1px;height:30px;background:var(--line);flex-shrink:0}
+.reviews-ctl{display:flex;align-items:center;gap:10px}
+.reviews-arrow{width:42px;height:42px;border-radius:50%;display:grid;place-items:center;border:1px solid var(--line2);background:rgba(255,255,255,.03);color:var(--text);cursor:pointer;transition:border-color .2s,color .2s,background .2s}
+.reviews-arrow:hover{border-color:var(--red);color:var(--red3);background:rgba(255,31,46,.08)}
+.reviews-arrow:disabled{opacity:.3;cursor:default}
+.reviews-count{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted2);letter-spacing:.1em;min-width:70px;text-align:center}
+
+.reviews-track{display:flex;gap:16px;margin-top:30px;overflow-x:auto;scroll-snap-type:x mandatory;scroll-behavior:smooth;padding:2px 2px 10px;scrollbar-width:none}
+.reviews-track::-webkit-scrollbar{display:none}
+.review-card{flex:0 0 clamp(300px,37%,378px);scroll-snap-align:start;display:flex;flex-direction:column;gap:16px;background:var(--card);border:1px solid var(--line);border-radius:22px;padding:24px;transition:border-color .3s,transform .3s}
+.review-card:hover{border-color:var(--line2);transform:translateY(-3px)}
+.review-card-head{display:flex;align-items:center;gap:11px}
+.review-card-head .review-av{width:44px;height:44px;font-size:13px;flex-shrink:0}
+.review-av-discord{background:linear-gradient(135deg,#5865F2,#3a45c9)!important;color:#fff}
+.review-card-id{min-width:0;flex:1}
+.review-card-id b{display:block;font-size:14.5px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.review-card-id small{display:block;color:var(--muted2);font-size:11.5px;margin-top:1px}
+.review-metric{margin-left:auto;flex-shrink:0;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:#0a0910;background:linear-gradient(120deg,#ff9a9e,var(--red3));padding:5px 9px;border-radius:8px;white-space:nowrap}
+.review-metric-open{background:rgba(255,255,255,.06);color:var(--muted);border:1px solid var(--line)}
+.review-card blockquote{color:#e9e1ec;font-size:14.5px;line-height:1.62;flex:1;margin:0}
+.review-chips{display:flex;flex-wrap:wrap;gap:6px;list-style:none;padding:0;margin:0}
+.review-chips li{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--muted);border:1px solid var(--line);background:rgba(255,255,255,.03);padding:4px 8px;border-radius:7px}
+.review-card-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;border-top:1px solid var(--line);padding-top:12px;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2)}
+.review-card-cta{border-style:dashed;border-color:rgba(255,31,46,.35);background:linear-gradient(150deg,rgba(255,31,46,.10),rgba(255,255,255,.02))}
+.review-cta-btn{align-self:flex-start;margin-top:2px}
+
+@keyframes livePulse{0%,100%{box-shadow:0 0 0 3px rgba(34,197,94,.18)}50%{box-shadow:0 0 0 7px rgba(34,197,94,.06)}}
+
+@media (max-width:980px){
+  .reviews-top{grid-template-columns:1fr;align-items:start}
+  .reviews-proof{flex-direction:row;flex-wrap:wrap;align-items:center}
+  .review-card{flex-basis:clamp(280px,62%,360px)}
+}
+@media (max-width:620px){
+  .reviews-proof{flex-direction:column;align-items:flex-start}
+  .review-card{flex-basis:86%}
+  .reviews-live{width:100%;justify-content:space-between}
+}

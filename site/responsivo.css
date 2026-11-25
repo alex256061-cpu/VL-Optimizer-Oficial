@@ -48,7 +48,6 @@
 
 @media (max-width: 1120px) {
   /* esconde primeiro os itens menos importantes, preservando Comprar/Entrar */
-  .nav-links a[href="#afiliados"],
   .nav-links a[href="#prints"] { display: none; }
   .nav-links { gap: 12px; }
 }

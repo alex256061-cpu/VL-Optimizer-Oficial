@@ -10,6 +10,15 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.77': {
+    corrigido: [
+      'Botao de suporte do app aponta para o convite certo do Discord (o antigo nao existia).',
+      'Site: secao de avaliacoes no padrao do GDZ (carrossel, cartoes com print de FPS, hardware e selo), comunidade do Discord ao vivo na home e na secao, e convite certo em todos os botoes.',
+      'Site: removido o programa de afiliados (nao esta ativo no momento).',
+      'Site: atualizacao passou a ser incremental (blockmap publicado) - a partir desta versao o app baixa so o que mudou, nao os 137 MB inteiros.',
+    ],
+    novo: [],
+  },
   '1.4.76': {
     corrigido: [
       'Auditoria com administrador: 29 de 29 ajustes e 15 de 16 acoes passaram. Corrigidos os dois que falharam, com o codigo copiado do GDZ, sem invencao:',

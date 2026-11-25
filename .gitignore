@@ -27,3 +27,6 @@ engine/VLScalingHost.exe
 *.original.json
 marca/ATIVA.txt
 marca/usada.json
+
+# estado local do wrangler (deploy do site)
+.wrangler/

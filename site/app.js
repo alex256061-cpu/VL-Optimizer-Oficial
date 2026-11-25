@@ -5,7 +5,7 @@ const CONFIG = {
   lifetimePrice: 99,
   monthlyUrl: '',   // link do checkout do plano mensal
   lifetimeUrl: '',  // link do checkout do vitalício
-  discordUrl: '',   // convite do Discord (ex.: https://discord.gg/xxxx)
+  discordUrl: 'https://discord.gg/k8F3mvxam',   // convite do Discord
   currency: 'R$'
 };
 
@@ -223,11 +223,61 @@ if (y) y.textContent = new Date().getFullYear();
 (function discord() {
   const btns = document.querySelectorAll('[data-discord]');
   btns.forEach((btn) => {
-    if (CONFIG.discordUrl) btn.href = CONFIG.discordUrl;
+    if (CONFIG.discordUrl) {
+      btn.href = CONFIG.discordUrl;
+      btn.target = '_blank';
+      btn.rel = 'noopener';
+    }
     btn.addEventListener('click', (e) => {
       if (CONFIG.discordUrl) return;
       e.preventDefault();
       toast('Convite do Discord ainda não configurado.');
     });
   });
+})();
+
+/* ── comunidade no Discord (números reais, com fallback estático) ── */
+(function discordStats() {
+  const membros = document.querySelectorAll('[data-discord-membros]');
+  const online = document.querySelectorAll('[data-discord-online]');
+  if (!membros.length && !online.length) return;
+  const fmt = (n) => Number(n).toLocaleString('pt-BR');
+  fetch('/api/discord', { cache: 'no-store' })
+    .then((r) => (r.ok ? r.json() : null))
+    .then((d) => {
+      if (!d || !d.ok) return;
+      if (d.membros) membros.forEach((el) => { el.textContent = fmt(d.membros); });
+      if (d.online) online.forEach((el) => { el.textContent = fmt(d.online); });
+    })
+    .catch(() => {});
+})();
+
+/* ── carrossel dos relatos (setas + contador) ── */
+(function reviewsCarousel() {
+  const track = document.getElementById('revTrack');
+  if (!track) return;
+  const cards = [...track.querySelectorAll('.review-card')];
+  if (!cards.length) return;
+  const contador = document.getElementById('revCount');
+  const escopo = track.closest('section') || document;
+  const anterior = escopo.querySelector('[data-rev="prev"]');
+  const proximo = escopo.querySelector('[data-rev="next"]');
+  const passo = () => (cards[0] ? cards[0].getBoundingClientRect().width + 16 : 320);
+  const maxScroll = () => Math.max(0, track.scrollWidth - track.clientWidth);
+  const atualiza = () => {
+    const p = passo();
+    const pagina = Math.min(cards.length, Math.max(1, Math.round(track.scrollLeft / p) + 1));
+    if (contador) contador.textContent = String(pagina).padStart(2, '0') + ' / ' + String(cards.length).padStart(2, '0');
+    if (anterior) anterior.disabled = track.scrollLeft <= 2;
+    if (proximo) proximo.disabled = track.scrollLeft >= maxScroll() - 2;
+  };
+  if (anterior) anterior.addEventListener('click', () => track.scrollBy({ left: -passo(), behavior: 'smooth' }));
+  if (proximo) proximo.addEventListener('click', () => track.scrollBy({ left: passo(), behavior: 'smooth' }));
+  let raf = null;
+  track.addEventListener('scroll', () => {
+    if (raf) cancelAnimationFrame(raf);
+    raf = requestAnimationFrame(atualiza);
+  }, { passive: true });
+  window.addEventListener('resize', atualiza);
+  atualiza();
 })();

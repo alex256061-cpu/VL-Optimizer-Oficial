@@ -757,7 +757,7 @@ H('open-site', (a) => {
     criar: SITE + '/criar-conta',
     bandeja: SITE + '/#precos',
     // Pedido de reset da chave (PC diferente) é caso de suporte: vai direto no Discord.
-    suporte: 'https://discord.gg/vloptimizer',
+    suporte: 'https://discord.gg/k8F3mvxam',
   };
   let url = paginas[pedido] || paginas.planos;
 

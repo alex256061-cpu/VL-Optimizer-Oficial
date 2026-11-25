@@ -128,11 +128,30 @@ export async function onRequest(context) {
 
   let upstream;
   try {
-    upstream = await fetch(destino, {
+    // Cuidado com o cache do Cloudflare:
+    //
+    // `cacheEverything` + cacheTtl de 24h no fetch do instalador também cacheia a
+    // resposta 404. Quando o blockmap de uma versão antiga é enviado ao GitHub DEPOIS
+    // da primeira consulta, o 404 antigo continua sendo servido por horas — o app
+    // desiste do download incremental ("status 404"). Medido: o mesmo blockmap em
+    // maiúsculas respondia 200 e em minúsculas 404, mesma URL de origem.
+    //
+    // Blockmap é pequeno (~140 KB): usa cache-buster e não é cacheado, então nunca
+    // mais um 404 velho fica preso. O instalador continua cacheado (137 MB), e um 404
+    // dele é confirmado sem cache antes de ser repassado.
+    const ehBlockmap = /\.blockmap$/i.test(nome);
+    const urlUpstream = ehBlockmap ? destino + '?cb=' + Date.now() : destino;
+    upstream = await fetch(urlUpstream, {
       headers: cabecalhos,
       redirect: 'follow',
-      cf: { cacheEverything: true, cacheTtl: 86400 },
+      cf: ehBlockmap ? { cacheEverything: false } : { cacheEverything: true, cacheTtl: 86400 },
     });
+    if (!ehBlockmap && upstream.status === 404) {
+      try {
+        const r2 = await fetch(destino + '?cb=' + Date.now(), { headers: cabecalhos, redirect: 'follow' });
+        if (r2.ok || r2.status === 206) upstream = r2;
+      } catch (e) { /* mantém o 404 original */ }
+    }
   } catch (e) {
     return new Response('Não foi possível buscar o instalador agora. Tente de novo em instantes.', {
       status: 502,
