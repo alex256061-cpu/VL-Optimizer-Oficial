@@ -1071,13 +1071,42 @@ const ACTIONS = {
     title: 'Plano de energia Desempenho Máximo',
     desc: 'Versão mais forte do Alto Desempenho: tira a economia de energia do disco, do USB e da placa de rede.',
     note: 'Mais consumo e temperatura. Indicado só para PC de mesa.',
+    // BUG CORRIGIDO (1.4.74): a linha que criava/ativava o plano estava COMENTADA
+    // ("# $u = powercfg -duplicatescheme ..."). O run salvava o backup e devolvia "ok"
+    // sem mudar nada; o detect então dizia "desligado" e o interruptor voltava sozinho.
+    // O detect também estava errado: procurava o GUID de MODELO (e9a42b02...) na lista,
+    // mas o Windows cria o plano clonado com um GUID NOVO a cada duplicate.
+    //
+    // Agora: guarda o GUID que criamos em HKCU\Software\VLOptimizer\UltimatePlan,
+    // reaproveita esse plano nas próximas vezes (não cria cópia nova), adota um
+    // "Desempenho Máximo"/"Ultimate Performance" que já exista, e só então ativa.
     run: `
-      $p = [regex]::Match((powercfg /getactivescheme | Out-String), '[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}').Value
-      Set-Content -Path (Join-Path $env:TEMP 'lopt-power.bak') -Value $p -Encoding ascii
-# $u = powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61 2>$null   # nao duplicar plano: cada clique criava uma copia
-      if ($u) { $u = [regex]::Match($u, '[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}').Value; powercfg /setactive $u }
+      $re = '[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}'
+      $p = [regex]::Match((powercfg /getactivescheme | Out-String), $re).Value
+      $g = Get-Val '${HKCU}\\Software\\VLOptimizer' 'UltimatePlan'
+      # Guarda o plano ORIGINAL só quando ainda não estamos no Máximo. Sem esta condição,
+      # ligar duas vezes gravava o próprio Máximo como "anterior" e o desligar não voltava
+      # nada (era o segundo defeito desta ação).
+      if ($p -and $p -ne $g) { Set-Content -Path (Join-Path $env:TEMP 'lopt-power.bak') -Value $p -Encoding ascii }
+      if (-not $g) {
+        $lista = powercfg /list | Out-String
+        $m = [regex]::Matches($lista, '(' + $re + ')\\s+\\((Desempenho M[aá]ximo|Ultimate Performance)\\)')
+        if ($m.Count -gt 0) { $g = $m[0].Groups[1].Value }
+      }
+      if (-not $g) {
+        $novo = powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61 2>$null | Out-String
+        $g = [regex]::Match($novo, $re).Value
+      }
+      if (-not $g) { Write-Output 'VL_ERRO: o Windows nao aceitou criar o plano Desempenho Maximo.'; exit }
+      Set-Val '${HKCU}\\Software\\VLOptimizer' 'UltimatePlan' $g 'String'
+      powercfg /setactive $g
+      $ativo = [regex]::Match((powercfg /getactivescheme | Out-String), $re).Value
+      if ($ativo -ne $g) { Write-Output 'VL_ERRO: o Windows nao aceitou ativar o plano Desempenho Maximo.'; exit }
       Write-Output 'ok'`,
-    detect: `powercfg /list | Select-String -Pattern 'e9a42b02-d5df-448d-aa00-03f14749eb61' | Out-String | ForEach-Object { if ($_ -match '\\*') { 'active' } }`,
+    detect: `
+      $g = Get-Val '${HKCU}\\Software\\VLOptimizer' 'UltimatePlan'
+      $ativo = [regex]::Match((powercfg /getactivescheme | Out-String), '[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}').Value
+      if ($g -and $ativo -eq $g) { Write-Output '1' } else { Write-Output '0' }`,
     revert: `
       $f = Join-Path $env:TEMP 'lopt-power.bak'
       if (Test-Path $f) { $g = (Get-Content $f -Raw).Trim(); if ($g) { powercfg /setactive $g } }

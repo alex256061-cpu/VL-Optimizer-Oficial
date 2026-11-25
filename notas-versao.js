@@ -10,6 +10,13 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.74': {
+    corrigido: [
+      'O ajuste "Plano de energia Desempenho Maximo" agora liga de verdade: a linha que ativava o plano estava comentada no codigo, entao ele salvava o backup e nao mudava nada - o interruptor voltava sozinho. Tambem passou a reaproveitar o plano em vez de criar uma copia a cada clique, e o desligar volta ao plano que estava antes.',
+    ],
+    novo: [],
+  },
+
   '1.4.73': {
     corrigido: [
       'Tela de instalacao com a cara do VL: boas-vindas com a arte da marca (fundo preto e vermelho, logo e anel), cabecalho VL na tela de instalacao e a pagina generica do Windows removida. Antes era o assistente padrao cinza.',
