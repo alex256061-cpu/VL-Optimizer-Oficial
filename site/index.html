@@ -20,9 +20,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800;900&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=2026112505">
-<link rel="stylesheet" href="recursos.css?v=2026112505">
-<link rel="stylesheet" href="responsivo.css?v=2026112505">
+<link rel="stylesheet" href="styles.css?v=2026112509">
+<link rel="stylesheet" href="recursos.css?v=2026112509">
+<link rel="stylesheet" href="responsivo.css?v=2026112509">
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -85,6 +85,8 @@
     <a href="#precos">Preço</a>
     <a href="#suporte">Suporte</a>
     <a href="#faq">Dúvidas</a>
+      <a href="/baixar.html" class="mob-only">Baixar</a>
+    <a href="entrar.html" class="mob-only">Entrar</a>
   </nav>
   <a class="nav-discord" data-discord href="https://discord.gg/k8F3mvxam" target="_blank" rel="noopener" aria-label="Entrar no Discord da VL">
     <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M20.3 4.4A19.8 19.8 0 0 0 15.4 3l-.3.6a18 18 0 0 1 4.3 1.6 15.9 15.9 0 0 0-14.8 0A18 18 0 0 1 8.9 3.6L8.6 3a19.8 19.8 0 0 0-4.9 1.4C1.1 8.6.4 12.7.7 16.7A20 20 0 0 0 6.7 20l.8-1.3c-.8-.3-1.6-.7-2.3-1.2l.6-.4a14.2 14.2 0 0 0 12.4 0l.6.4c-.7.5-1.5.9-2.3 1.2l.8 1.3a20 20 0 0 0 6-3.3c.4-4.7-.6-8.8-3-12.3zM8.7 14.3c-1 0-1.7-.9-1.7-2s.7-2 1.7-2 1.8.9 1.7 2c0 1.1-.8 2-1.7 2zm6.6 0c-1 0-1.8-.9-1.7-2 0-1.1.7-2 1.7-2s1.8.9 1.7 2c0 1.1-.7 2-1.7 2z"/></svg>
@@ -121,7 +123,7 @@
       </a>
     </div>
 
-    <div class="hero-art reveal" aria-hidden="true">
+        <div class="hero-art reveal" aria-hidden="true">
       <div class="gyro">
         <div class="gyro-glow"></div>
         <div class="gimbal">
@@ -132,33 +134,35 @@
             </div>
           </div>
         </div>
-        <div class="core"><img src="assets/logo.png" alt=""></div>
       </div>
       <span class="chip chip-a">FPS ao vivo</span>
-      <span class="chip chip-b">1% low em 10 s</span>
+      <span class="chip chip-b">gargalo CPU/GPU</span>
       <span class="chip chip-c">desfazer 1 clique</span>
       <span class="chip chip-d">LSFG 3.1</span>
-      <div class="medidor" aria-hidden="true">
-        <div class="medidor-top">
-          <span class="medidor-live"><i></i>medidor ao vivo</span>
-          <span class="medidor-pill">estável</span>
+
+      <div class="medidor-wrap">
+        <div class="medidor" aria-hidden="true">
+          <div class="medidor-top">
+            <span class="medidor-live"><i></i>medidor ao vivo</span>
+            <span class="medidor-pill">estável</span>
+          </div>
+          <div class="medidor-fps">
+            <b id="fpsNum" data-fps="30">0</b>
+            <span class="medidor-fps-label">FPS</span>
+            <span class="medidor-low">1% low <b>28</b></span>
+          </div>
+          <svg class="medidor-graph" viewBox="0 0 260 64" preserveAspectRatio="none" aria-hidden="true">
+            <defs><linearGradient id="gGrad" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#ff1f2e"/><stop offset="1" stop-color="#ff5560"/></linearGradient></defs>
+            <path class="g-fill" d="M0,46 L26,44 L52,38 L78,40 L104,30 L130,33 L156,24 L182,27 L208,18 L234,21 L260,14 L260,64 L0,64 Z"/>
+            <path class="g-line" stroke="url(#gGrad)" d="M0,46 L26,44 L52,38 L78,40 L104,30 L130,33 L156,24 L182,27 L208,18 L234,21 L260,14"/>
+          </svg>
+          <div class="medidor-stats">
+            <div><small>frametime</small><b>33,3 ms</b></div>
+            <div><small>1% low</small><b>28</b></div>
+            <div><small>overlay</small><b>validado</b></div>
+          </div>
+          <div class="medidor-foot">exemplo real do painel · PC de teste</div>
         </div>
-        <div class="medidor-fps">
-          <b id="fpsNum" data-fps="30">0</b>
-          <span class="medidor-fps-label">FPS</span>
-          <span class="medidor-low">1% low <b>28</b></span>
-        </div>
-        <svg class="medidor-graph" viewBox="0 0 260 64" preserveAspectRatio="none" aria-hidden="true">
-          <defs><linearGradient id="gGrad" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#ff1f2e"/><stop offset="1" stop-color="#ff5560"/></linearGradient></defs>
-          <path class="g-fill" d="M0,46 L26,44 L52,38 L78,40 L104,30 L130,33 L156,24 L182,27 L208,18 L234,21 L260,14 L260,64 L0,64 Z"/>
-          <path class="g-line" stroke="url(#gGrad)" d="M0,46 L26,44 L52,38 L78,40 L104,30 L130,33 L156,24 L182,27 L208,18 L234,21 L260,14"/>
-        </svg>
-        <div class="medidor-stats">
-          <div><small>frametime</small><b>33,3 ms</b></div>
-          <div><small>1% low</small><b>28</b></div>
-          <div><small>overlay</small><b>validado</b></div>
-        </div>
-        <div class="medidor-foot">exemplo real do painel · PC de teste</div>
       </div>
     </div>
   </section>
@@ -582,7 +586,7 @@
 
 <div class="mobile-buy"><b>R$ <span data-price="lifetime">99</span><small>vitalício · ou R$ <span data-price="monthly">40</span>/mês</small></b><a class="btn btn-primary" href="#precos">Comprar</a></div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
-<script src="app.js?v=2026112505"></script>
-<script src="checkout.js?v=2026112505"></script>
+<script src="app.js?v=2026112509"></script>
+<script src="checkout.js?v=2026112509"></script>
 </body>
 </html>

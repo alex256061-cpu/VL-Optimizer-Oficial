@@ -393,3 +393,70 @@ if (y) y.textContent = new Date().getFullYear();
   document.addEventListener('visibilitychange', () => { parado = document.hidden; });
   window.addEventListener('pagehide', () => clearInterval(timer));
 })();
+
+
+/* ── hero: parallax/tilt com o mouse (igual ao visual 3D do GDZ) ── */
+(function heroParallax() {
+  const art = document.querySelector('.hero-art');
+  if (!art) return;
+  const wrap = art.querySelector('.medidor-wrap');
+  const gyro = art.querySelector('.gyro');
+  const reduzir = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduzir || !wrap) return;
+  let raf = null;
+  const mover = (x, y) => {
+    if (raf) cancelAnimationFrame(raf);
+    raf = requestAnimationFrame(() => {
+      wrap.style.transform = 'rotateX(' + (-y * 9).toFixed(2) + 'deg) rotateY(' + (x * 13).toFixed(2) + 'deg) translateZ(0)';
+      if (gyro) gyro.style.transform = 'translate(' + (x * -16).toFixed(1) + 'px,' + (y * -11).toFixed(1) + 'px)';
+    });
+  };
+  art.addEventListener('pointermove', (e) => {
+    if (e.pointerType === 'touch') return;
+    const r = art.getBoundingClientRect();
+    mover((e.clientX - r.left) / r.width - 0.5, (e.clientY - r.top) / r.height - 0.5);
+  });
+  art.addEventListener('pointerleave', () => {
+    wrap.style.transform = '';
+    if (gyro) gyro.style.transform = '';
+  });
+})();
+
+/* ── stagger dos filhos quando o bloco aparece (padrão GDZ) ── */
+(function staggerReveal() {
+  if (!('IntersectionObserver' in window)) return;
+  const reduzir = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const seletor = ':scope > .card, :scope > .feature, :scope > .game-card, :scope > .result, :scope > .promise, :scope > .plan, :scope > .review-card, :scope > .stat, :scope > .admin-card';
+  const blocos = document.querySelectorAll('.reveal');
+  const io = new IntersectionObserver((ents) => {
+    ents.forEach((e) => {
+      if (!e.isIntersecting) return;
+      if (!reduzir) {
+        const filhos = e.target.querySelectorAll(seletor);
+        filhos.forEach((f, i) => {
+          if (!f.animate) return;
+          try {
+            f.animate(
+              [{ opacity: 0, transform: 'translateY(16px)' }, { opacity: 1, transform: 'none' }],
+              { duration: 620, delay: 40 + i * 65, easing: 'cubic-bezier(.16,1,.3,1)', fill: 'both' }
+            );
+          } catch (err) { }
+        });
+      }
+      e.target.classList.add('in');
+      io.unobserve(e.target);
+    });
+  }, { threshold: 0.12, rootMargin: '0px 0px -8% 0px' });
+  blocos.forEach((el) => io.observe(el));
+})();
+
+/* ── game cards: brilho segue o mouse ── */
+(function gameGlow() {
+  document.querySelectorAll('.game-card').forEach((card) => {
+    card.addEventListener('pointermove', (e) => {
+      const r = card.getBoundingClientRect();
+      card.style.setProperty('--gx', ((e.clientX - r.left) / r.width) * 100 + '%');
+      card.style.setProperty('--gy', ((e.clientY - r.top) / r.height) * 100 + '%');
+    }, { passive: true });
+  });
+})();
