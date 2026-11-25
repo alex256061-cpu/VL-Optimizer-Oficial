@@ -23,8 +23,12 @@ const dataBR = (iso) => {
 
 export function emailConfigurado(env) {
   const remetente = String(env.EMAIL_REMETENTE || '').trim();
-  // Ordem de preferência: Mailjet (6.000/mês, verifica só o e-mail remetente),
-  // SendGrid (100/dia), Brevo (300/dia), Resend (3.000/mês, exige domínio).
+  // Ordem de preferência: provedores com verificação SÓ do e-mail remetente
+  // (sem domínio): SMTP2GO (1.000/mês), Elastic Email (100/dia).
+  // Depois: Mailjet (6.000/mês, bloqueado para conta nova), SendGrid (100/dia),
+  // Brevo (300/dia) e Resend (3.000/mês, exige domínio verificado).
+  if (env.SMTP2GO_API_KEY && remetente) return { ok: true, provedor: 'smtp2go', remetente };
+  if (env.ELASTICEMAIL_API_KEY && remetente) return { ok: true, provedor: 'elasticemail', remetente };
   if (env.MAILJET_API_KEY && env.MAILJET_SECRET_KEY && remetente) return { ok: true, provedor: 'mailjet', remetente };
   if (env.SENDGRID_API_KEY && remetente) return { ok: true, provedor: 'sendgrid', remetente };
   if (env.BREVO_API_KEY && remetente) return { ok: true, provedor: 'brevo', remetente };
@@ -33,9 +37,7 @@ export function emailConfigurado(env) {
     ok: false,
     provedor: null,
     remetente,
-    precisa: env.MAILJET_API_KEY || env.MAILJET_SECRET_KEY
-      ? ['MAILJET_API_KEY e MAILJET_SECRET_KEY', 'EMAIL_REMETENTE']
-      : ['MAILJET_API_KEY + MAILJET_SECRET_KEY (ou SENDGRID_API_KEY)', 'EMAIL_REMETENTE'],
+    precisa: ['SMTP2GO_API_KEY (ou ELASTICEMAIL_API_KEY / SENDGRID_API_KEY)', 'EMAIL_REMETENTE'],
   };
 }
 
@@ -151,6 +153,51 @@ export async function enviar(env, para, assunto, html, texto) {
   }
   const remetenteNome = String(env.EMAIL_NOME || 'VL Optimizer').trim();
   try {
+    if (conf.provedor === 'smtp2go') {
+      const r = await fetch('https://api.smtp2go.com/v3/email/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          api_key: String(env.SMTP2GO_API_KEY),
+          sender: conf.remetente,
+          to: [para],
+          subject: assunto,
+          html_body: html,
+          text_body: texto,
+        }),
+      });
+      let j = null;
+      try { j = await r.json(); } catch (e) { j = null; }
+      const okSmtp2go = r.ok && (!j || !j.data || j.data.succeeded !== 0);
+      if (!okSmtp2go) {
+        console.error('SMTP2GO falhou:', r.status, JSON.stringify(j || {}).slice(0, 300));
+        return { ok: false, erro: 'O provedor de e-mail recusou o envio (' + r.status + ').' };
+      }
+      return { ok: true, provedor: 'smtp2go' };
+    }
+    if (conf.provedor === 'elasticemail') {
+      const r = await fetch('https://api.elasticemail.com/v4/emails/transactional', {
+        method: 'POST',
+        headers: { 'X-ElasticEmail-ApiKey': String(env.ELASTICEMAIL_API_KEY), 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          Recipients: [{ Email: para }],
+          Content: {
+            From: conf.remetente,
+            Subject: assunto,
+            Body: [
+              { ContentType: 'PlainText', Content: texto },
+              { ContentType: 'HTML', Content: html },
+            ],
+          },
+        }),
+      });
+      if (!r.ok) {
+        const txt = await r.text();
+        console.error('Elastic Email falhou:', r.status, txt.slice(0, 300));
+        return { ok: false, erro: 'O provedor de e-mail recusou o envio (' + r.status + ').' };
+      }
+      return { ok: true, provedor: 'elasticemail' };
+    }
     if (conf.provedor === 'mailjet') {
       const auth = btoa(String(env.MAILJET_API_KEY) + ':' + String(env.MAILJET_SECRET_KEY));
       const r = await fetch('https://api.mailjet.com/v3.1/send', {

@@ -240,7 +240,7 @@
       if (d.configurado) {
         statusEl.innerHTML = '<span class="adm-badge-ok">ATIVO</span> provedor <b>' + esc(d.provedor) + '</b> · remetente <b>' + esc(d.remetente) + '</b> · <b>' + (d.vencendo || []).length + '</b> licença(s) vencendo em 7 dias · <b>' + (d.avisos || []).length + '</b> aviso(s) enviados recentemente';
       } else {
-        statusEl.innerHTML = '<span class="adm-badge-suspenso">NÃO CONFIGURADO</span> falta configurar: <b>' + esc((d.precisa || []).join(', ')) + '</b> · <span class="adm-avisos-dica">o e-mail sai por Mailjet, SendGrid, Brevo ou Resend (Mailjet: 6.000/mês grátis). A prévia já funciona.</span>';
+        statusEl.innerHTML = '<span class="adm-badge-suspenso">NÃO CONFIGURADO</span> falta configurar: <b>' + esc((d.precisa || []).join(', ')) + '</b> · <span class="adm-avisos-dica">o e-mail sai por SMTP2GO, Elastic Email, SendGrid, Mailjet, Brevo ou Resend. A prévia já funciona.</span>';
       }
       const venc = (d.vencendo || []).slice(0, 10);
       lista.innerHTML = venc.length
