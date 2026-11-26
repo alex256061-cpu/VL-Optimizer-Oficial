@@ -10,6 +10,13 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.80': {
+    corrigido: [
+      'Atualizacao podia instalar a versao que ja estava baixada (mais antiga) e so na abertura seguinte oferecer a mais nova. Agora, ao clicar em instalar, o app reconfere o servidor, baixa e instala a versao MAIS RECENTE.',
+      'A conferencia de atualizacao passou de 6 horas para 30 minutos e o arquivo de versao e lido sem cache.',
+    ],
+    novo: [],
+  },
   '1.4.79': {
     corrigido: [
       'Marca duplicada no topo (aparecia VL VL OPTIMIZER): agora a marca fica so na sidebar.',

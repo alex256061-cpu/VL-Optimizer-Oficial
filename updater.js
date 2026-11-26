@@ -27,7 +27,7 @@ const assinatura = require('./assinatura-update');
 const SITE = MARCA.site;
 const UPDATE_URL = MARCA.urlAtualizacoes;
 const DOWNLOAD_PAGE = MARCA.urlDownload;
-const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;   // 6 horas
+const CHECK_INTERVAL_MS = 30 * 60 * 1000;   // 30 min: o botão de atualizar não fica velho
 
 // ── Assinatura da atualização ────────────────────────────────────────────────
 //
@@ -232,6 +232,11 @@ function init() {
   autoUpdater.autoDownload = true;          // baixa sozinho, mas não instala sozinho
   autoUpdater.autoInstallOnAppQuit = false; // instalar é escolha do usuário
   autoUpdater.allowPrerelease = false;
+  // BUG CORRIGIDO (1.4.80): no updater.js o feed era lido sem "sem-cache". Se o
+  // Cloudflare/Electron devolvesse um latest.yml velho, o app baixava uma versão
+  // antiga e só na abertura seguinte oferecia a mais nova (o cliente via "atualizou
+  // pra uma antiga e pediu de novo"). Agora o feed e o instalador são pedidos sem cache.
+  try { autoUpdater.requestHeaders = { 'Cache-Control': 'no-cache', Pragma: 'no-cache' }; } catch (e) { }
 
   autoUpdater.on('checking-for-update', () => { emit(); });
   autoUpdater.on('update-available', (info) => {
@@ -307,6 +312,26 @@ function init() {
   return true;
 }
 
+// Espera o download de uma versão específica terminar (state.downloaded só fica true
+// depois de a assinatura ser conferida no handler de update-downloaded).
+function aguardarDownload(versao, timeoutMs) {
+  return new Promise((resolve) => {
+    let terminou = false;
+    const terminar = (ok) => {
+      if (terminou) return;
+      terminou = true;
+      try { clearInterval(tic); } catch (e) { }
+      try { clearTimeout(tmr); } catch (e) { }
+      resolve(ok);
+    };
+    const tmr = setTimeout(() => terminar(false), timeoutMs || 240000);
+    const tic = setInterval(() => {
+      if (state.downloaded && state.version === versao) { terminar(true); return; }
+      if (!state.downloading && !state.conferindo && state.error && !state.downloaded) { terminar(false); }
+    }, 400);
+  });
+}
+
 async function check() {
   if (!autoUpdater) { emit(); return status(); }
   try {
@@ -320,18 +345,56 @@ async function check() {
 }
 
 // Instala a versão baixada e reinicia. Só é chamado por ação explícita do usuário.
-function install() {
-  // A tela checa r.success/r.error (main.js repassa o retorno direto).
-  // Antes devolvia { ok } e, quando a atualização dava certo, a tela mostrava
-  // "Não foi possível atualizar agora." — o inverso do que aconteceu.
+//
+// BUG CORRIGIDO (1.4.80): o autoDownload baixa a versão assim que fica disponível.
+// Se o cliente só clicava em "Instalar" depois de já ter saído outra versão, ele
+// instalava a versão BAIXADA ANTES (a "antiga") e, ao abrir de novo, o app oferecia
+// a mais nova — parecia que o botão buscava "a próxima" e não a última.
+// Antes de instalar, reconferimos o feed: se tem versão mais nova, baixamos e
+// instalamos ela.
+let revalidando = false;
+
+async function install() {
   if (!autoUpdater || !state.downloaded) {
     return { success: false, ok: false, error: 'Nenhuma atualização baixada.' };
   }
-  // Segunda fechadura: `downloaded` só fica true depois da assinatura conferida, mas
-  // se algo reprovou no caminho, o botão não instala de jeito nenhum.
   if (state.assinatura === 'reprovada') {
     return { success: false, ok: false, error: assinatura.MSG_NAO_CONFERE };
   }
+  if (revalidando) {
+    return { success: false, ok: false, error: 'Estou conferindo a versão mais recente. Aguarde um instante.' };
+  }
+
+  revalidando = true;
+  const baixada = state.version;
+  try {
+    const res = await autoUpdater.checkForUpdates();
+    const info = res && res.updateInfo;
+    const maisNova = !!(info && info.version && baixada && info.version !== baixada);
+    if (maisNova) {
+      state.downloaded = false;
+      state.available = true;
+      state.downloading = true;
+      state.conferindo = false;
+      state.percent = 0;
+      state.version = info.version;
+      state.error = null;
+      emit();
+      const pronto = await aguardarDownload(info.version, 240000);
+      if (!pronto || !state.downloaded) {
+        const msg = 'A versão mais recente (' + info.version + ') ainda está baixando. Tente instalar de novo em instantes.';
+        state.error = msg;
+        state.downloading = false;
+        emit();
+        return { success: false, ok: false, error: msg };
+      }
+    }
+  } catch (e) {
+    // sem rede, segue com a versão já baixada e conferida
+  } finally {
+    revalidando = false;
+  }
+
   try {
     setImmediate(() => { try { autoUpdater.quitAndInstall(false, true); } catch (e) { } });
     return { success: true, ok: true };
