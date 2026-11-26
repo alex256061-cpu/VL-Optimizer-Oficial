@@ -1,19 +1,13 @@
+import { processarAprovado, emailCompradorValido } from './_venda.js';
+
 /**
  * functions/api/webhook.js — recebe o aviso do Mercado Pago e libera o plano.
  *
- * Fluxo:
- *   1. Cliente paga no Mercado Pago (PIX ou cartão)
- *   2. O Mercado Pago chama esta URL
- *   3. Aqui confirmamos o pagamento na API do MP (nunca confiamos no corpo do aviso)
- *   4. Se estiver aprovado, chamamos liberar_plano() no Supabase
+ * O corpo do webhook pode ser forjado, por isso sempre confirmamos o pagamento
+ * consultando o Mercado Pago com o nosso token.
  *
- * Segurança: o corpo do webhook pode ser forjado por qualquer pessoa. Por isso a confirmação
- * sempre é feita consultando o Mercado Pago com o nosso token.
- *
- * Variáveis de ambiente:
- *   MP_ACCESS_TOKEN     token do Mercado Pago
- *   SUPABASE_URL        https://wsmropvlmnyegpvmyndn.supabase.co
- *   SUPABASE_SERVICE    chave service_role (pode executar liberar_plano)
+ * A liberação agora é feita por processarAprovado() (_venda.js): grava a venda,
+ * cria a conta do comprador se ainda não existir e envia o e-mail para definir senha.
  */
 
 export async function onRequestPost({ request, env }) {
@@ -24,7 +18,6 @@ export async function onRequestPost({ request, env }) {
   try {
     aviso = await request.json();
   } catch (e) {
-    // o Mercado Pago às vezes manda como query string
     const u = new URL(request.url);
     aviso = { type: u.searchParams.get('type'), data: { id: u.searchParams.get('data.id') } };
   }
@@ -32,7 +25,6 @@ export async function onRequestPost({ request, env }) {
   const tipo = aviso.type || aviso.topic || '';
   const idPagamento = aviso?.data?.id || aviso?.id;
 
-  // só tratamos aviso de pagamento
   if (!/payment/.test(String(tipo)) || !idPagamento) {
     return responder({ ok: true, ignorado: tipo || 'sem tipo' });
   }
@@ -53,78 +45,42 @@ export async function onRequestPost({ request, env }) {
     return responder({ ok: false, erro: 'Falha ao consultar o Mercado Pago.' }, 502);
   }
 
-  // 2. só libera se estiver aprovado
   if (pagamento.status !== 'approved') {
     return responder({ ok: true, status: pagamento.status, liberado: false });
   }
 
-  // 3. descobrir quem comprou e qual plano
-  const email = pagamento?.payer?.email || pagamento?.metadata?.email;
-  const plano = String(pagamento?.metadata?.plano || '').toLowerCase();
-  const dias = pagamento?.metadata?.dias;
+  // 2. e-mail do comprador: prefere o que o site mandou (metadata) e depois o pagador
+  const meta = pagamento.metadata || {};
+  const email = String(meta.email || (pagamento.payer && pagamento.payer.email) || pagamento.external_reference || '').trim();
 
-  if (!email) {
-    return responder({ ok: false, erro: 'Pagamento sem e-mail do comprador.' }, 422);
-  }
-
-  // 4. liberar no Supabase pela função liberar_plano
-  const base = env.SUPABASE_URL.replace(/\/$/, '');
-  // O pix.js grava o plano com os nomes 'mensal' e 'vitalicio'; o Checkout Pro usa
-// 'monthly' e 'lifetime'. Aqui aceitamos os dois e NÃO adivinhamos pelo número de dias:
-// antes, um plano mensal que não casasse com o regex virava vitalício por engano.
-  const planoNormalizado = /mensal|monthly/i.test(plano) ? 30
-    : /vital|lifetime/i.test(plano) ? null
-    : (dias === null || dias === undefined ? null : Number(dias));
-
-  try {
-    const r = await fetch(base + '/rest/v1/rpc/liberar_plano', {
-      method: 'POST',
-      headers: {
-        apikey: env.SUPABASE_SERVICE,
-        Authorization: 'Bearer ' + env.SUPABASE_SERVICE,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        email_alvo: email,
-        dias: planoNormalizado,
-        recursos: ['*'],
-        pcs: 1,
-      }),
-    });
-
-    const texto = await r.text();
-    if (!r.ok) return responder({ ok: false, erro: 'Falha ao liberar plano.', detalhe: texto }, 502);
-
-    // grava a venda para o painel
-    try {
-      await fetch(base + '/rest/v1/rpc/registrar_venda', {
-        method: 'POST',
-        headers: {
-          apikey: env.SUPABASE_SERVICE,
-          Authorization: 'Bearer ' + env.SUPABASE_SERVICE,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          p_pagamento: String(idPagamento),
-          p_email: email,
-          p_plano: /mensal|monthly|30/.test(plano) ? 'mensal' : 'vitalicio',
-          p_valor: Number(pagamento.transaction_amount || 0),
-          p_dias: planoNormalizado === null ? null : Number(planoNormalizado),
-          p_metodo: pagamento.payment_method_id || 'pix',
-        }),
-      });
-    } catch (e) { }
-
+  if (!emailCompradorValido(email)) {
     return responder({
-      ok: true,
-      liberado: true,
-      email,
-      dias: planoNormalizado === null ? 'vitalício' : planoNormalizado + ' dias',
-      pagamento: idPagamento,
-    });
-  } catch (e) {
-    return responder({ ok: false, erro: 'Falha de conexão com o banco.' }, 502);
+      ok: false,
+      erro: 'Pagamento aprovado sem e-mail válido do comprador. Use o painel (Liberar compra) para liberar manualmente.',
+    }, 422);
   }
+
+  const base = env.SUPABASE_URL.replace(/\/$/, '');
+  const r = await processarAprovado({ base, svc: env.SUPABASE_SERVICE, env }, {
+    pagamentoId: String(idPagamento),
+    email,
+    plano: meta.plano,
+    dias: meta.dias,
+    valor: pagamento.transaction_amount,
+    metodo: pagamento.payment_method_id || 'pix',
+  });
+
+  if (!r.ok) return responder({ ok: false, erro: r.erro || 'Falha ao liberar.', pagamento: idPagamento }, 502);
+
+  return responder({
+    ok: true,
+    liberado: true,
+    email,
+    conta_criada: !!r.contaCriada,
+    aviso_email: !!r.avisoEmail,
+    dias: r.dias === null ? 'vitalício' : r.dias + ' dias',
+    pagamento: idPagamento,
+  });
 }
 
 // o Mercado Pago às vezes manda GET para validar a URL

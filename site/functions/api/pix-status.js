@@ -1,21 +1,21 @@
 import { limite, ipDe } from './_limite.js';
+import { processarAprovado, emailCompradorValido } from './_venda.js';
 
 /**
  * functions/api/pix-status.js — verifica se o PIX foi pago e libera o plano.
  *
- * O site fica perguntando de 3 em 3 segundos. Quando o Mercado Pago diz que o pagamento
- * está aprovado, esta função libera o plano no Supabase e devolve liberado: true.
+ * A tela pergunta de 3 em 3 segundos. Quando o Mercado Pago diz que está aprovado,
+ * chamamos processarAprovado(), que:
+ *   - grava a venda
+ *   - se o comprador não tem conta, cria a conta com o e-mail informado
+ *   - libera o plano
+ *   - manda o e-mail "crie sua senha" (quando o provedor está configurado)
  *
- * É a mesma ideia do webhook, mas puxada pela tela: funciona mesmo se o webhook atrasar, e
- * o cliente não precisa atualizar a página para ver o acesso liberado.
- *
- * Uso:  GET /api/pix-status?id=123456
- *       -> { status: 'approved' | 'pending' | ..., liberado: true|false }
+ * Uso: GET /api/pix-status?id=123456
+ *   -> { status, liberado: true|false, email?, conta_criada?, aviso_email? }
  */
 
 export async function onRequestGet({ request, env }) {
-  // A tela verifica a cada 3s; 200 por 10 min cobre várias abas sem permitir varredura
-  // de ids de pagamento.
   const bloqueio = limite('status:' + ipDe(request), 200, 10 * 60 * 1000);
   if (bloqueio) {
     return new Response(JSON.stringify({ erro: bloqueio.erro }), { status: 429, headers: { 'Content-Type': 'application/json' } });
@@ -26,7 +26,6 @@ export async function onRequestGet({ request, env }) {
 
   const id = new URL(request.url).searchParams.get('id');
   if (!id || !/^\d+$/.test(String(id))) return responder({ erro: 'Id inválido.' }, 400);
-
   if (!env.MP_ACCESS_TOKEN) return responder({ erro: 'Pagamento não configurado.' }, 503);
 
   // 1. consultar o pagamento no Mercado Pago
@@ -42,102 +41,58 @@ export async function onRequestGet({ request, env }) {
   }
 
   const status = pag.status || 'pending';
+  if (status !== 'approved') return responder({ status, liberado: false });
 
-  if (status !== 'approved') {
-    return responder({ status, liberado: false });
-  }
-
-  // 2. já liberado? evita liberar duas vezes (o webhook pode ter chegado antes)
   const meta = pag.metadata || {};
-  const email = meta.email || pag.external_reference || '';
-  if (!email || email === 'sem-email') {
-    return responder({ status, liberado: false, erro: 'Pagamento sem e-mail do comprador.' });
+  const email = String(meta.email || pag.external_reference || '').trim();
+
+  // 2. sem e-mail válido não tem como liberar (pagador anônimo do PIX)
+  if (!emailCompradorValido(email)) {
+    return responder({
+      status,
+      liberado: false,
+      erro: 'Este pagamento foi feito sem um e-mail válido. Fale com o suporte no Discord para liberar a compra.',
+    });
   }
 
   if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE) {
-    return responder({ status, liberado: false, erro: 'Banco não configurado.' });
+    return responder({ status, liberado: false, erro: 'Banco não configurado.' }, 503);
   }
-
   const base = env.SUPABASE_URL.replace(/\/$/, '');
-  const emailLimpo = String(email).trim();
+  const svc = env.SUPABASE_SERVICE;
 
-  // 3. ler o plano atual do perfil
-  let jaOk = false;
+  // 3. já está liberado? (webhook pode ter chegado antes) — evita e-mail repetido
   try {
     const r = await fetch(
-      base + '/rest/v1/profiles?select=plan,lifetime,license_expires_at&email=eq.' + encodeURIComponent(emailLimpo),
-      {
-        headers: {
-          apikey: env.SUPABASE_SERVICE,
-          Authorization: 'Bearer ' + env.SUPABASE_SERVICE,
-          'Content-Type': 'application/json',
-        },
-      }
+      base + '/rest/v1/profiles?select=plan&email=eq.' + encodeURIComponent(email),
+      { headers: { apikey: svc, Authorization: 'Bearer ' + svc, 'Content-Type': 'application/json' } }
     );
-    const lista = await r.json();
-    const p = Array.isArray(lista) && lista[0];
-    if (p && p.plan === 'pro') jaOk = true;
+    const lista = r.ok ? await r.json() : [];
+    if (Array.isArray(lista) && lista[0] && lista[0].plan === 'pro') {
+      return responder({ status, liberado: true, email, conta_criada: false });
+    }
   } catch (e) { }
 
-  if (jaOk) {
-    return responder({ status, liberado: true, email: emailLimpo });
+  // 4. libera (cria conta se precisar) e grava a venda
+  const r = await processarAprovado({ base, svc, env }, {
+    pagamentoId: String(id),
+    email,
+    plano: meta.plano,
+    dias: meta.dias,
+    valor: pag.transaction_amount,
+    metodo: pag.payment_method_id || 'pix',
+  });
+
+  if (!r.ok) {
+    return responder({ status, liberado: false, email, erro: r.erro || 'Não consegui liberar a compra.' });
   }
 
-  // 4. liberar
-  const dias = meta.dias === undefined ? null : meta.dias;
-  try {
-    const r = await fetch(base + '/rest/v1/rpc/liberar_plano', {
-      method: 'POST',
-      headers: {
-        apikey: env.SUPABASE_SERVICE,
-        Authorization: 'Bearer ' + env.SUPABASE_SERVICE,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        email_alvo: emailLimpo,
-        dias: dias === null || dias === undefined ? null : Number(dias),
-        recursos: ['*'],
-        pcs: 1,
-      }),
-    });
-
-    if (!r.ok) {
-      const t = await r.text();
-      return responder({ status, liberado: false, erro: 'Falha ao liberar: ' + t.slice(0, 120) });
-    }
-
-    // 3.1 gravar a venda para o painel (falha aqui não impede a liberação)
-    let valorVenda = 0;
-    let planoVenda = 'mensal';
-    try {
-      valorVenda = Number(pag.transaction_amount || 0);
-      planoVenda = pag.metadata && pag.metadata.plano ? String(pag.metadata.plano) : (dias ? 'mensal' : 'vitalicio');
-      await fetch(base + '/rest/v1/rpc/registrar_venda', {
-        method: 'POST',
-        headers: {
-          apikey: env.SUPABASE_SERVICE,
-          Authorization: 'Bearer ' + env.SUPABASE_SERVICE,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          p_pagamento: String(pag.id || id),
-          p_email: emailLimpo,
-          p_plano: planoVenda,
-          p_valor: valorVenda,
-          p_dias: dias === null || dias === undefined ? null : Number(dias),
-          p_metodo: pag.payment_method_id || 'pix',
-        }),
-      });
-    } catch (e) { }
-
-    return responder({
-      status,
-      liberado: true,
-      email: emailLimpo,
-      dias: dias === null || dias === undefined ? 'vitalício' : Number(dias) + ' dias',
-      venda: valorVenda,
-    });
-  } catch (e) {
-    return responder({ status, liberado: false, erro: 'Falha de conexão com o banco.' }, 502);
-  }
+  return responder({
+    status,
+    liberado: true,
+    email,
+    conta_criada: !!r.contaCriada,
+    aviso_email: !!r.avisoEmail,
+    dias: r.dias === null ? 'vitalício' : r.dias + ' dias',
+  });
 }

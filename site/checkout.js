@@ -15,12 +15,32 @@
   let modal = null;
   let polling = null;
 
-  function lembrarEmail() {
+  function sessaoCompra() {
     try {
       const s = JSON.parse(localStorage.getItem('vl-sessao') || 'null');
-      if (s && s.user && s.user.email) return s.user.email;
+      if (s && s.access_token) return { token: s.access_token, email: (s.user && s.user.email) || '' };
     } catch (e) { }
-    return '';
+    return null;
+  }
+
+  // Igual ao GDZ: sem conta logada não gera PIX; mostra entrar/criar conta.
+  function pedirLogin() {
+    const corpo = document.getElementById('vl-pix-corpo');
+    if (!corpo) return;
+    corpo.innerHTML = `
+      <div style="width:52px;height:52px;margin:0 auto 16px;border-radius:15px;background:rgba(255,31,46,.12);display:grid;place-items:center">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#ff5560" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a8 8 0 0 1 16 0v1"/></svg>
+      </div>
+      <div style="font-size:19px;font-weight:900;color:#f5f2f7;margin-bottom:8px">Entre na sua conta para comprar</div>
+      <div style="font-size:13px;color:#a99fb4;line-height:1.7;margin-bottom:18px">
+        A licença é liberada direto na sua conta (a mesma do aplicativo).<br>
+        Se ainda não tem conta, criar leva 30 segundos.
+      </div>
+      <a href="/entrar?voltar=/" style="display:block;text-decoration:none;background:linear-gradient(135deg,#ff1f2e,#c00c1a);color:#fff;font-weight:800;font-size:13.5px;padding:13px;border-radius:10px;margin-bottom:8px">Entrar</a>
+      <a href="/criar-conta" style="display:block;text-decoration:none;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);color:#f5f2f7;font-weight:800;font-size:13.5px;padding:12px;border-radius:10px">Criar conta grátis</a>
+      <button id="vl-pix-fechar" style="width:100%;margin-top:12px;border:0;background:transparent;color:#6f6a82;font-size:12px;cursor:pointer;padding:8px;font-family:inherit">Fechar</button>`;
+    const f = document.getElementById('vl-pix-fechar');
+    if (f) f.onclick = fecharModal;
   }
 
   function abrirModal() {
@@ -122,8 +142,8 @@
       </div>
       <div style="font-size:19px;font-weight:900;color:#f5f2f7;margin-bottom:8px">Pagamento confirmado!</div>
       <div style="font-size:13px;color:#a99fb4;line-height:1.6;margin-bottom:20px">
-        Seu acesso${d.dias ? ' de ' + d.dias : ''} está liberado.<br>
-        Entre no aplicativo com a mesma conta e abra as otimizações.
+        Seu acesso${d.dias ? ' de ' + d.dias : ''} entrou na sua conta.${d.email ? '<br><b style="color:#f5f2f7">' + d.email + '</b>' : ''}<br>
+        Abra o aplicativo e entre com a mesma conta para liberar as otimizações.
       </div>
       <a href="/conta" style="display:block;text-decoration:none;background:linear-gradient(135deg,#ff1f2e,#c00c1a);color:#fff;font-weight:800;font-size:13.5px;padding:13px;border-radius:10px">Ir para a minha conta</a>
     `;
@@ -145,11 +165,22 @@
 
       abrirModal();
 
+      // Igual ao GDZ: compra só com conta logada
+      const sess = sessaoCompra();
+      if (!sess) {
+        pedirLogin();
+        btn.textContent = texto;
+        btn.style.opacity = '';
+        btn.style.pointerEvents = '';
+        delete btn.dataset.carregando;
+        return;
+      }
+
       try {
         const r = await fetch('/api/pix', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ plano, email: lembrarEmail() }),
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + sess.token },
+          body: JSON.stringify({ plano }),
         });
         const d = await r.json();
 

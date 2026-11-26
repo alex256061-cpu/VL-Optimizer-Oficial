@@ -60,25 +60,38 @@ export async function onRequestPost({ request, env }) {
     return responder(env, { erro: 'Pagamento ainda não configurado. Fale no Discord.' }, 503);
   }
 
-  const email = String(corpo.email || '').trim().slice(0, 120);
-
-  // O e-mail é usado para liberar o plano depois do pagamento: se vier malformado,
-  // o cliente paga e não recebe. Recusamos antes de criar o PIX.
-  if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(email)) {
-    return responder(env, { erro: 'E-mail inválido.' }, 400);
+  // Igual ao GDZ: "Entre na sua conta e clique em comprar".
+  // A compra é sempre vinculada à conta logada — nada de PIX sem dono.
+  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE) {
+    return responder(env, { erro: 'Servidor sem configuração de conta.' }, 500);
+  }
+  const auth = request.headers.get('Authorization') || '';
+  const mToken = /^Bearer\s+(\S+)$/i.exec(auth.trim());
+  if (!mToken) {
+    return responder(env, { erro: 'Entre na sua conta para comprar.', precisaLogin: true }, 401);
+  }
+  let usuario = null;
+  try {
+    const ru = await fetch(env.SUPABASE_URL.replace(/\/$/, '') + '/auth/v1/user', {
+      headers: { apikey: env.SUPABASE_SERVICE, Authorization: 'Bearer ' + mToken[1] },
+    });
+    if (ru.ok) usuario = await ru.json();
+  } catch (e) { }
+  if (!usuario || !usuario.email) {
+    return responder(env, { erro: 'Sua sessão expirou. Entre de novo para comprar.', precisaLogin: true }, 401);
+  }
+  const email = String(usuario.email).trim().toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(email)) {
+    return responder(env, { erro: 'Sua conta está sem um e-mail válido. Fale no Discord.' }, 400);
   }
   const site = (env.SITE_URL || 'https://vl-optimizer.pages.dev').replace(/\/$/, '');
-
-  // O Mercado Pago exige um e-mail do pagador para criar o PIX.
-  // Sem e-mail informado, usamos um genérico que o webhook troca depois.
-  const emailPagador = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) ? email : 'comprador@vl-optimizer.com';
 
   const pagamento = {
     transaction_amount: plano.valor,
     description: plano.descricao,
     payment_method_id: 'pix',
-    payer: { email: emailPagador },
-    external_reference: email || 'sem-email',
+    payer: { email },
+    external_reference: email,
     notification_url: site + '/api/webhook',
     metadata: { plano: chavePlano, email, dias: plano.dias },
   };
