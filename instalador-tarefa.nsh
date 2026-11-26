@@ -14,12 +14,14 @@
 ;     Abort(), entao ela nem aparece. A instalacao continua por usuario (sem UAC).
 ; ═══════════════════════════════════════════════════════════════════════════
 
+!define MUI_BGCOLOR "0B0307"
+!define MUI_TEXTCOLOR "F5F1F6"
+!define MUI_INSTFILESPAGE_COLORS "0B0307 F5F1F6"
 !define MUI_WELCOMEPAGE_TITLE "Bem-vindo ao VL Optimizer"
 !define MUI_WELCOMEPAGE_TEXT "Este assistente instala o VL Optimizer no seu PC.$\r$\n$\r$\nEm poucos segundos o programa fica pronto, com atalho na Area de Trabalho e no menu Iniciar. Depois e so entrar com a sua conta."
 !define MUI_ABORTWARNING
 !define MUI_FINISHPAGE_TITLE "VL Optimizer instalado"
 !define MUI_FINISHPAGE_TEXT "O VL Optimizer esta pronto. Abra pelo atalho da Area de Trabalho ou pelo menu Iniciar e comece a otimizar."
-!define MUI_INSTFILESPAGE_COLORS "FFFFFF 000000"
 
 !macro customWelcomePage
   !insertmacro MUI_PAGE_WELCOME

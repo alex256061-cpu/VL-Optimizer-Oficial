@@ -10,6 +10,13 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.90': {
+    corrigido: [],
+    novo: [
+      'Instalador com tema escuro tecnologico do VL no assistente inteiro: boas-vindas, progresso e conclusao sem as areas brancas padrao do NSIS.',
+    ],
+  },
+
   '1.4.89': {
     corrigido: [
       'Cabecalho e sidebar iguais ao GDZ: marca visivel na barra de titulo, controles da janela a direita e logo da sidebar no tamanho/margens do GDZ, sem corte.',
