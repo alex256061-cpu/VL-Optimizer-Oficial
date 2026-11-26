@@ -10,6 +10,15 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.79': {
+    corrigido: [
+      'Marca duplicada no topo (aparecia VL VL OPTIMIZER): agora a marca fica so na sidebar.',
+      'Os cartoes de otimizacao voltaram a caber 5 por linha mesmo com a sidebar aberta.',
+    ],
+    novo: [
+      'Dashboard com o mesmo acabamento da tela de entrada: sidebar aberta com os nomes das secoes em janelas largas (e rail compacto nas menores), item ativo com brilho, titlebar e barra superior no mesmo estilo, cards com hover suave, transicao ao trocar de pagina e barra de rolagem discreta.',
+    ],
+  },
   '1.4.78': {
     corrigido: [
       'Janela de entrada agora tem botoes de minimizar e fechar (X): a janela e sem borda e antes nao tinha como fechar pela tela.',

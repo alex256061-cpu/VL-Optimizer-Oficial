@@ -1,0 +1,317 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   dashboard-polish.css — acabamento visual do dashboard (carregado por último).
+
+   Só aparência: nada aqui muda lógica, largura de layout ou comportamento.
+   Objetivo: deixar o app no mesmo nível de capricho da tela de entrada —
+   titlebar, sidebar, topbar, cards, botões e páginas com o mesmo idioma visual.
+   Tudo usa as variáveis do tema (funciona no claro/escuro).
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── titlebar: vidro, marca com brilho, controles iguais aos do login ── */
+.titlebar{
+  height: 38px !important;
+  padding: 0 6px 0 14px !important;
+  background: linear-gradient(180deg, rgba(11,8,15,.94), rgba(8,6,12,.80)) !important;
+  border-bottom: 1px solid rgba(255,255,255,.07) !important;
+  backdrop-filter: blur(20px) saturate(1.1);
+  box-shadow: 0 10px 30px rgba(0,0,0,.22) !important;
+  align-items: center !important;
+}
+.tb-brand{ gap: 10px !important; }
+.tb-logo{
+  width: 22px !important; height: 22px !important; object-fit: contain;
+  filter: drop-shadow(0 0 8px rgba(255,31,46,.55));
+}
+.tb-app{ font-size: 12.5px !important; font-weight: 700 !important; letter-spacing: .01em !important; }
+.tb-app b{ color: #fff !important; font-weight: 900 !important; }
+.tb-app i{ font-style: normal !important; color: #a49db8 !important; font-weight: 600 !important; }
+.tb-ctrl{ gap: 4px !important; padding: 0 4px !important; align-items: center !important; }
+.wc-btn{
+  width: 32px !important; height: 26px !important;
+  margin: 0 !important; border-radius: 8px !important;
+  border: 1px solid rgba(255,255,255,.06) !important;
+  background: rgba(255,255,255,.035) !important;
+  color: #b9b3c9 !important;
+  transition: background .15s, color .15s, border-color .15s, box-shadow .15s !important;
+}
+.wc-btn:hover{ background: rgba(255,255,255,.09) !important; color: #fff !important; border-color: rgba(255,255,255,.16) !important; }
+.wc-close:hover{ background: rgba(255,31,46,.92) !important; border-color: rgba(255,31,46,.92) !important; color: #fff !important; box-shadow: 0 0 16px rgba(255,31,46,.4) !important; }
+.wc-btn:active{ transform: scale(.96) !important; }
+
+/* ── sidebar: gradiente, ícones em caixinhas, item ativo com brilho ── */
+.sidebar{
+  background: linear-gradient(180deg, rgba(11,8,15,.97) 0%, rgba(8,6,12,.99) 100%) !important;
+  border-right: 1px solid rgba(255,255,255,.07) !important;
+  box-shadow: inset -1px 0 0 rgba(255,255,255,.03);
+}
+.sidebar:is(:hover,:focus-within):not(.sb-closing){
+  background: linear-gradient(180deg, rgba(13,9,18,.985), rgba(9,6,14,.99)) !important;
+  border-right-color: rgba(255,31,46,.18) !important;
+}
+.sb-logo{ padding: 16px 14px 10px !important; }
+.sb-logo img{ width: 32px !important; height: 32px !important; filter: drop-shadow(0 0 10px rgba(255,31,46,.45)); }
+.sb-logo-name{ font-size: 13.5px !important; font-weight: 800 !important; letter-spacing: -.01em; }
+.sb-logo-name span{ color: var(--purple2); }
+
+.sb-section{ font-size: 9.5px !important; letter-spacing: .18em !important; color: #6f6a82 !important; font-weight: 800 !important; padding: 0 4px !important; }
+.sb-nav{ padding: 10px 10px 8px !important; }
+
+.nav-item{
+  height: 40px !important;
+  border-radius: 11px !important;
+  margin: 2px 0 !important;
+  gap: 10px !important;
+  font-size: 12.5px !important;
+  font-weight: 600 !important;
+  color: #b3aec2 !important;
+  border: 1px solid transparent;
+  transition: background .16s, color .16s, border-color .16s, box-shadow .16s !important;
+}
+.nav-item:hover{ background: rgba(255,255,255,.05) !important; color: #fff !important; border-color: rgba(255,255,255,.06) !important; }
+.nav-item.active{
+  background: linear-gradient(100deg, rgba(255,31,46,.26) 0%, rgba(255,255,255,.04) 100%) !important;
+  border-color: rgba(255,31,46,.30) !important;
+  box-shadow: 0 8px 22px rgba(255,31,46,.14), inset 0 1px 0 rgba(255,255,255,.08) !important;
+}
+.nav-item{ position: relative; }
+
+/* indicador único que desliza para o item ativo (já existe no painel) */
+.nav-indicator{
+  left: 10px !important; right: 10px !important;
+  border-radius: 11px !important;
+  border: 1px solid rgba(255,31,46,.20);
+  box-shadow: 0 8px 22px rgba(255,31,46,.10);
+}
+.nav-indicator::before{
+  width: 3px !important; height: 18px !important; margin-top: -9px !important;
+  background: linear-gradient(180deg, #ff9aa2, #ff1f2e) !important;
+  box-shadow: 0 0 12px rgba(255,31,46,.7) !important;
+}
+.nav-icon{
+  width: 28px !important; height: 28px !important; border-radius: 9px !important;
+  display: flex !important; align-items: center !important; justify-content: center !important;
+  background: transparent;
+  border: 1px solid transparent;
+  flex-shrink: 0;
+  transition: background .16s, border-color .16s, box-shadow .16s;
+}
+.nav-icon svg{ width: 17px !important; height: 17px !important; }
+.nav-item:hover .nav-icon{ background: rgba(255,255,255,.05); border-color: rgba(255,255,255,.07); }
+.nav-item.active .nav-icon{ background: rgba(255,31,46,.18); border-color: rgba(255,31,46,.32); box-shadow: 0 0 14px rgba(255,31,46,.16); }
+
+/* recolhida: itens mais vivos (o tema escurecia demais) */
+.sidebar:is(.sb-closing,:not(:hover):not(:focus-within)) .nav-item{ opacity: .86 !important; }
+.sidebar:is(.sb-closing,:not(:hover):not(:focus-within)) .nav-item.active{ opacity: 1 !important; }
+.sidebar:is(:hover,:focus-within):not(.sb-closing) .nav-item{ opacity: 1 !important; }
+.nav-label{ letter-spacing: .01em; }
+.nav-badge{ border-radius: 999px !important; font-weight: 800 !important; }
+
+/* recolhida: ícones centralizados e sem partir o alinhamento */
+.sidebar:is(.sb-closing,:not(:hover):not(:focus-within)) .nav-item{ padding: 0 !important; justify-content: center !important; }
+.sidebar:is(.sb-closing,:not(:hover):not(:focus-within)) .nav-item.active::before{ left: -2px; }
+.sidebar:is(.sb-closing,:not(:hover):not(:focus-within)) .sb-logo{ justify-content: center; padding: 16px 0 10px !important; }
+
+.sb-footer{ padding: 10px 10px 14px !important; border-top: 1px solid rgba(255,255,255,.05); }
+.user-row{
+  border-radius: 11px !important; border: 1px solid rgba(255,255,255,.06) !important;
+  background: rgba(255,255,255,.035) !important; padding: 6px !important;
+}
+.user-row:hover{ background: rgba(255,255,255,.06) !important; border-color: rgba(255,31,46,.22) !important; }
+.logout-btn{ border-radius: 9px !important; }
+
+/* ── topbar: vidro, título forte ── */
+.topbar{
+  height: 74px !important;
+  padding: 0 30px !important;
+  background: linear-gradient(180deg, rgba(11,8,15,.92), rgba(8,6,12,.70)) !important;
+  backdrop-filter: blur(16px);
+  border-bottom: 1px solid rgba(255,255,255,.07) !important;
+  box-shadow: 0 14px 34px rgba(0,0,0,.16) !important;
+}
+.topbar-title{ font-size: 21px !important; font-weight: 900 !important; letter-spacing: -.03em !important; }
+.topbar-sub{ font-size: 12.5px !important; color: var(--text3) !important; }
+.topbar-right{ gap: 8px !important; }
+
+/* ── conteúdo: respiro e cabeçalhos de seção ── */
+.content{ padding: 26px 30px 40px !important; }
+.sec-hdr{
+  font-size: 11px !important; font-weight: 900 !important; letter-spacing: .16em !important;
+  text-transform: uppercase !important; color: #a49db8 !important;
+  display: flex !important; align-items: center !important; gap: 10px !important;
+  margin: 24px 0 12px !important;
+}
+.sec-hdr::before{
+  content: ''; width: 14px; height: 2px; border-radius: 2px; flex-shrink: 0;
+  background: linear-gradient(90deg, #ff1f2e, rgba(255,31,46,.2));
+  box-shadow: 0 0 10px rgba(255,31,46,.5);
+}
+.content > .sec-hdr:first-child{ margin-top: 2px !important; }
+
+/* ── cards: mesmo idioma visual do login ── */
+:is(.icard,.acard,.health-card,.hw-card,.hw-detect-card,.hw-summary,.auto-card,
+    .game-card,.team-card,.mt-card,.bn-hero,.dh-card,.icard-lg,.home-card,.hero-card){
+  border-radius: 16px !important;
+  border-color: rgba(255,255,255,.075) !important;
+  box-shadow: 0 16px 44px rgba(0,0,0,.30), inset 0 1px 0 rgba(255,255,255,.035) !important;
+  transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease !important;
+}
+:is(.icard,.acard,.health-card,.hw-card,.hw-detect-card,.hw-summary,.auto-card,
+    .game-card,.team-card,.mt-card,.dh-card,.icard-lg,.home-card){
+  background: var(--card-grad) !important;
+}
+:is(.icard,.acard,.health-card,.hw-card,.hw-detect-card,.hw-summary,.auto-card,
+    .game-card,.team-card,.mt-card,.dh-card,.icard-lg,.home-card):hover{
+  border-color: rgba(255,31,46,.24) !important;
+  box-shadow: 0 20px 52px rgba(0,0,0,.40), 0 0 0 1px rgba(255,31,46,.10) inset !important;
+  transform: translateY(-1px);
+}
+.icard-hdr{ border-bottom-color: rgba(255,255,255,.06) !important; }
+.icard-title{ font-size: 13.5px !important; font-weight: 800 !important; letter-spacing: -.01em !important; }
+.empty-state{
+  border: 1px dashed rgba(255,255,255,.10) !important;
+  border-radius: 14px !important;
+  background: rgba(255,255,255,.02) !important;
+}
+
+/* ── botões: primário com gradiente, ghost discreto ── */
+.run-btn{
+  border-radius: 10px !important;
+  font-weight: 800 !important;
+  background: linear-gradient(135deg, #ff2434 0%, #a30a13 100%) !important;
+  color: #fff !important;
+  border: 1px solid rgba(255,255,255,.12) !important;
+  box-shadow: 0 10px 24px rgba(255,31,46,.22), inset 0 1px 0 rgba(255,255,255,.18) !important;
+  transition: transform .15s, filter .15s, box-shadow .15s !important;
+}
+.run-btn:hover{ transform: translateY(-1px) !important; filter: brightness(1.07); box-shadow: 0 14px 30px rgba(255,31,46,.32), inset 0 1px 0 rgba(255,255,255,.18) !important; }
+.run-btn:active{ transform: translateY(0) scale(.99) !important; }
+.ghost-btn{
+  border-radius: 10px !important; font-weight: 700 !important;
+  background: rgba(255,255,255,.045) !important;
+  border: 1px solid rgba(255,255,255,.09) !important;
+  color: #cfc9db !important;
+  transition: background .15s, border-color .15s, color .15s !important;
+}
+.ghost-btn:hover{ background: rgba(255,255,255,.08) !important; border-color: rgba(255,31,46,.30) !important; color: #fff !important; }
+.btn, .mini-btn, .tb-btn{ border-radius: 10px !important; }
+
+/* ── toggles e chips ── */
+.toggle{ border-radius: 999px !important; }
+.toggle.on{ box-shadow: 0 0 16px rgba(255,31,46,.42) !important; }
+:is(.hw-chip,.tag,.pill,.badge,.nav-badge,.dh-chip){ border-radius: 999px !important; }
+
+/* ── campos: foco vermelho consistente ── */
+.app :is(input,select,textarea):focus{
+  outline: none !important;
+  border-color: rgba(255,31,46,.55) !important;
+  box-shadow: 0 0 0 3px rgba(255,31,46,.12) !important;
+}
+
+/* ── scrollbar fina com brilho ── */
+::-webkit-scrollbar{ width: 9px !important; height: 9px !important; }
+::-webkit-scrollbar-thumb{
+  background: linear-gradient(180deg, rgba(255,85,96,.85), rgba(224,16,31,.85)) !important;
+  border-radius: 999px !important; border: 2px solid transparent !important; background-clip: padding-box !important;
+}
+::-webkit-scrollbar-thumb:hover{ background: linear-gradient(180deg, #ff9aa2, #ff1f2e) !important; background-clip: padding-box !important; }
+
+/* ── entrada de página suave (respeita quem desliga animação) ── */
+.page.active{ animation: vlPgIn .26s cubic-bezier(.16,1,.3,1) both; }
+@keyframes vlPgIn{ from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce){
+  .page.active{ animation: none !important; }
+  :is(.icard,.acard,.health-card,.hw-card,.game-card):hover{ transform: none !important; }
+}
+
+/* ── tema claro: mantém o acabamento sem forçar superfícies escuras ── */
+[data-theme="light"] .titlebar{ background: rgba(255,255,255,.92) !important; border-bottom-color: rgba(20,10,30,.10) !important; }
+[data-theme="light"] .sidebar{ background: #fbf9fe !important; border-right-color: rgba(20,10,30,.10) !important; }
+[data-theme="light"] .topbar{ background: rgba(255,255,255,.86) !important; border-bottom-color: rgba(20,10,30,.10) !important; }
+[data-theme="light"] .nav-item{ color: #6f6a82 !important; }
+[data-theme="light"] .nav-item:hover{ background: rgba(20,10,30,.05) !important; color: #1b1024 !important; }
+[data-theme="light"] .nav-item.active{ color: #1b1024 !important; background: linear-gradient(100deg, rgba(255,31,46,.16), rgba(20,10,30,.03)) !important; }
+[data-theme="light"] .nav-icon{ background: rgba(20,10,30,.04) !important; border-color: rgba(20,10,30,.08) !important; }
+[data-theme="light"] .sec-hdr{ color: #5f5a73 !important; }
+[data-theme="light"] .wc-btn{ border-color: rgba(20,10,30,.10) !important; background: rgba(20,10,30,.03) !important; color: #5f5a73 !important; }
+[data-theme="light"] .wc-btn:hover{ background: rgba(20,10,30,.07) !important; color: #1b1024 !important; }
+
+
+/* ── faixa do modo limitado (administrador) ── */
+.adm-bar{
+  margin: 12px 30px 0 !important;
+  border-radius: 12px !important;
+  padding: 11px 16px !important;
+  background: linear-gradient(100deg, rgba(255,31,46,.14), rgba(255,255,255,.02)) !important;
+  border: 1px solid rgba(255,31,46,.30) !important;
+  box-shadow: 0 12px 30px rgba(0,0,0,.24) !important;
+  backdrop-filter: blur(12px);
+  font-weight: 600 !important;
+}
+.adm-bar .adm-btn{ border-radius: 9px !important; font-weight: 800 !important; }
+body.adm-bar-ativa .page.active{ padding-top: 66px !important; }
+
+/* a sidebar já esconde a própria barra (o tema fazia isso); meu scrollbar global
+   com !important reativava e aparecia um risco vermelho na lateral. */
+.sb-nav::-webkit-scrollbar,
+.sb-nav::-webkit-scrollbar-thumb,
+.sb-nav::-webkit-scrollbar-track{ width: 0 !important; height: 0 !important; display: none !important; }
+
+/* ── SIDEBAR EXPANDIDA POR PADRÃO (janelas largas) ──
+   Em 1400px (padrão da janela) o rail de 72px parece um app pela metade.
+   Aqui a sidebar fica aberta com os rótulos; em janelas menores (<=1319px)
+   continua o rail compacto que abre no hover, como antes. */
+@media (min-width:1320px){
+  .sidebar{
+    width: 248px !important;
+    box-shadow: 8px 0 40px rgba(0,0,0,.30), inset -1px 0 0 rgba(255,255,255,.03);
+  }
+  .main{ margin-left: 248px !important; }
+  .sidebar :is(.nav-label, .sb-logo-name, .user-info, .logout-btn){
+    opacity: 1 !important; transform: none !important; pointer-events: auto !important;
+  }
+  .sidebar .sb-section{ color: #6f6a82 !important; padding: 0 6px !important; }
+  .sidebar .sb-section .sb-sec-txt{ max-width: none !important; }
+  .sidebar .nav-item{ padding: 0 12px !important; justify-content: flex-start !important; gap: 11px !important; }
+  .sidebar .sb-logo{ justify-content: flex-start !important; padding: 16px 16px 10px !important; }
+  .sidebar .nav-badge{ position: static !important; width: auto !important; height: auto !important; padding: 2px 7px !important; font-size: 10px !important; }
+  .sidebar .nav-indicator{ left: 10px !important; right: 10px !important; height: 40px !important; }
+  .sidebar .sb-footer{ padding: 10px 12px 14px !important; }
+  /* conteúdo acompanha a sidebar aberta */
+  .page .content{ padding-left: 32px !important; }
+}
+@media (min-width:1320px) and (max-width:1439px){
+  .sidebar{ width: 232px !important; }
+  .main{ margin-left: 232px !important; }
+}
+
+/* topbar com título em degradê da marca */
+.topbar-title{
+  background: linear-gradient(90deg, #ffffff 0%, #ffe9eb 55%, #ffc7cc 100%);
+  -webkit-background-clip: text; background-clip: text; color: transparent !important;
+}
+
+/* scrollbar mais discreta (a do tema era um risco vermelho forte) */
+::-webkit-scrollbar{ width: 8px !important; height: 8px !important; }
+::-webkit-scrollbar-thumb{
+  background: linear-gradient(180deg, rgba(255,85,96,.55), rgba(224,16,31,.55)) !important;
+  border-radius: 999px !important; border: 2px solid transparent !important; background-clip: padding-box !important;
+}
+::-webkit-scrollbar-thumb:hover{
+  background: linear-gradient(180deg, rgba(255,154,162,.85), rgba(255,31,46,.85)) !important;
+  background-clip: padding-box !important;
+}
+
+/* ── acabamentos finais ── */
+/* a marca fica na sidebar; na titlebar ficava duplicada ("VL VL OPTIMIZER") */
+.tb-brand{ display: none !important; }
+.titlebar{ padding-left: 16px !important; }
+
+/* 5 cards de otimização cabem na linha mesmo com a sidebar aberta */
+.op-cats{ grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)) !important; }
+
+/* título do destaque um pouco mais equilibrado com a sidebar aberta */
+.dh-title{ font-size: clamp(26px, 2.6vw, 33px) !important; }
+
+/* cartões de otimização: respiro interno e hover mais macio */
+.op-cats > *{ border-radius: 16px !important; transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease !important; }
+.op-cats > *:hover{ border-color: rgba(255,31,46,.24) !important; transform: translateY(-1px); box-shadow: 0 18px 44px rgba(0,0,0,.36) !important; }
