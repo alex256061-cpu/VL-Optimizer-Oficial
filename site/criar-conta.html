@@ -56,6 +56,12 @@
       <div class="auth-campo">
         <label for="email">E-mail</label>
         <input id="email" name="email" type="email" placeholder="seu@email.com" autocomplete="username" required>
+        <div class="auth-dica" id="email-dica" style="font-size:12.5px;color:#ff8a93;line-height:1.45;margin-top:6px"></div>
+      </div>
+
+      <div class="auth-campo">
+        <label for="email2">Confirme o e-mail</label>
+        <input id="email2" name="email2" type="email" placeholder="repita seu@email.com" autocomplete="off" required>
       </div>
 
       <div class="auth-campo">
@@ -117,14 +123,76 @@ $('senha').addEventListener('input', (e) => {
   $('forca-txt').textContent = p ? 'Senha ' + (nomes[Math.min(s + 1, 5)] || 'fraca') : '';
 });
 
+// ── Aviso de domínio digitado errado (gmail.con, hotmial etc.) ────────────────
+// Não bloqueia por código: só mostra a sugestão e deixa a pessoa corrigir.
+const COMUNS = ['gmail.com','hotmail.com','outlook.com','live.com','yahoo.com','icloud.com','bol.com.br','uol.com.br','terra.com.br'];
+const TROCAS = {
+  'gmail.con':'gmail.com','gmail.co':'gmail.com','gmial.com':'gmail.com','gmai.com':'gmail.com','gamil.com':'gmail.com',
+  'hotmail.con':'hotmail.com','hotmail.co':'hotmail.com','hotmial.com':'hotmail.com','hotmal.com':'hotmail.com','hotmai.com':'hotmail.com',
+  'outlook.con':'outlook.com','outlok.com':'outlook.com','outllok.com':'outlook.com',
+  'yahoo.con':'yahoo.com','yaho.com':'yahoo.com','yahooo.com':'yahoo.com',
+  'icloud.con':'icloud.com','iclod.com':'icloud.com',
+  'bol.com':'bol.com.br','uol.com':'uol.com.br'
+};
+function distancia(a, b) {
+  const m = a.length, n = b.length;
+  const d = Array.from({ length: m + 1 }, (_, i) => [i].concat(Array(n).fill(0)));
+  for (let j = 0; j <= n; j++) d[0][j] = j;
+  for (let i = 1; i <= m; i++) for (let j = 1; j <= n; j++) {
+    d[i][j] = Math.min(d[i-1][j] + 1, d[i][j-1] + 1, d[i-1][j-1] + (a[i-1] === b[j-1] ? 0 : 1));
+  }
+  return d[m][n];
+}
+function sugerirEmail(valor) {
+  const e = String(valor || '').trim().toLowerCase();
+  const at = e.lastIndexOf('@');
+  if (at < 1) return '';
+  const local = e.slice(0, at);
+  const dominio = e.slice(at + 1);
+  if (!dominio || COMUNS.includes(dominio)) return '';
+  let certo = TROCAS[dominio] || '';
+  if (!certo) {
+    let menor = 99;
+    for (const c of COMUNS) { const d = distancia(dominio, c); if (d < menor && d <= 2) { menor = d; certo = c; } }
+  }
+  return certo && certo !== dominio ? local + '@' + certo : '';
+}
+function atualizarDicaEmail() {
+  const alvo = $('email-dica');
+  if (!alvo) return;
+  alvo.textContent = '';
+  const sugestao = sugerirEmail($('email').value);
+  if (!sugestao) return;
+  alvo.appendChild(document.createTextNode('Você quis dizer '));
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'auth-sugestao';
+  b.textContent = sugestao;
+  b.style.cssText = 'border:0;background:transparent;color:#ff8a93;font:inherit;font-weight:800;cursor:pointer;padding:0;text-decoration:underline';
+  b.onclick = () => {
+    $('email').value = sugestao;
+    if (!$('email2').value || $('email2').value.trim().toLowerCase() === $('email').dataset.antes) $('email2').value = sugestao;
+    atualizarDicaEmail();
+    $('email2').focus();
+  };
+  alvo.appendChild(b);
+  alvo.appendChild(document.createTextNode('?'));
+}
+$('email').addEventListener('input', () => { $('email').dataset.antes = $('email').value.trim().toLowerCase(); atualizarDicaEmail(); });
+$('email').addEventListener('blur', atualizarDicaEmail);
+
 $('form-criar').onsubmit = async (e) => {
   e.preventDefault();
   const nome = $('usuario').value.trim();
-  const email = $('email').value.trim();
+  const email = $('email').value.trim().toLowerCase();
+  const email2 = $('email2').value.trim().toLowerCase();
   const senha = $('senha').value;
   const termos = $('termos').checked;
 
   if (!email || !senha) { mostrar('Preencha e-mail e senha.'); return; }
+  if (email2 !== email) { mostrar('Os dois e-mails não são iguais. Confira antes de continuar.'); $('email2').focus(); return; }
+  const sugestao = sugerirEmail(email);
+  if (sugestao) { mostrar('Confira o e-mail: você quis dizer ' + sugestao + '?'); $('email').focus(); return; }
   if (senha.length < 8) { mostrar('A senha precisa de pelo menos 8 caracteres.'); return; }
   if (!termos) { mostrar('Aceite os termos de uso para continuar.'); return; }
 
@@ -160,5 +228,6 @@ $('form-criar').onsubmit = async (e) => {
   $('usuario').focus();
 })();
 </script>
+<script src="/senha-olho.js"></script>
 </body>
 </html>

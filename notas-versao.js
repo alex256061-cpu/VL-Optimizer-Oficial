@@ -10,6 +10,16 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.83': {
+    corrigido: [
+      'Campos de senha ganharam o botao de olho (mostrar/ocultar) no site e na tela de entrada do app.',
+      'O e-mail do cadastro agora e digitado duas vezes; o site avisa quando o dominio parece errado (gmail.con, hotmial etc.) para o cliente nao perder o acesso.',
+      'A tela do PIX mostra em qual conta o acesso sera liberado. Se o e-mail estiver errado, da para trocar de conta antes de pagar.',
+    ],
+    novo: [
+      'Tela de pagamento confirmado com download do app, passo a passo de acesso, codigo do pedido para guardar e botao de suporte no Discord.',
+    ],
+  },
   '1.4.82': {
     corrigido: [
       'Seguranca: o login agora e validado no SERVIDOR (/api/login). O bloqueio de tentativas e o registro de falhas sairam das funcoes publicas do Supabase - antes, qualquer pessoa conseguia apagar o bloqueio de um e-mail e ate travar o login de outra pessoa.',

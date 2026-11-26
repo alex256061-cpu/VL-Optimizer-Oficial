@@ -77,12 +77,14 @@
     const img = pagamento.qrBase64
       ? '<img src="data:image/png;base64,' + pagamento.qrBase64 + '" alt="QR do Pix" style="width:220px;height:220px;border-radius:12px;background:#fff;padding:10px;margin:0 auto 18px;display:block">'
       : '';
+    const emailConta = emailDaConta() || (pagamento && pagamento.email) || '';
 
     corpo.innerHTML = `
       <div style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#a99fb4;font-weight:800;margin-bottom:6px">Plano ${nomePlano}</div>
-      <div style="font-size:26px;font-weight:900;color:#f5f2f7;letter-spacing:-.02em;margin-bottom:16px">
+      <div style="font-size:26px;font-weight:900;color:#f5f2f7;letter-spacing:-.02em;margin-bottom:10px">
         R$ ${pagamento.valor.toFixed(2).replace('.', ',')}
       </div>
+      ${emailConta ? `<div style="font-size:12px;color:#a99fb4;line-height:1.5;margin-bottom:14px">Acesso será liberado na conta<br><b style="color:#f5f2f7">${escaparHtml(emailConta)}</b><br><button id="vl-pix-trocar" type="button" style="border:0;background:transparent;color:#ff8a93;font-size:11.5px;font-weight:700;cursor:pointer;padding:4px 0;font-family:inherit;text-decoration:underline">E-mail errado? Trocar de conta</button></div>` : ''}
       ${img}
       <div style="font-size:12.5px;color:#a99fb4;margin-bottom:12px">Escaneie o QR com o app do banco, ou copie o código:</div>
       <textarea readonly id="vl-pix-codigo" style="width:100%;box-sizing:border-box;height:64px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:9px;padding:9px;color:#f5f2f7;font-size:11px;font-family:monospace;resize:none">${pagamento.qr}</textarea>
@@ -113,6 +115,18 @@
 
     document.getElementById('vl-pix-fechar').onclick = fecharModal;
 
+    // Antes de pagar, dá para sair e entrar com outro e-mail se a conta estiver errada.
+    // O PIX já gerado não foi pago; ao sair, ele simplesmente expira.
+    const trocar = document.getElementById('vl-pix-trocar');
+    if (trocar) {
+      trocar.onclick = () => {
+        if (!confirm('Você ainda NÃO pagou este PIX.\n\nSair da conta atual para entrar/criar com o e-mail correto?')) return;
+        try { if (window.SUPABASE && SUPABASE.sair) SUPABASE.sair(); } catch (e) { }
+        fecharModal();
+        location.href = '/entrar?voltar=/';
+      };
+    }
+
     // começa a verificar
     inicioPolling(pagamento.id);
   }
@@ -127,7 +141,7 @@
         const d = await r.json();
         if (d && d.liberado) {
           clearInterval(polling); polling = null;
-          mostrarLiberado(d);
+          mostrarLiberado(d, id);
         }
       } catch (e) { }
     }, 3000);
@@ -148,21 +162,40 @@
     catch (e) { return ''; }
   }
 
-  function mostrarLiberado(d) {
+  function mostrarLiberado(d, pedidoId) {
     const corpo = document.getElementById('vl-pix-corpo');
     if (!corpo) return;
     const email = emailDaConta() || (d && d.email) || '';
+    const pedido = String(pedidoId || '');
     corpo.innerHTML = `
       <div style="width:54px;height:54px;margin:0 auto 16px;border-radius:16px;background:rgba(60,220,130,.14);display:grid;place-items:center">
         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#3ddc82" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
       </div>
       <div style="font-size:19px;font-weight:900;color:#f5f2f7;margin-bottom:8px">Pagamento confirmado!</div>
-      <div style="font-size:13px;color:#a99fb4;line-height:1.6;margin-bottom:20px">
-        Seu acesso${d.dias ? ' de ' + escaparHtml(d.dias) : ''} entrou na sua conta.${email ? '<br><b style="color:#f5f2f7">' + escaparHtml(email) + '</b>' : ''}<br>
-        Abra o aplicativo e entre com a mesma conta para liberar as otimizações.
+      <div style="font-size:13px;color:#a99fb4;line-height:1.6;margin-bottom:16px">
+        Seu acesso${d.dias ? ' de ' + escaparHtml(d.dias) : ''} já está ativo na conta${email ? ':<br><b style="color:#f5f2f7">' + escaparHtml(email) + '</b>' : '.'}
       </div>
-      <a href="/conta" style="display:block;text-decoration:none;background:linear-gradient(135deg,#ff1f2e,#c00c1a);color:#fff;font-weight:800;font-size:13.5px;padding:13px;border-radius:10px">Ir para a minha conta</a>
+      <div style="text-align:left;background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:14px 14px 12px;margin-bottom:14px;font-size:12.5px;color:#cfc6d8;line-height:1.65">
+        <div><b style="color:#f5f2f7">1.</b> Baixe o aplicativo no botão abaixo.</div>
+        <div><b style="color:#f5f2f7">2.</b> Abra e entre com <b>este e-mail</b> e a senha que você criou.</div>
+        <div><b style="color:#f5f2f7">3.</b> Pronto: as otimizações ficam liberadas.</div>
+      </div>
+      <a href="/baixar" style="display:block;text-decoration:none;background:linear-gradient(135deg,#ff1f2e,#c00c1a);color:#fff;font-weight:800;font-size:13.5px;padding:13px;border-radius:10px;margin-bottom:8px">Baixar o aplicativo</a>
+      <a href="/conta" style="display:block;text-decoration:none;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);color:#f5f2f7;font-weight:800;font-size:13px;padding:11px;border-radius:10px;margin-bottom:12px">Ir para a minha conta</a>
+      ${pedido ? `<div style="font-size:11.5px;color:#a99fb4;line-height:1.5;margin-bottom:10px">Guarde o código do pedido:<br><b style="color:#f5f2f7;font-family:monospace;font-size:12px">${escaparHtml(pedido)}</b> <button id="vl-pedido-copiar" type="button" style="border:0;background:transparent;color:#ff8a93;font-size:11px;font-weight:700;cursor:pointer;text-decoration:underline;font-family:inherit">copiar</button></div>` : ''}
+      <div style="font-size:11.5px;color:#8d849a;line-height:1.55;margin-bottom:8px">
+        Não recebeu o e-mail? Não precisa esperar: seu acesso já está ativo.<br>
+        Se o e-mail estiver errado, fale no <a href="https://discord.gg/k8F3mvxam" target="_blank" rel="noopener" style="color:#ff8a93;font-weight:700">Discord</a> e envie o código do pedido.
+      </div>
+      <button id="vl-pix-fechar" type="button" style="width:100%;border:0;background:transparent;color:#6f6a82;font-size:12px;cursor:pointer;padding:8px;font-family:inherit">Fechar</button>
     `;
+    const copiar = document.getElementById('vl-pedido-copiar');
+    if (copiar) copiar.onclick = async () => {
+      try { await navigator.clipboard.writeText(pedido); copiar.textContent = 'copiado!'; } catch (e) { }
+      setTimeout(() => { copiar.textContent = 'copiar'; }, 2200);
+    };
+    const fechar = document.getElementById('vl-pix-fechar');
+    if (fechar) fechar.onclick = fecharModal;
   }
 
   // ── botões ──
