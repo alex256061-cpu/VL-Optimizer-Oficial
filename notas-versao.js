@@ -10,6 +10,14 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.86': {
+    corrigido: [],
+    novo: [
+      'Instalador com visual novo: sidebar e cabecalho no padrao preto/vermelho do VL, com o simbolo VL e os aneis da marca.',
+      'Textos do assistente de instalacao mais claros e sem aquele visual generico do instalador padrao.',
+    ],
+  },
+
   '1.4.85': {
     corrigido: [
       'Corrige os acentos nas verificacoes de hardware: textos como "Placa de video em ordem" e "A memoria esta numa velocidade boa" apareciam com caractere invalido no app. O PowerShell agora devolve a saida em UTF-8.',

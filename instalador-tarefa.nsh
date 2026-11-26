@@ -15,10 +15,10 @@
 ; ═══════════════════════════════════════════════════════════════════════════
 
 !define MUI_WELCOMEPAGE_TITLE "Bem-vindo ao VL Optimizer"
-!define MUI_WELCOMEPAGE_TEXT "Este assistente instala o VL Optimizer no seu PC.$\r$\n$\r$\nA instalacao e' rapida: copia o programa, cria o atalho e registra a abertura automatica. Depois e' so entrar com a sua conta."
+!define MUI_WELCOMEPAGE_TEXT "Este assistente instala o VL Optimizer no seu PC.$\r$\n$\r$\nEm poucos segundos o programa fica pronto, com atalho na Area de Trabalho e no menu Iniciar. Depois e so entrar com a sua conta."
 !define MUI_ABORTWARNING
 !define MUI_FINISHPAGE_TITLE "VL Optimizer instalado"
-!define MUI_FINISHPAGE_TEXT "O VL Optimizer esta pronto para usar. Abra pelo atalho da area de trabalho ou pelo menu Iniciar."
+!define MUI_FINISHPAGE_TEXT "O VL Optimizer esta pronto. Abra pelo atalho da Area de Trabalho ou pelo menu Iniciar e comece a otimizar."
 !define MUI_INSTFILESPAGE_COLORS "FFFFFF 000000"
 
 !macro customWelcomePage
