@@ -10,6 +10,14 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.81': {
+    corrigido: [
+      'Seguranca: as janelas do app agora bloqueiam navegacao para sites externos (links abrem no navegador) e window.open; permissoes de camera, microfone, localizacao e notificacao sao negadas. O clipboard e o fullscreen continuam funcionando.',
+      'Tela de entrada agora tem Content-Security-Policy (a do app ja tinha).',
+      'Site: corrigido redirecionamento aberto no parametro ?voltar do login; e-mail mostrado no checkout passou a ser escapado; o status do PIX devolve o e-mail mascarado; o endpoint antigo /api/comprar foi desativado (410).',
+    ],
+    novo: [],
+  },
   '1.4.80': {
     corrigido: [
       'Atualizacao podia instalar a versao que ja estava baixada (mais antiga) e so na abertura seguinte oferecer a mais nova. Agora, ao clicar em instalar, o app reconfere o servidor, baixa e instala a versao MAIS RECENTE.',

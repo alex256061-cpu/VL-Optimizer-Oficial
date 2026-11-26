@@ -98,6 +98,22 @@ function carregando(id, on, texto) {
   else b.textContent = texto || b._t || 'Entrar';
 }
 
+// O `?voltar=` vem da URL: só pode ser um caminho do PRÓPRIO site.
+// Sem isso, /entrar?voltar=https://site-falso.com redirecionava para fora depois do login
+// (open redirect / phishing). Aceita apenas caminho começando em "/" (sem "//" e sem "\").
+function destinoSeguro(valor) {
+  const s = String(valor == null ? '' : valor).trim();
+  if (!s || s[0] !== '/' || s[1] === '/' || s.indexOf('\\') !== -1) return '/conta';
+  if (/[\u0000-\u001f\u007f]/.test(s)) return '/conta';
+  try {
+    const u = new URL(s, location.origin);
+    if (u.origin !== location.origin) return '/conta';
+    return u.pathname + u.search + u.hash;
+  } catch (e) {
+    return '/conta';
+  }
+}
+
 $('form-entrar').onsubmit = async (e) => {
   e.preventDefault();
   const email = $('email').value.trim();
@@ -114,7 +130,7 @@ $('form-entrar').onsubmit = async (e) => {
     if (r.success) {
       mostrar('Login realizado. Abrindo...', 'ok');
       const voltar = new URLSearchParams(location.search).get('voltar');
-      setTimeout(() => { location.href = voltar || '/conta'; }, 500);
+      setTimeout(() => { location.href = destinoSeguro(voltar); }, 500);
     } else {
       // Antes qualquer recusa caía no genérico. Agora tem mensagem por motivo.
       const porMotivo = {

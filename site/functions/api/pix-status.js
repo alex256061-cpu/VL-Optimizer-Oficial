@@ -12,8 +12,24 @@ import { processarAprovado, emailCompradorValido } from './_venda.js';
  *   - manda o e-mail "crie sua senha" (quando o provedor está configurado)
  *
  * Uso: GET /api/pix-status?id=123456
- *   -> { status, liberado: true|false, email?, conta_criada?, aviso_email? }
+ *   -> { status, liberado, email (MASCARADO), conta_criada?, aviso_email? }
+ *
+ * O e-mail volta mascarado (ex.: l***s@gmail.com): quem tiver o id de um pagamento
+ * não consegue colher o endereço completo do comprador. O site mostra o e-mail real
+ * da própria sessão logada.
  */
+
+// Mascara o e-mail preservando o suficiente para o comprador se reconhecer:
+// "lucas@gmail.com" -> "l***s@gmail.com".
+function mascararEmail(valor) {
+  const e = String(valor || '').trim();
+  const at = e.indexOf('@');
+  if (at < 1) return '***';
+  const local = e.slice(0, at);
+  const dominio = e.slice(at);
+  if (local.length <= 2) return local[0] + '***' + dominio;
+  return local[0] + '***' + local[local.length - 1] + dominio;
+}
 
 export async function onRequestGet({ request, env }) {
   const bloqueio = limite('status:' + ipDe(request), 200, 10 * 60 * 1000);
@@ -69,7 +85,7 @@ export async function onRequestGet({ request, env }) {
     );
     const lista = r.ok ? await r.json() : [];
     if (Array.isArray(lista) && lista[0] && lista[0].plan === 'pro') {
-      return responder({ status, liberado: true, email, conta_criada: false });
+      return responder({ status, liberado: true, email: mascararEmail(email), conta_criada: false });
     }
   } catch (e) { }
 
@@ -84,13 +100,13 @@ export async function onRequestGet({ request, env }) {
   });
 
   if (!r.ok) {
-    return responder({ status, liberado: false, email, erro: r.erro || 'Não consegui liberar a compra.' });
+    return responder({ status, liberado: false, email: mascararEmail(email), erro: r.erro || 'Não consegui liberar a compra.' });
   }
 
   return responder({
     status,
     liberado: true,
-    email,
+    email: mascararEmail(email),
     conta_criada: !!r.contaCriada,
     aviso_email: !!r.avisoEmail,
     dias: r.dias === null ? 'vitalício' : r.dias + ' dias',

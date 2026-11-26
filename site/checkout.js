@@ -133,16 +133,32 @@
     }, 3000);
   }
 
+  // Escapa texto antes de entrar em HTML. O e-mail vem do servidor; mesmo válido,
+  // não pode ser interpretado como HTML (stored XSS no painel do cliente).
+  function escaparHtml(v) {
+    return String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+    }[c]));
+  }
+
+  // E-mail real da conta logada. O /api/pix-status passou a devolver o e-mail
+  // mascarado (privacidade); aqui usamos o da própria sessão para exibir completo.
+  function emailDaConta() {
+    try { const s = sessaoCompra(); return s && s.email ? String(s.email) : ''; }
+    catch (e) { return ''; }
+  }
+
   function mostrarLiberado(d) {
     const corpo = document.getElementById('vl-pix-corpo');
     if (!corpo) return;
+    const email = emailDaConta() || (d && d.email) || '';
     corpo.innerHTML = `
       <div style="width:54px;height:54px;margin:0 auto 16px;border-radius:16px;background:rgba(60,220,130,.14);display:grid;place-items:center">
         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#3ddc82" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
       </div>
       <div style="font-size:19px;font-weight:900;color:#f5f2f7;margin-bottom:8px">Pagamento confirmado!</div>
       <div style="font-size:13px;color:#a99fb4;line-height:1.6;margin-bottom:20px">
-        Seu acesso${d.dias ? ' de ' + d.dias : ''} entrou na sua conta.${d.email ? '<br><b style="color:#f5f2f7">' + d.email + '</b>' : ''}<br>
+        Seu acesso${d.dias ? ' de ' + escaparHtml(d.dias) : ''} entrou na sua conta.${email ? '<br><b style="color:#f5f2f7">' + escaparHtml(email) + '</b>' : ''}<br>
         Abra o aplicativo e entre com a mesma conta para liberar as otimizações.
       </div>
       <a href="/conta" style="display:block;text-decoration:none;background:linear-gradient(135deg,#ff1f2e,#c00c1a);color:#fff;font-weight:800;font-size:13.5px;padding:13px;border-radius:10px">Ir para a minha conta</a>

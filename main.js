@@ -1,5 +1,5 @@
 // main.js — VL Optimizer (Electron)
-const { app, BrowserWindow, ipcMain, shell, screen, nativeTheme, globalShortcut, Notification, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, session, screen, nativeTheme, globalShortcut, Notification, dialog } = require('electron');
 
 
 // Rastreio de janelas — SÓ para desenvolvimento.
@@ -38,6 +38,20 @@ const ex = require('./engine-extras');
 const feat = require('./features');
 const elev = require('./elevacao');
 const updater = require('./updater');
+// Travas de navegação e permissões (arquivo testável fora do Electron).
+const segNavegacao = require('./seguranca-navegacao');
+
+// TODAS as janelas do app (principal, scaling, overlay) ganham as travas:
+// - navegação só para arquivos dentro da pasta do app;
+// - link externo abre no navegador, nunca dentro da janela;
+// - window.open/target=_blank é negado (sem janelas com conteúdo de fora).
+app.on('web-contents-created', (evento, contents) => {
+  try {
+    // Não interfere no DevTools (só existe em desenvolvimento).
+    if (contents && typeof contents.getType === 'function' && contents.getType() === 'devtools') return;
+    segNavegacao.aplicar(contents, { shell, raiz: __dirname });
+  } catch (e) { }
+});
 const conta = require('./supabase');
 const telemetria = require('./telemetria');
 const MARCA = require('./marca');
@@ -1277,6 +1291,10 @@ if (!obteveLock) {
 
 function iniciar() {
 app.whenReady().then(async () => {
+  // Permissões: o app não usa câmera, microfone, localização nem notificação web.
+  // Clipboard/fullscreen continuam liberados (telas de diagnóstico copiam texto).
+  try { segNavegacao.aplicarPermissoes(session.defaultSession); } catch (e) { }
+
   if (process.argv.includes('--siteshot')) {
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const out = process.env.VL_SITE_OUT || path.join(__dirname, 'site', 'preview');

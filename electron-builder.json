@@ -29,7 +29,7 @@
     "engine-extras.js",
     "engine-scaler.js",
     "engine-bridge.js",
-    "updater.js",
+    "updater.js",`r`n    "seguranca-navegacao.js",
     "assinatura-update.js",
     "supabase.js",
     "telemetria.js",
