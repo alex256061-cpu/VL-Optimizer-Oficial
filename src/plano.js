@@ -62,6 +62,23 @@
   }
   // Quanto falta para o plano com data vencer (null: grátis, vitalício ou Licença do PC).
   const msLeft = () => (user && user.plan === 'pro' && !user.lifetime && user.licenseExpiresAt ? new Date(user.licenseExpiresAt).getTime() - Date.now() : null);
+
+  // Título do aviso de vencimento pelo calendário, não por horas:
+  // "amanhã" é mais claro que "menos de 1 dia"; e nunca mais "1 dias".
+  function tituloVencimento() {
+    try {
+      const exp = new Date(user.licenseExpiresAt);
+      const hoje = new Date();
+      const d0 = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
+      const d1 = new Date(exp.getFullYear(), exp.getMonth(), exp.getDate());
+      const dias = Math.round((d1.getTime() - d0.getTime()) / DAY);
+      if (dias <= 0) return 'Seu plano vence hoje';
+      if (dias === 1) return 'Seu plano vence amanhã';
+      return 'Seu plano vence em ' + dias + ' dias';
+    } catch (e) {
+      return 'Seu plano está perto de vencer';
+    }
+  }
   // "2 dias", "5 h 12 min", "8 min"
   function leftText(ms) {
     if (!(ms > 0)) return null;
@@ -398,10 +415,10 @@
     } else if (ms !== null && ms <= 3 * DAY) {
       nudge({
         trigger: 'vencimento',
-        title: ms < DAY ? 'Seu plano vence em menos de 1 dia' : `Seu plano vence em ${Math.ceil(ms / DAY)} dias`,
+        title: tituloVencimento(),
         text: up
           ? `Renove o mensal ou passe para o vitalício por ${brl(up.finalCents)}: os ${brl(up.creditCents)} do mensal viram crédito.`
-          : 'Renove agora: os dias se somam aos que ainda faltam.',
+          : 'Renove agora: os dias se somam aos que ainda faltam. Não perca os ajustes que você já aplicou.',
         cta: 'Renovar', modalTitle: 'Renovar o plano',
       });
     } else if (promo) {

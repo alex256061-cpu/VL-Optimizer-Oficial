@@ -10,6 +10,14 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.84': {
+    corrigido: [
+      'Aviso de vencimento mais claro: com 1 dia restante agora mostra "Seu plano vence amanhã" (ou "hoje" se for o mesmo dia) e nunca mais o texto errado "1 dias".',
+      'A mensagem tambem lembra que renovar mantem os ajustes ja aplicados.',
+    ],
+    novo: [],
+  },
+
   '1.4.83': {
     corrigido: [
       'Campos de senha ganharam o botao de olho (mostrar/ocultar) no site e na tela de entrada do app.',
