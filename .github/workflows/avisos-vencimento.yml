@@ -12,9 +12,29 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Chamar o cron do VL Optimizer
+      - name: Ver se os avisos estão configurados
+        env:
+          VL_AVISOS_URL: ${{ secrets.VL_AVISOS_URL }}
+          VL_CRON_KEY: ${{ secrets.VL_CRON_KEY }}
         run: |
-          curl -fsS -X POST "${{ secrets.VL_AVISOS_URL }}" \
-            -H "x-cron-key: ${{ secrets.VL_CRON_KEY }}" \
+          # Enquanto o e-mail/cron não estiver configurado, não falhar o workflow
+          # (evita e-mail de "Run failed" todo dia). Quando os dois secrets
+          # existirem, o passo de baixo chama o cron normalmente.
+          if [ -z "$VL_AVISOS_URL" ] || [ -z "$VL_CRON_KEY" ]; then
+            echo "Avisos de vencimento ainda não configurados; nada a fazer."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+        id: config
+
+      - name: Chamar o cron do VL Optimizer
+        if: steps.config.outputs.configured == 'true'
+        env:
+          VL_AVISOS_URL: ${{ secrets.VL_AVISOS_URL }}
+          VL_CRON_KEY: ${{ secrets.VL_CRON_KEY }}
+        run: |
+          curl -fsS -X POST "$VL_AVISOS_URL" \
+            -H "x-cron-key: $VL_CRON_KEY" \
             -H "Content-Type: application/json" \
             -d '{}'
