@@ -353,55 +353,57 @@ async function entrar(email, senha) {
 
   const limpo = String(email).trim().toLowerCase();
 
-  // 0. Anti-rollback: o maxSeen do arquivo é lido ANTES de regravar a sessão. No GDZ a
-  // entitlement é recusada quando o relógio está atrasado (refreshEntitlement:
-  // "O relógio do Windows está atrasado."). Aqui o login é justamente o caminho da
-  // internet, então ele continua valendo — quem bloqueia é o `sessao()` sem servidor.
-  // O login, ao passar, ressincroniza o carimbo (gravarSessao faz Math.max).
+  // 0. Anti-rollback: o maxSeen do arquivo é lido ANTES de regravar a sessão (igual antes).
   const textoPuro = lerSessaoTextoPuro();
 
-  // 1. bloqueio por excesso de tentativas
-  const bl = await pedir('/rest/v1/rpc/login_bloqueado', {
-    method: 'POST',
-    body: JSON.stringify({ p_email: limpo }),
-  });
-  if (bl.ok && bl.dados && bl.dados.bloqueado) {
-    return { success: false, message: bl.dados.mensagem || 'Muitas tentativas. Espere alguns minutos.' };
-  }
-
-  const r = await pedir('/auth/v1/token?grant_type=password', {
-    method: 'POST',
-    body: JSON.stringify({ email: String(email).trim(), password: senha }),
-  });
-
-  if (!r.ok) {
-    // 2. registra a falha
-    pedir('/rest/v1/rpc/registrar_falha_login', {
+  // 1. Login pelo SERVIDOR do site (/api/login). O bloqueio de tentativas e o registro
+  // de falhas saíram das RPCs públicas (qualquer um conseguia chamar limpar_falhas_login
+  // e apagar o bloqueio). Se o site estiver fora do ar, cai no Supabase direto (o GoTrue
+  // também tem limite próprio) para não travar quem já usa o app.
+  const site = String(MARCA.site || 'https://vl-optimizer.pages.dev').replace(/\/+$/, '');
+  let dados = null;
+  let status = 0;
+  let tentouServidor = false;
+  try {
+    const rs = await fetch(site + '/api/login', {
       method: 'POST',
-      body: JSON.stringify({ p_email: limpo, p_ip: null }),
-    }).catch(() => { });
-    // A migração do sessao.json antigo só pode acontecer num login que deu certo. Se a
-    // senha estava errada, o arquivo antigo volta intacto.
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: String(email).trim(), senha: String(senha) }),
+      signal: AbortSignal.timeout(20000),
+    });
+    status = rs.status;
+    const txt = await rs.text();
+    try { dados = txt ? JSON.parse(txt) : null; } catch (e) { dados = null; }
+    tentouServidor = true;
+  } catch (e) { tentouServidor = false; }
+
+  if (!tentouServidor || status >= 500) {
+    // Plano B: site indisponível — fala direto com o Supabase Auth.
+    const r = await pedir('/auth/v1/token?grant_type=password', {
+      method: 'POST',
+      body: JSON.stringify({ email: String(email).trim(), password: senha }),
+    });
+    if (!r.ok) {
+      // A migração do sessao.json antigo só pode acontecer num login que deu certo.
+      if (textoPuro) {
+        try { fs.mkdirSync(DIR_SESSAO, { recursive: true }); fs.writeFileSync(SESSAO, textoPuro.bruto, 'utf8'); } catch (e) { }
+      }
+      return { success: false, message: traduzir(r.dados && (r.dados.error_description || r.dados.msg || r.dados.message), r.status) };
+    }
+    dados = { access_token: r.dados.access_token, refresh_token: r.dados.refresh_token, expires_in: r.dados.expires_in, user: r.dados.user };
+  } else if (!dados || dados.ok !== true) {
     if (textoPuro) {
       try { fs.mkdirSync(DIR_SESSAO, { recursive: true }); fs.writeFileSync(SESSAO, textoPuro.bruto, 'utf8'); } catch (e) { }
     }
-    return { success: false, message: traduzir(r.dados && (r.dados.error_description || r.dados.msg || r.dados.message), r.status) };
+    return { success: false, message: (dados && dados.erro) || 'Não foi possível entrar. Confira o e-mail e a senha e tente de novo.' };
   }
 
-  // 3. sucesso: limpa as falhas
-  pedir('/rest/v1/rpc/limpar_falhas_login', {
-    method: 'POST',
-    body: JSON.stringify({ p_email: limpo }),
-  }).catch(() => { });
   const s = {
-    access_token: r.dados.access_token,
-    refresh_token: r.dados.refresh_token,
-    expires_at: Date.now() + (Number(r.dados.expires_in) || 3600) * 1000,
-    user: r.dados.user,
+    access_token: dados.access_token,
+    refresh_token: dados.refresh_token,
+    expires_at: Date.now() + (Number(dados.expires_in) || 3600) * 1000,
+    user: dados.user,
   };
-  // maxSeen: gravarSessao já faz Math.max(agora, maxSeen anterior). O anterior vem do
-  // arquivo antigo, quando existe.
-  gravarSessao(s);
   const p = await perfil(s);
   // A mesma verificação do servidor que o `sessao()` faz: é ela que diz se o plano vale
   // neste PC. O resultado fica guardado na sessão (é a referência do offlineUntil).

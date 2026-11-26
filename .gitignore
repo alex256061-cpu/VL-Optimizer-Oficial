@@ -30,3 +30,7 @@ marca/usada.json
 
 # estado local do wrangler (deploy do site)
 .wrangler/
+
+# segredos locais do wrangler (nunca versionar)
+.dev.vars
+.site/.dev.vars

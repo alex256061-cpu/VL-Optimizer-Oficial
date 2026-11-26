@@ -10,6 +10,13 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.82': {
+    corrigido: [
+      'Seguranca: o login agora e validado no SERVIDOR (/api/login). O bloqueio de tentativas e o registro de falhas sairam das funcoes publicas do Supabase - antes, qualquer pessoa conseguia apagar o bloqueio de um e-mail e ate travar o login de outra pessoa.',
+      'Se o site estiver fora do ar, o app continua entrando direto pelo Supabase (reserva) para nao travar quem ja usa.',
+    ],
+    novo: [],
+  },
   '1.4.81': {
     corrigido: [
       'Seguranca: as janelas do app agora bloqueiam navegacao para sites externos (links abrem no navegador) e window.open; permissoes de camera, microfone, localizacao e notificacao sao negadas. O clipboard e o fullscreen continuam funcionando.',

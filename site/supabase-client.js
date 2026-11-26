@@ -59,47 +59,42 @@ const SUPABASE = (() => {
     return msg || 'Não foi possível concluir. Tente de novo.';
   }
 
+  // Login pelo SERVIDOR (/api/login). O bloqueio de tentativas e o registro de falhas
+  // não são mais feitos por RPC pública: qualquer pessoa conseguia chamar
+  // limpar_falhas_login e apagar o bloqueio. Agora só o servidor (com service key)
+  // consulta/grava isso e devolve a sessão já validada.
   async function entrar(email, senha, lembrar) {
     const limpo = String(email).trim().toLowerCase();
-
-    // 1. já errou demais? bloqueia antes de tentar (proteção contra força bruta)
-    const bl = await pedir('/rest/v1/rpc/login_bloqueado', {
-      method: 'POST',
-      body: JSON.stringify({ p_email: limpo }),
-    });
-    if (bl.ok && bl.dados && bl.dados.bloqueado) {
-      return { success: false, message: bl.dados.mensagem || 'Muitas tentativas. Espere alguns minutos.' };
-    }
-
-    const r = await pedir('/auth/v1/token?grant_type=password', {
-      method: 'POST',
-      body: JSON.stringify({ email: String(email).trim(), password: senha }),
-    });
-
-    if (!r.ok) {
-      // 2. registra a falha para o bloqueio funcionar
-      pedir('/rest/v1/rpc/registrar_falha_login', {
+    let resposta;
+    let dados = null;
+    try {
+      resposta = await fetch('/api/login', {
         method: 'POST',
-        body: JSON.stringify({ p_email: limpo, p_ip: null }),
-      }).catch(() => { });
-      return { success: false, message: traduzir(r.dados && (r.dados.error_description || r.dados.msg), r.status) };
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: limpo, senha: String(senha) }),
+      });
+      const txt = await resposta.text();
+      try { dados = txt ? JSON.parse(txt) : null; } catch (e) { dados = null; }
+    } catch (e) {
+      return { success: false, message: 'Sem conexão. Verifique sua internet.' };
     }
 
-    // 3. login certo: limpa as falhas deste e-mail
-    pedir('/rest/v1/rpc/limpar_falhas_login', {
-      method: 'POST',
-      body: JSON.stringify({ p_email: limpo }),
-    }).catch(() => { });
+    if (!resposta.ok || !dados || dados.ok !== true) {
+      return {
+        success: false,
+        message: (dados && dados.erro) || 'Não foi possível entrar. Confira o e-mail e a senha e tente de novo.',
+      };
+    }
 
     const s = {
-      access_token: r.dados.access_token,
-      refresh_token: r.dados.refresh_token,
-      expires_at: Date.now() + (Number(r.dados.expires_in) || 3600) * 1000,
-      user: r.dados.user,
+      access_token: dados.access_token,
+      refresh_token: dados.refresh_token,
+      expires_at: Date.now() + (Number(dados.expires_in) || 3600) * 1000,
+      user: dados.user,
     };
     if (lembrar !== false) guardar(s);
     else sessionStorage.setItem(CHAVE_SESSAO, JSON.stringify(s));
-    return { success: true, user: r.dados.user };
+    return { success: true, user: dados.user };
   }
 
   async function criarConta(nome, email, senha) {
