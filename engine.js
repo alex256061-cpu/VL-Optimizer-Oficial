@@ -47,6 +47,8 @@ setDataDir(DATA_DIR);
 
 // ── PowerShell ──
 const PS_LIB = `
+[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+$OutputEncoding = [Console]::OutputEncoding
 $ProgressPreference = 'SilentlyContinue'
 $ErrorActionPreference = 'SilentlyContinue'
 function New-Key($p) {

@@ -10,6 +10,13 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.85': {
+    corrigido: [
+      'Corrige os acentos nas verificacoes de hardware: textos como "Placa de video em ordem" e "A memoria esta numa velocidade boa" apareciam com caractere invalido no app. O PowerShell agora devolve a saida em UTF-8.',
+    ],
+    novo: [],
+  },
+
   '1.4.84': {
     corrigido: [
       'Aviso de vencimento mais claro: com 1 dia restante agora mostra "Seu plano vence amanhã" (ou "hoje" se for o mesmo dia) e nunca mais o texto errado "1 dias".',
