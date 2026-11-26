@@ -15,8 +15,10 @@
 ; ═══════════════════════════════════════════════════════════════════════════
 
 ; deixa a janela do instalador no tema escuro do Windows (barra de titulo)
+!define MUI_CUSTOMFUNCTION_GUIINIT "VLDarkWindow"
+
 !macro customHeader
-  Function .onGUIInit
+  Function VLDarkWindow
     System::Call 'dwmapi::DwmSetWindowAttribute(i $HWNDPARENT, i 20, *i 1, i 4)'
     System::Call 'dwmapi::DwmSetWindowAttribute(i $HWNDPARENT, i 19, *i 1, i 4)'
     SetCtlColors $HWNDPARENT "F5F1F6" "0B0307"
