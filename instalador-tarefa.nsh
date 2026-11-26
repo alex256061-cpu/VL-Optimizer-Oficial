@@ -14,6 +14,15 @@
 ;     Abort(), entao ela nem aparece. A instalacao continua por usuario (sem UAC).
 ; ═══════════════════════════════════════════════════════════════════════════
 
+; deixa a janela do instalador no tema escuro do Windows (barra de titulo)
+!macro customHeader
+  Function .onGUIInit
+    System::Call 'dwmapi::DwmSetWindowAttribute(i $HWNDPARENT, i 20, *i 1, i 4)'
+    System::Call 'dwmapi::DwmSetWindowAttribute(i $HWNDPARENT, i 19, *i 1, i 4)'
+    SetCtlColors $HWNDPARENT "F5F1F6" "0B0307"
+  FunctionEnd
+!macroend
+
 !define MUI_BGCOLOR "0B0307"
 !define MUI_TEXTCOLOR "F5F1F6"
 !define MUI_INSTFILESPAGE_COLORS "0B0307 F5F1F6"

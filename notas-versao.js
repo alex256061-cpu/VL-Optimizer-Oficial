@@ -10,6 +10,13 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.91': {
+    corrigido: [],
+    novo: [
+      'Instalador tambem escurece a barra de titulo e o rodape nativo do Windows, para nao sobrar area branca no assistente.',
+    ],
+  },
+
   '1.4.90': {
     corrigido: [],
     novo: [
