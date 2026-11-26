@@ -3,8 +3,12 @@
 name: Avisos de vencimento
 
 on:
-  schedule:
-    - cron: '0 12 * * *' # 12:00 UTC = 09:00 de Brasília
+  # Envio automático DESLIGADO por decisão do dono (26/11/2026):
+  # com muitos clientes, aviso diário de vencimento pode virar volume/spam.
+  # O envio manual continua disponível no painel admin (Prévia / Teste / Enviar).
+  # Para reativar, descomente a linha abaixo:
+  # schedule:
+  #   - cron: '0 12 * * *' # 12:00 UTC = 09:00 de Brasília
   workflow_dispatch: {}
 
 jobs:
