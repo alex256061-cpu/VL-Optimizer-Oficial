@@ -34,3 +34,7 @@ marca/usada.json
 # segredos locais do wrangler (nunca versionar)
 .dev.vars
 .site/.dev.vars
+
+# scripts locais com segredo (os modelos .exemplo.ps1 ficam publicos)
+ferramentas/configurar-variaveis.ps1
+ferramentas/configurar-mp.ps1
