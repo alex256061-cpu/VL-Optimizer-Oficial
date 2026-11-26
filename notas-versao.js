@@ -10,6 +10,13 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.87': {
+    corrigido: [
+      'Barra de titulo do app: os controles de minimizar, maximizar e fechar estavam alinhados a esquerda; agora ficam a direita, no padrao do Windows, com Tutorial, som e tema ao lado.',
+    ],
+    novo: [],
+  },
+
   '1.4.86': {
     corrigido: [],
     novo: [

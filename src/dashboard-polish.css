@@ -304,7 +304,8 @@ body.adm-bar-ativa .page.active{ padding-top: 66px !important; }
 /* ── acabamentos finais ── */
 /* a marca fica na sidebar; na titlebar ficava duplicada ("VL VL OPTIMIZER") */
 .tb-brand{ display: none !important; }
-.titlebar{ padding-left: 16px !important; }
+.titlebar{ padding-left: 16px !important; justify-content: flex-end !important; }
+.tb-ctrl{ margin-left: auto !important; }
 
 /* 5 cards de otimização cabem na linha mesmo com a sidebar aberta */
 .op-cats{ grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)) !important; }
