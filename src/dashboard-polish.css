@@ -48,9 +48,9 @@
   background: linear-gradient(180deg, rgba(13,9,18,.985), rgba(9,6,14,.99)) !important;
   border-right-color: rgba(255,31,46,.18) !important;
 }
-.sb-logo{ padding: 16px 14px 10px !important; }
-.sb-logo img{ width: 32px !important; height: 32px !important; margin: 0 !important; filter: drop-shadow(0 0 10px rgba(255,31,46,.45)); }
-.sb-logo-name{ font-size: 13.5px !important; font-weight: 800 !important; letter-spacing: -.01em; }
+.sb-logo{ padding: 20px 14px 6px !important; }
+.sb-logo img{ width: 68px !important; height: 68px !important; margin: -17px -8px -17px -10px !important; filter: drop-shadow(0 0 10px rgba(255,31,46,.45)); }
+.sb-logo-name{ font-size: 15px !important; font-weight: 800 !important; letter-spacing: -.01em; }
 .sb-logo-name span{ color: var(--purple2); }
 
 .sb-section{ font-size: 9.5px !important; letter-spacing: .18em !important; color: #6f6a82 !important; font-weight: 800 !important; padding: 0 4px !important; }
@@ -303,9 +303,8 @@ body.adm-bar-ativa .page.active{ padding-top: 66px !important; }
 
 /* ── acabamentos finais ── */
 /* a marca fica na sidebar; na titlebar ficava duplicada ("VL VL OPTIMIZER") */
-.tb-brand{ display: none !important; }
-.titlebar{ padding-left: 16px !important; justify-content: flex-end !important; }
-.tb-ctrl{ margin-left: auto !important; }
+/* igual ao GDZ: marca visível na titlebar e controles à direita pelo space-between */
+.titlebar{ padding-left: 16px !important; }
 
 /* 5 cards de otimização cabem na linha mesmo com a sidebar aberta */
 .op-cats{ grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)) !important; }

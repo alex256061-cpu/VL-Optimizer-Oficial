@@ -10,6 +10,13 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.89': {
+    corrigido: [
+      'Cabecalho e sidebar iguais ao GDZ: marca visivel na barra de titulo, controles da janela a direita e logo da sidebar no tamanho/margens do GDZ, sem corte.',
+    ],
+    novo: [],
+  },
+
   '1.4.88': {
     corrigido: [
       'Logo da sidebar nao fica mais cortado nem pula para fora da tela ao abrir/fechar o menu lateral.',
