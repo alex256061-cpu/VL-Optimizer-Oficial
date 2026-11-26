@@ -10,6 +10,15 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.78': {
+    corrigido: [
+      'Janela de entrada agora tem botoes de minimizar e fechar (X): a janela e sem borda e antes nao tinha como fechar pela tela.',
+      'O card de login nao corta mais no tamanho minimo da janela (1180x700).',
+    ],
+    novo: [
+      'Nova tela de entrada no estilo do GDZ: grade tecnologica no fundo, card de login com abas Entrar/Criar conta, campos com icone e beneficios a esquerda.',
+    ],
+  },
   '1.4.77': {
     corrigido: [
       'Botao de suporte do app aponta para o convite certo do Discord (o antigo nao existia).',
