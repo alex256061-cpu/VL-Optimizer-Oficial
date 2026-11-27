@@ -10,6 +10,13 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.103': {
+    corrigido: [
+      'VL Scaling no app instalado: o motor esta em app.asar.unpacked, mas o codigo procurava dentro de app.asar. O Windows nao executa esse caminho, e a tela mostrava VLScaling nao ficou aberto. Agora o caminho e resolvido para app.asar.unpacked.',
+    ],
+    novo: [],
+  },
+
   '1.4.102': {
     corrigido: [
       'VL Scaling: dashboard e janela separada agora usam o mesmo fluxo ls-launch do GDZ e o toggle Versao otimizada (FSRType=OPTIMIZED).',

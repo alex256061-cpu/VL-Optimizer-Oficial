@@ -16,7 +16,26 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-const APP_DIR = path.join(__dirname, 'native', 'lossless');
+// O empacotamento do Electron coloca os executáveis em app.asar.unpacked, não dentro do
+// app.asar. No modo de desenvolvimento __dirname é a pasta do projeto e funciona; no app
+// instalado, criar o caminho em cima de app.asar faz o spawn falhar em silêncio (Windows não
+// executa um caminho virtual do asar). Foi o erro "VLScaling nao ficou aberto" no cliente.
+function resolverPastaNativa() {
+  const candidatos = [];
+  if (__dirname.includes('app.asar')) {
+    if (process.resourcesPath) {
+      candidatos.push(path.join(process.resourcesPath, 'app.asar.unpacked', 'native', 'lossless'));
+    }
+    candidatos.push(path.join(__dirname.replace(/app\.asar(?!\.unpacked)/, 'app.asar.unpacked'), 'native', 'lossless'));
+  }
+  candidatos.push(path.join(__dirname, 'native', 'lossless'));
+  for (const dir of candidatos) {
+    try { if (fs.existsSync(path.join(dir, 'VLScaling.exe'))) return dir; } catch (e) { }
+  }
+  return candidatos[0];
+}
+
+const APP_DIR = resolverPastaNativa();
 // O executável rebrandado da nossa marca (o .dll mantém o nome LosslessScaling.dll,
 // porque o assembly .NET exige — só o .exe e os textos são nossos).
 const EXE = path.join(APP_DIR, 'VLScaling.exe');
