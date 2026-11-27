@@ -15,6 +15,7 @@
 ; ═══════════════════════════════════════════════════════════════════════════
 
 ; deixa a janela do instalador no tema escuro do Windows (barra de titulo)
+!include "nsDialogs.nsh"
 !define MUI_CUSTOMFUNCTION_GUIINIT "VLDarkWindow"
 
 !macro customHeader
