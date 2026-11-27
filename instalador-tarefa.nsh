@@ -52,44 +52,6 @@
 ; (o MUI continua controlando habilitar/desabilitar e a navegacao).
 !ifndef BUILD_UNINSTALLER
 Var vlFooter
-Var vlImgNext
-Var vlImgCancel
-Var vlImgFinish
-Function VLCarregarImagensBotoes
-  InitPluginsDir
-  File /oname=$PLUGINSDIR\vl-btn-next.bmp "${BUILD_RESOURCES_DIR}\btn-proximo.bmp"
-  File /oname=$PLUGINSDIR\vl-btn-cancel.bmp "${BUILD_RESOURCES_DIR}\btn-cancelar.bmp"
-  File /oname=$PLUGINSDIR\vl-btn-finish.bmp "${BUILD_RESOURCES_DIR}\btn-concluir.bmp"
-  System::Call 'user32::LoadImage(i 0, w "$PLUGINSDIR\vl-btn-next.bmp", i 0, i 0, i 0, i 0x10) i .r0'
-  StrCpy $vlImgNext $0
-  System::Call 'user32::LoadImage(i 0, w "$PLUGINSDIR\vl-btn-cancel.bmp", i 0, i 0, i 0, i 0x10) i .r0'
-  StrCpy $vlImgCancel $0
-  System::Call 'user32::LoadImage(i 0, w "$PLUGINSDIR\vl-btn-finish.bmp", i 0, i 0, i 0, i 0x10) i .r0'
-  StrCpy $vlImgFinish $0
-FunctionEnd
-
-Function VLBotoesImagem
-  ; botoes 1 (Proximo/Concluir) e 2 (Cancelar)
-  GetDlgItem $0 $HWNDPARENT 1
-  StrCmp $0 0 vl_btn_sem_next
-  System::Call 'user32::GetWindowLong(i $0, i -16) i .r1'
-  IntOp $1 $1 | 0x80
-  System::Call 'user32::SetWindowLong(i $0, i -16, i r1)'
-  SendMessage $0 0x000C 0 0
-  SendMessage $0 0x00F7 0 $vlImgNext
-  System::Call 'user32::InvalidateRect(i $0, i 0, i 1)'
-  vl_btn_sem_next:
-
-  GetDlgItem $0 $HWNDPARENT 2
-  StrCmp $0 0 vl_btn_sem_cancel
-  System::Call 'user32::GetWindowLong(i $0, i -16) i .r1'
-  IntOp $1 $1 | 0x80
-  System::Call 'user32::SetWindowLong(i $0, i -16, i r1)'
-  SendMessage $0 0x000C 0 0
-  SendMessage $0 0x00F7 0 $vlImgCancel
-  System::Call 'user32::InvalidateRect(i $0, i 0, i 1)'
-  vl_btn_sem_cancel:
-FunctionEnd
 
 ; Preenche a pagina com um bitmap de fundo em tamanho cheio.
 Function VLPaginaComFundo
@@ -150,7 +112,6 @@ Function VLTrazerBotoesFrente
 FunctionEnd
 
 Function VLBoasVindasLeave
-  Call VLRestaurarBotoes
   StrCmp $vlFooter 0 vl_bv_sem_rodape
   System::Call 'user32::DestroyWindow(i $vlFooter)'
   StrCpy $vlFooter 0
@@ -158,52 +119,24 @@ Function VLBoasVindasLeave
 FunctionEnd
 
 Function VLConclusaoLeave
-  Call VLRestaurarBotoes
   StrCmp $vlFooter 0 vl_cc_sem_rodape
   System::Call 'user32::DestroyWindow(i $vlFooter)'
   StrCpy $vlFooter 0
   vl_cc_sem_rodape:
 FunctionEnd
 
-Function VLRestaurarBotoes
-  GetDlgItem $0 $HWNDPARENT 1
-  StrCmp $0 0 vl_rest_sem1
-  System::Call 'user32::GetWindowLong(i $0, i -16) i .r1'
-  IntOp $1 $1 & 0xFFFFFF7F
-  System::Call 'user32::SetWindowLong(i $0, i -16, i r1)'
-  SendMessage $0 0x00F7 0 0
-  System::Call 'user32::InvalidateRect(i $0, i 0, i 1)'
-  vl_rest_sem1:
-  GetDlgItem $0 $HWNDPARENT 2
-  StrCmp $0 0 vl_rest_sem2
-  System::Call 'user32::GetWindowLong(i $0, i -16) i .r1'
-  IntOp $1 $1 & 0xFFFFFF7F
-  System::Call 'user32::SetWindowLong(i $0, i -16, i r1)'
-  SendMessage $0 0x00F7 0 0
-  System::Call 'user32::InvalidateRect(i $0, i 0, i 1)'
-  vl_rest_sem2:
-FunctionEnd
-
 Function VLTimerBoasVindas
   ${NSD_KillTimer} VLTimerBoasVindas
-  Call VLBotoesImagem
   Call VLTrazerBotoesFrente
 FunctionEnd
 
 Function VLTimerConclusao
   ${NSD_KillTimer} VLTimerConclusao
-  Call VLBotoesImagem
-  GetDlgItem $0 $HWNDPARENT 1
-  StrCmp $0 0 vl_timer_sem_botao
-  SendMessage $0 0x00F7 0 $vlImgFinish
-  System::Call 'user32::InvalidateRect(i $0, i 0, i 1)'
-  vl_timer_sem_botao:
   Call VLTrazerBotoesFrente
 FunctionEnd
 
 Function VLCriarBoasVindas
   InitPluginsDir
-  Call VLCarregarImagensBotoes
   File /oname=$PLUGINSDIR\vl-welcome.bmp "${BUILD_RESOURCES_DIR}\vl-welcome.bmp"
   StrCpy $1 "$PLUGINSDIR\vl-welcome.bmp"
   Call VLPaginaComFundo
@@ -213,7 +146,6 @@ FunctionEnd
 
 Function VLCriarConclusao
   InitPluginsDir
-  Call VLCarregarImagensBotoes
   File /oname=$PLUGINSDIR\vl-finish.bmp "${BUILD_RESOURCES_DIR}\vl-finish.bmp"
   StrCpy $1 "$PLUGINSDIR\vl-finish.bmp"
   Call VLPaginaComFundo
