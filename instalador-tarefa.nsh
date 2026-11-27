@@ -175,13 +175,30 @@ Function VLRestaurarBotoes
   vl_rest_sem2:
 FunctionEnd
 
+Function VLTimerBoasVindas
+  !insertmacro NSD_KillTimer VLTimerBoasVindas
+  Call VLBotoesImagem
+  Call VLTrazerBotoesFrente
+FunctionEnd
+
+Function VLTimerConclusao
+  !insertmacro NSD_KillTimer VLTimerConclusao
+  Call VLBotoesImagem
+  GetDlgItem $0 $HWNDPARENT 1
+  StrCmp $0 0 vl_timer_sem_botao
+  System::Call 'user32::LoadImage(i 0, w "$PLUGINSDIR\vl-btn-finish.bmp", i 0, i 0, i 0, i 0x10) i .r2'
+  SendMessage $0 0x00F7 0 $2
+  System::Call 'user32::InvalidateRect(i $0, i 0, i 1)'
+  vl_timer_sem_botao:
+  Call VLTrazerBotoesFrente
+FunctionEnd
+
 Function VLCriarBoasVindas
   InitPluginsDir
   File /oname=$PLUGINSDIR\vl-welcome.bmp "${BUILD_RESOURCES_DIR}\vl-welcome.bmp"
   StrCpy $1 "$PLUGINSDIR\vl-welcome.bmp"
   Call VLPaginaComFundo
-  Call VLBotoesImagem
-  Call VLTrazerBotoesFrente
+  !insertmacro NSD_CreateTimer VLTimerBoasVindas 150
   nsDialogs::Show
 FunctionEnd
 
@@ -190,15 +207,7 @@ Function VLCriarConclusao
   File /oname=$PLUGINSDIR\vl-finish.bmp "${BUILD_RESOURCES_DIR}\vl-finish.bmp"
   StrCpy $1 "$PLUGINSDIR\vl-finish.bmp"
   Call VLPaginaComFundo
-  Call VLBotoesImagem
-  ; na conclusao o botao 1 vira "Concluir"
-  GetDlgItem $0 $HWNDPARENT 1
-  StrCmp $0 0 vl_conclui_sem_botao
-  System::Call 'user32::LoadImage(i 0, w "$PLUGINSDIR\vl-btn-finish.bmp", i 0, i 0, i 0, i 0x10) i .r2'
-  SendMessage $0 0x00F7 0 $2
-  System::Call 'user32::InvalidateRect(i $0, i 0, i 1)'
-  vl_conclui_sem_botao:
-  Call VLTrazerBotoesFrente
+  !insertmacro NSD_CreateTimer VLTimerConclusao 150
   nsDialogs::Show
 FunctionEnd
 
