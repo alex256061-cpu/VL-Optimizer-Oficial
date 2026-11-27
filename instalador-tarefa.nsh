@@ -36,7 +36,6 @@
     System::Call 'uxtheme::SetWindowTheme(i $1, w "", w "")'
     SetCtlColors $1 "F5F1F6" "1A0710"
   FunctionEnd
-
 !macroend
 
 !define MUI_BGCOLOR "0B0307"
@@ -51,7 +50,35 @@
 ; Troca o desenho dos botoes nativos por imagens do VL, mantendo os mesmos IDs
 ; (o MUI continua controlando habilitar/desabilitar e a navegacao).
 !ifndef BUILD_UNINSTALLER
-Var vlFooter
+Function VLBotoesImagem
+  InitPluginsDir
+  File /oname=$PLUGINSDIR\vl-btn-next.bmp "${BUILD_RESOURCES_DIR}\btn-proximo.bmp"
+  File /oname=$PLUGINSDIR\vl-btn-cancel.bmp "${BUILD_RESOURCES_DIR}\btn-cancelar.bmp"
+  File /oname=$PLUGINSDIR\vl-btn-finish.bmp "${BUILD_RESOURCES_DIR}\btn-concluir.bmp"
+
+  ; botoes 1 (Proximo/Concluir) e 2 (Cancelar)
+  GetDlgItem $0 $HWNDPARENT 1
+  StrCmp $0 0 vl_btn_sem_next
+  System::Call 'user32::GetWindowLong(i $0, i -16) i .r1'
+  IntOp $1 $1 | 0x80
+  System::Call 'user32::SetWindowLong(i $0, i -16, i r1)'
+  SendMessage $0 0x000C 0 0
+  System::Call 'user32::LoadImage(i 0, w "$PLUGINSDIR\vl-btn-next.bmp", i 0, i 0, i 0, i 0x10) i .r2'
+  SendMessage $0 0x00F7 0 $2
+  System::Call 'user32::InvalidateRect(i $0, i 0, i 1)'
+  vl_btn_sem_next:
+
+  GetDlgItem $0 $HWNDPARENT 2
+  StrCmp $0 0 vl_btn_sem_cancel
+  System::Call 'user32::GetWindowLong(i $0, i -16) i .r1'
+  IntOp $1 $1 | 0x80
+  System::Call 'user32::SetWindowLong(i $0, i -16, i r1)'
+  SendMessage $0 0x000C 0 0
+  System::Call 'user32::LoadImage(i 0, w "$PLUGINSDIR\vl-btn-cancel.bmp", i 0, i 0, i 0, i 0x10) i .r2'
+  SendMessage $0 0x00F7 0 $2
+  System::Call 'user32::InvalidateRect(i $0, i 0, i 1)'
+  vl_btn_sem_cancel:
+FunctionEnd
 
 ; Preenche a pagina com um bitmap de fundo em tamanho cheio.
 Function VLPaginaComFundo
@@ -91,48 +118,6 @@ Function VLPaginaComFundo
   IntOp $7 $7 - $5
   System::Call 'user32::SetWindowPos(i $2, i 0, i 0, i 0, i r6, i r7, i 0x0004)'
   System::Free $3
-  ; faixa tecnologica do rodape (so existe nesta pagina; sai no leave)
-  File /oname=$PLUGINSDIR\vl-footer.bmp "${BUILD_RESOURCES_DIR}\vl-footer.bmp"
-  System::Call 'user32::CreateWindowEx(i 0, w "Static", w "", i 0x5000000E, i 0, i 0, i 1, i 1, i $HWNDPARENT, i 0, i 0, i 0) i .r8'
-  System::Call 'user32::LoadImage(i 0, w "$PLUGINSDIR\vl-footer.bmp", i 0, i 0, i 0, i 0x10) i .r9'
-  SendMessage $8 0x0172 0 $9
-  StrCpy $vlFooter $8
-  System::Call 'user32::SetWindowPos(i $8, i 1, i 0, i 314, i 497, i 44, i 0x0010)'
-FunctionEnd
-
-Function VLTrazerBotoesFrente
-  GetDlgItem $0 $HWNDPARENT 1
-  StrCmp $0 0 vl_frente_sem1
-  System::Call 'user32::SetWindowPos(i $0, i 0, i 0, i 0, i 0, i 0, i 0x0013)'
-  vl_frente_sem1:
-  GetDlgItem $0 $HWNDPARENT 2
-  StrCmp $0 0 vl_frente_sem2
-  System::Call 'user32::SetWindowPos(i $0, i 0, i 0, i 0, i 0, i 0, i 0x0013)'
-  vl_frente_sem2:
-FunctionEnd
-
-Function VLBoasVindasLeave
-  StrCmp $vlFooter 0 vl_bv_sem_rodape
-  System::Call 'user32::DestroyWindow(i $vlFooter)'
-  StrCpy $vlFooter 0
-  vl_bv_sem_rodape:
-FunctionEnd
-
-Function VLConclusaoLeave
-  StrCmp $vlFooter 0 vl_cc_sem_rodape
-  System::Call 'user32::DestroyWindow(i $vlFooter)'
-  StrCpy $vlFooter 0
-  vl_cc_sem_rodape:
-FunctionEnd
-
-Function VLTimerBoasVindas
-  ${NSD_KillTimer} VLTimerBoasVindas
-  Call VLTrazerBotoesFrente
-FunctionEnd
-
-Function VLTimerConclusao
-  ${NSD_KillTimer} VLTimerConclusao
-  Call VLTrazerBotoesFrente
 FunctionEnd
 
 Function VLCriarBoasVindas
@@ -140,7 +125,7 @@ Function VLCriarBoasVindas
   File /oname=$PLUGINSDIR\vl-welcome.bmp "${BUILD_RESOURCES_DIR}\vl-welcome.bmp"
   StrCpy $1 "$PLUGINSDIR\vl-welcome.bmp"
   Call VLPaginaComFundo
-  ${NSD_CreateTimer} VLTimerBoasVindas 150
+  Call VLBotoesImagem
   nsDialogs::Show
 FunctionEnd
 
@@ -149,16 +134,23 @@ Function VLCriarConclusao
   File /oname=$PLUGINSDIR\vl-finish.bmp "${BUILD_RESOURCES_DIR}\vl-finish.bmp"
   StrCpy $1 "$PLUGINSDIR\vl-finish.bmp"
   Call VLPaginaComFundo
-  ${NSD_CreateTimer} VLTimerConclusao 150
+  Call VLBotoesImagem
+  ; na conclusao o botao 1 vira "Concluir"
+  GetDlgItem $0 $HWNDPARENT 1
+  StrCmp $0 0 vl_conclui_sem_botao
+  System::Call 'user32::LoadImage(i 0, w "$PLUGINSDIR\vl-btn-finish.bmp", i 0, i 0, i 0, i 0x10) i .r2'
+  SendMessage $0 0x00F7 0 $2
+  System::Call 'user32::InvalidateRect(i $0, i 0, i 1)'
+  vl_conclui_sem_botao:
   nsDialogs::Show
 FunctionEnd
 
 !macro customWelcomePage
-  Page custom VLCriarBoasVindas VLBoasVindasLeave
+  Page custom VLCriarBoasVindas
 !macroend
 
 !macro customFinishPage
-  Page custom VLCriarConclusao VLConclusaoLeave
+  Page custom VLCriarConclusao
 !macroend
 !endif
 

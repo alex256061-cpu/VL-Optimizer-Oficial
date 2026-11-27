@@ -10,6 +10,13 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.96': {
+    corrigido: [],
+    novo: [
+      'Boas-vindas e conclusao do instalador em tela cheia com a arte tecnologica do VL e os botoes personalizados PROXIMO/CANCELAR/CONCLUIR.',
+    ],
+  },
+
   '1.4.95': {
     corrigido: [],
     novo: [
