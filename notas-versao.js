@@ -10,6 +10,13 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.95': {
+    corrigido: [],
+    novo: [
+      'Rodape do instalador recebeu uma faixa tecnologica escura atras dos botoes, eliminando a ultima area clara do assistente.',
+    ],
+  },
+
   '1.4.94': {
     corrigido: [],
     novo: [
