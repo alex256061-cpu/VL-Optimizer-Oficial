@@ -86,14 +86,22 @@ Function VLPaginaComFundo
   nsDialogs::Create 1044
   Pop $0
   ; esconde cabecalho, marca e linhas do MUI: o fundo e a arte da pagina
-  ShowWindow $mui.Header.Text ${SW_HIDE}
-  ShowWindow $mui.Header.SubText ${SW_HIDE}
-  ShowWindow $mui.Header.Background ${SW_HIDE}
-  ShowWindow $mui.Header.Image ${SW_HIDE}
-  ShowWindow $mui.Branding.Text ${SW_HIDE}
-  ShowWindow $mui.Branding.Background ${SW_HIDE}
-  ShowWindow $mui.Line.Standard ${SW_HIDE}
-  ShowWindow $mui.Line.FullWindow ${SW_NORMAL}
+  GetDlgItem $9 $HWNDPARENT 1034
+  System::Call 'user32::ShowWindow(i r9, i 0)'
+  GetDlgItem $9 $HWNDPARENT 1037
+  System::Call 'user32::ShowWindow(i r9, i 0)'
+  GetDlgItem $9 $HWNDPARENT 1038
+  System::Call 'user32::ShowWindow(i r9, i 0)'
+  GetDlgItem $9 $HWNDPARENT 1046
+  System::Call 'user32::ShowWindow(i r9, i 0)'
+  GetDlgItem $9 $HWNDPARENT 1028
+  System::Call 'user32::ShowWindow(i r9, i 0)'
+  GetDlgItem $9 $HWNDPARENT 1256
+  System::Call 'user32::ShowWindow(i r9, i 0)'
+  GetDlgItem $9 $HWNDPARENT 1035
+  System::Call 'user32::ShowWindow(i r9, i 0)'
+  GetDlgItem $9 $HWNDPARENT 1045
+  System::Call 'user32::ShowWindow(i r9, i 5)'
   ; fundo escuro tambem no rodape da pagina personalizada
   System::Call 'gdi32::CreateSolidBrush(i 0x0007030B) i .r8'
   System::Call 'user32::SetClassLong(i $0, i -10, i r8)'
