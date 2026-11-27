@@ -9,7 +9,7 @@ const INVOKE = [
   'get-hardware', 'get-stats', 'get-mem-stats', 'get-processes', 'kill-process',
   'run-action', 'revert-action', 'restore-all', 'get-backups', 'get-caps', 'run-check',
   'measure-bottleneck', 'bn-find-game', 'bn-notify',
-  'games-scan', 'games-status', 'set-auto-mode', 'game-clean', 'shader-clean',
+  'games-scan', 'games-status', 'set-auto-mode', 'game-clean', 'shader-clean', 'game-boost-info', 'game-boost-set',
   'ram-clean', 'ram-status', 'ram-auto-set',
   'startup-list', 'startup-set', 'get-recommendations',
   'clean-scan', 'clean-status', 'clean-run', 'disk-drives', 'disk-scan', 'disk-scan-status', 'disk-scan-cancel', 'disk-open',

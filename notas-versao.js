@@ -10,6 +10,18 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.104': {
+    novo: [
+      'Game Boost por jogo (P0): perfil por jogo com prioridade AboveNormal/Alta e timer de alta resolucao, aplicado pelo modo automatico; prioridade preparada e salva antes de mutar, timer em helper PowerShell -EncodedCommand e restauracao ao fechar o jogo.',
+      'Configurador de Game Boost na pagina Jogos, com aviso quando o modo automatico esta desligado e bloqueio de perfil sem acao.',
+    ],
+    corrigido: [
+      'Modo automatico: estado do auto-state agora e atomico com backup; apps fechados sao guardados por chave e relancados por caminhos fixos, nunca por caminho vindo do estado.',
+      'Restauracao do modo automatico: lock contra concorrencia, checagem do plano base e retry de boost/base no proximo tick ou na proxima abertura.',
+      'Atalho Ctrl+Shift+Q e before-quit passam pela restauracao antes de sair.',
+    ],
+  },
+
   '1.4.103': {
     corrigido: [
       'VL Scaling no app instalado: o motor esta em app.asar.unpacked, mas o codigo procurava dentro de app.asar. O Windows nao executa esse caminho, e a tela mostrava VLScaling nao ficou aberto. Agora o caminho e resolvido para app.asar.unpacked.',

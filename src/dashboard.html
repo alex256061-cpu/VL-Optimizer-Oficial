@@ -1519,6 +1519,20 @@
 
         </div>
 
+        <div class="auto-card" style="margin-top:10px;margin-bottom:12px">
+
+          <div>
+
+            <div class="auto-title">Game Boost por jogo</div>
+
+            <div class="auto-desc">Opcional. Para cada jogo, aplica prioridade e timer de alta resolução enquanto ele está aberto — e restaura ao fechar. Só funciona com o Modo automático ligado.</div>
+
+          </div>
+
+          <button class="run-btn" onclick="openGameBoost()">Configurar</button>
+
+        </div>
+
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;flex-wrap:wrap">
 
           <div class="sec-hdr" style="margin:0">Seus Jogos</div>
@@ -1542,6 +1556,32 @@
         <div id="gta-card"></div>
 
         <div class="games-note">"Aplicar perfil" ativa o plano de energia, o Modo de Jogo e desliga a gravação em segundo plano. Vale para o Windows todo e não altera arquivos do jogo.</div>
+
+        <!-- Game Boost por jogo (modal) -->
+
+        <div class="gb-overlay" id="gb-overlay" onclick="if(event.target===this)closeGameBoost()">
+
+          <div class="gb-dialog">
+
+            <div class="gb-head"><div><div class="gb-title">Game Boost por jogo</div></div><button class="gb-x" onclick="closeGameBoost()">✕</button></div>
+
+            <div class="gb-sub">Só age com o Modo automático ligado. Aplica prioridade e timer de alta resolução ao jogo e restaura ao fechar; não mexe em serviços, apps, afinidade de núcleos, QoS nem refresh rate.</div>
+
+            <div class="gb-field"><label class="gb-label" for="gb-game">Jogo</label><select class="gb-select" id="gb-game" onchange="gbLoadSelected()"></select></div>
+
+            <div class="gb-row"><div><div class="gb-row-t">Ativar Game Boost</div><div class="gb-row-d">Desligado, este perfil não aplica nada.</div></div><div class="toggle" id="gb-enabled" onclick="this.classList.toggle('on')"></div></div>
+
+            <div class="gb-row"><div><div class="gb-row-t">Prioridade</div><div class="gb-row-d">Acima do normal é o equilíbrio seguro; Alta pode dar mais resposta, mas pode causar stutter.</div></div><select class="gb-select" id="gb-priority" style="max-width:170px"><option value="keep">Manter</option><option value="above">Acima do normal</option><option value="high">Alta</option></select></div>
+
+            <div class="gb-row"><div><div class="gb-row-t">Timer de alta resolução</div><div class="gb-row-d">Reduz a latência de timer durante a partida. Um helper fica ativo só enquanto o jogo existe.</div></div><div class="toggle" id="gb-timer" onclick="this.classList.toggle('on')"></div></div>
+
+            <div class="gb-msg" id="gb-msg"></div>
+
+            <div class="gb-actions"><button class="gb-btn" onclick="closeGameBoost()">Fechar</button><button class="gb-btn primary" id="gb-save" onclick="saveGameBoost()">Salvar perfil</button></div>
+
+          </div>
+
+        </div>
 
       </div>
 
@@ -5157,6 +5197,77 @@
 
     toast(r.autoMode ? 'Modo automático ligado: os ajustes entram quando um jogo abrir.' : 'Modo automático desligado.');
 
+  }
+
+  // ── Game Boost por jogo ────────────────────────────────────────────────
+  let gbGames = [];
+
+  function gbMsg(texto, tipo) {
+    const el = document.getElementById('gb-msg');
+    if (!el) return;
+    el.className = 'gb-msg' + (tipo ? ' ' + tipo : '');
+    el.textContent = texto || '';
+  }
+
+  function gbLoadSelected() {
+    const sel = document.getElementById('gb-game');
+    const g = gbGames.find(x => x.id === sel.value);
+    document.getElementById('gb-enabled').classList.toggle('on', !!(g && g.profile && g.profile.enabled));
+    document.getElementById('gb-priority').value = (g && g.profile && g.profile.priority) || 'keep';
+    document.getElementById('gb-timer').classList.toggle('on', !!(g && g.profile && g.profile.timer));
+    gbMsg('');
+  }
+
+  async function openGameBoost() {
+    const overlay = document.getElementById('gb-overlay');
+    if (!overlay) return;
+    let r = null;
+    try { r = await ipcRenderer.invoke('game-boost-info'); } catch (e) { }
+    if (!r || !Array.isArray(r.games)) { toast('Não foi possível carregar os perfis de Game Boost.'); return; }
+    gbGames = r.games;
+    const sel = document.getElementById('gb-game');
+    const anterior = sel.value;
+    sel.innerHTML = '';
+    for (const g of gbGames) {
+      const o = document.createElement('option');
+      o.value = g.id;
+      o.textContent = g.name;
+      sel.appendChild(o);
+    }
+    if (!gbGames.length) { toast('Nenhum jogo conhecido para configurar.'); return; }
+    if (anterior && gbGames.some(x => x.id === anterior)) sel.value = anterior;
+    gbLoadSelected();
+    overlay.classList.add('open');
+    const auto = document.getElementById('auto-toggle');
+    if (auto && !auto.classList.contains('on')) gbMsg('O Modo automático está desligado. Ligue ele para o Game Boost entrar em ação.', 'err');
+  }
+
+  function closeGameBoost() {
+    document.getElementById('gb-overlay')?.classList.remove('open');
+  }
+
+  async function saveGameBoost() {
+    const sel = document.getElementById('gb-game');
+    if (!sel || !sel.value) { gbMsg('Escolha um jogo.', 'err'); return; }
+    const profile = {
+      enabled: document.getElementById('gb-enabled').classList.contains('on'),
+      priority: document.getElementById('gb-priority').value,
+      timer: document.getElementById('gb-timer').classList.contains('on'),
+    };
+    if (profile.enabled && profile.priority === 'keep' && !profile.timer) {
+      gbMsg('Escolha prioridade acima do normal/alta ou ligue o timer para o perfil ter efeito.', 'err');
+      return;
+    }
+    const b = document.getElementById('gb-save');
+    if (b) { b.disabled = true; b.textContent = 'Salvando...'; }
+    let r = null;
+    try { r = await ipcRenderer.invoke('game-boost-set', { id: sel.value, profile }); } catch (e) { }
+    if (b) { b.disabled = false; b.textContent = 'Salvar perfil'; }
+    if (!r || !r.success) { gbMsg((r && r.error) || 'Não foi possível salvar o perfil.', 'err'); return; }
+    const g = gbGames.find(x => x.id === sel.value);
+    if (g) g.profile = r.profile;
+    gbMsg('Perfil salvo. Ele entra quando o jogo abrir.', 'ok');
+    toast('Game Boost salvo para ' + (g ? g.name : 'este jogo') + '.');
   }
 
   // Status "Rodando" de verdade, atualizado enquanto a página de jogos está aberta.

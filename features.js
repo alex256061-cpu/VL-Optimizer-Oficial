@@ -5,13 +5,35 @@ const path = require('path');
 const { execFile } = require('child_process');
 const core = require('./engine');
 const MARCA = require('./marca');
+const gameBoost = require('./game-boost');
 
 // Pasta de dados DESTA marca. Antes era 'VL Optimizer' fixo, e o build de um
 // revendedor gravava backup/DNS/limpeza na pasta do VL.
 const DATA = () => process.env.LOPT_DATA_DIR || path.join(MARCA.dirDados, 'data');
 const file = (n) => path.join(DATA(), n);
-const readJson = (n, d) => { try { return JSON.parse(fs.readFileSync(file(n), 'utf8')); } catch (e) { return d; } };
-const writeJson = (n, v) => { try { fs.mkdirSync(DATA(), { recursive: true }); fs.writeFileSync(file(n), JSON.stringify(v, null, 1)); } catch (e) {} };
+function readJson(n, d) {
+  try { return JSON.parse(fs.readFileSync(file(n), 'utf8')); }
+  catch (e) {
+    // Se o arquivo principal corromper no meio de uma escrita/crash, o backup
+    // ainda permite restaurar plano/prioridade/timer. Antes retornava null e o
+    // rollback era perdido.
+    try { return JSON.parse(fs.readFileSync(file(n) + '.bak', 'utf8')); } catch (e2) { return d; }
+  }
+}
+function writeJson(n, v) {
+  try {
+    fs.mkdirSync(DATA(), { recursive: true });
+    const destino = file(n);
+    const tmp = destino + '.tmp';
+    const texto = JSON.stringify(v, null, 1);
+    const fd = fs.openSync(tmp, 'w');
+    try { fs.writeFileSync(fd, texto, 'utf8'); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+    try { if (fs.existsSync(destino)) fs.copyFileSync(destino, destino + '.bak'); } catch (e) { }
+    try { fs.renameSync(tmp, destino); }
+    catch (e) { try { fs.rmSync(destino, { force: true }); } catch (e2) { } fs.renameSync(tmp, destino); }
+    return true;
+  } catch (e) { return false; }
+}
 
 const F = {};
 
@@ -54,10 +76,17 @@ const AUTO_MS = 5000;
 // lados: rebaixar no início e devolver a Normal no fim — é a mesma lista que o
 // autoStopScript do GDZ usa para saber quem ele rebaixou.
 const AUTO_APPS_LOW = ['chrome', 'msedge', 'firefox', 'opera', 'Discord'];
-const AUTO_APPS_CLOSE = ['OneDrive', 'Dropbox', 'GoogleDriveFS'];
+// O estado guarda CHAVES conhecidas, nunca caminho de executável. Assim um
+// auto-state adulterado não consegue fazer o app elevado dar Start-Process em
+// um .exe arbitrário. O caminho de relançamento é fixo no script abaixo.
+const AUTO_APPS_CLOSE = [
+  { key: 'onedrive', name: 'OneDrive' },
+  { key: 'dropbox', name: 'Dropbox' },
+  { key: 'googledrivefs', name: 'GoogleDriveFS' },
+];
+const AUTO_CLOSE_KEYS = new Set(AUTO_APPS_CLOSE.map((a) => a.key));
 const PLAN_HIGH = '8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c';
 const GUID_RE = /^\{?[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}\}?$/i;
-const EXE_RE = /^[A-Za-z]:\\[^"<>|?*\r\n]+\.exe$/i;
 const psQuote = (s) => "'" + String(s).replace(/'/g, "''") + "'";
 
 // Nomes de processo por jogo, como o `proc` do GDZ. Cada entrada é o nome EXATO
@@ -90,6 +119,7 @@ const procMatchers = (pat) => new RegExp('^' + pat.toLowerCase().replace(/[.+${}
 
 const auto = { on: false, state: null, timer: null, lastAt: 0 };
 let autoBusy = false;
+let autoRestorePending = false;
 
 // Mesmo `cleanAutoState` do GDZ (linha 2771): só deixa passar o que dá para
 // desfazer com segurança — um jogo conhecido, um GUID de plano válido e caminhos
@@ -98,10 +128,21 @@ function cleanAutoState(s) {
   if (!s || typeof s !== 'object') return null;
   const game = typeof s.game === 'string' && s.game ? s.game : null;
   const scheme = typeof s.scheme === 'string' && GUID_RE.test(s.scheme) ? s.scheme : '';
+  // Aceita só as chaves conhecidas. Estados antigos traziam caminhos absolutos;
+  // eles são descartados de propósito (o app não executa caminho de arquivo).
   const killed = (Array.isArray(s.killed) ? s.killed : [])
-    .filter((p) => typeof p === 'string' && EXE_RE.test(p))
-    .slice(0, 10);
-  return { game, scheme, killed };
+    .map((k) => String(k || '').toLowerCase())
+    .filter((k) => AUTO_CLOSE_KEYS.has(k))
+    .filter((k, i, a) => a.indexOf(k) === i)
+    .slice(0, 3);
+  const out = { game, scheme, killed };
+  // O boost é opcional: estados antigos (sem ele) continuam válidos e são
+  // devolvidos exatamente como antes, sem quebrar testes/comparações.
+  const boost = gameBoost.sanitizeBoostState(s.boost);
+  // O profileId precisa ser um jogo conhecido. Isso impede um auto-state
+  // adulterado de usar a restauração de prioridade em processo arbitrário.
+  if (boost && AUTO_GAME_PROCS.some(([pat]) => pat === boost.profileId)) out.boost = boost;
+  return out;
 }
 
 F.autoState = () => ({
@@ -110,6 +151,22 @@ F.autoState = () => ({
   game: auto.state ? auto.state.game : null,
   lastAt: auto.lastAt,
 });
+
+// ────────────────────────────── GAME BOOST POR JOGO ──────────────────────────
+// As ações reais (prioridade e timer) ficam em game-boost.js. O features.js só
+// guarda o vínculo com o modo automático e o estado no auto-state.
+F.gameBoostInfo = () => gameBoost.listInfo(AUTO_GAME_PROCS);
+F.gameBoostSet = (arg) => {
+  const a = arg && typeof arg === 'object' ? arg : {};
+  const ids = new Set(AUTO_GAME_PROCS.map((g) => g[0]));
+  return gameBoost.setProfile(a.id, a.profile ? a.profile : a, ids);
+};
+
+async function restaurarGameBoost(state) {
+  if (!state || typeof state !== 'object') return { success: true, warnings: [] };
+  try { return await gameBoost.restore(state); }
+  catch (e) { return { success: false, warnings: ['Game Boost não pôde ser restaurado: ' + e.message] }; }
+}
 
 F.autoSet = (arg) => {
   const on = typeof arg === 'object' ? !!arg.on : !!arg;
@@ -131,11 +188,15 @@ F.autoStart = () => {
 };
 
 F.autoStop = () => {
-  if (auto.timer) clearInterval(auto.timer);
-  auto.timer = null;
-  // Desliga o modo, mas o desfazer NÃO é sincrônico aqui: o autoTick seguinte
-  // vê `!auto.on` com estado preenchido e desfaz (igual ao ramo do GDZ).
-  if (auto.state) F.autoTick();
+  // NÃO limpa o interval aqui. Se o tick estiver ocupado, limpar o timer fazia
+  // a restauração nunca mais acontecer. O interval é unref e, com auto.on=false
+  // + state vazio, o tick retorna imediatamente.
+  if (!auto.state) {
+    if (auto.timer) { clearInterval(auto.timer); auto.timer = null; }
+    return;
+  }
+  if (autoBusy) autoRestorePending = true;
+  F.autoTick();
 };
 
 const saveAutoState = (s) => writeJson(AUTO_STATE_FILE, s);
@@ -174,27 +235,61 @@ function autoStartScript(caps) {
   const skipPlan = !!(caps && (caps.x3dDual || caps.laptop));
   const planPart = skipPlan ? '' :
     "if ($scheme -and $scheme -ne '" + PLAN_HIGH + "') { powercfg /setactive " + PLAN_HIGH + " 2>$null; $plan = ($LASTEXITCODE -eq 0) }";
+  const closeNames = AUTO_APPS_CLOSE.map((a) => psQuote(a.name)).join(',');
   return `
     $scheme = [regex]::Match((powercfg /getactivescheme | Out-String), '[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}').Value
     foreach ($n in @(${AUTO_APPS_LOW.map(psQuote).join(',')})) { Get-Process -Name $n -ErrorAction SilentlyContinue | ForEach-Object { try { $_.PriorityClass = 'BelowNormal' } catch {} } }
     $killed = @()
-    foreach ($n in @(${AUTO_APPS_CLOSE.map(psQuote).join(',')})) { Get-Process -Name $n -ErrorAction SilentlyContinue | ForEach-Object { if ($_.Path) { $killed += $_.Path }; Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue } }
+    foreach ($n in @(${closeNames})) {
+      Get-Process -Name $n -ErrorAction SilentlyContinue | ForEach-Object {
+        $killed += ([string]$_.ProcessName).ToLower()
+        Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue
+      }
+    }
     $plan = $false
     ${planPart}
     Write-Output ('VL_AUTO: ' + (ConvertTo-Json -InputObject ([ordered]@{ scheme = $(if ($plan) { $scheme } else { '' }); killed = @($killed | Select-Object -Unique) }) -Compress))`;
 }
 
-// `autoStopScript` do GDZ (linha 2770), montado do mesmo jeito.
+// `autoStopScript`: relança SÓ os apps conhecidos, por caminhos fixos. O estado
+// nunca fornece um caminho de .exe para Start-Process. Se o app não estiver no
+// caminho esperado, ele simplesmente não é relançado.
 function autoStopScript(state) {
   const schemePart = state && state.scheme ? "powercfg /setactive '" + String(state.scheme).replace(/'/g, "''") + "' 2>$null" : '';
-  const killedList = (state && Array.isArray(state.killed) ? state.killed : []).map(psQuote).join(',') || "''";
+  const killedList = (state && Array.isArray(state.killed) ? state.killed.filter((k) => AUTO_CLOSE_KEYS.has(String(k).toLowerCase())) : []);
+  const killedPS = killedList.map((k) => psQuote(String(k).toLowerCase())).join(',') || "''";
   return `
     foreach ($n in @(${AUTO_APPS_LOW.map(psQuote).join(',')})) { Get-Process -Name $n -ErrorAction SilentlyContinue | ForEach-Object { try { if ($_.PriorityClass -eq 'BelowNormal') { $_.PriorityClass = 'Normal' } } catch {} } }
     ${schemePart}
-    foreach ($p in @(${killedList})) {
-      if (-not $p -or -not (Test-Path -LiteralPath $p)) { continue }
-      if ($p -match 'OneDrive\\.exe$') { Start-Process -FilePath $p -ArgumentList '/background' -ErrorAction SilentlyContinue } else { Start-Process -FilePath $p -ErrorAction SilentlyContinue }
+    function Start-VLAutoApp($key) {
+      switch ($key) {
+        'onedrive' {
+          $p = Join-Path $env:LOCALAPPDATA 'Microsoft\\OneDrive\\OneDrive.exe'
+          if (Test-Path -LiteralPath $p) { Start-Process -FilePath $p -ArgumentList '/background' -ErrorAction SilentlyContinue }
+          return
+        }
+        'dropbox' {
+          foreach ($p in @(
+            (Join-Path $env:ProgramFiles 'Dropbox\\Dropbox.exe'),
+            (Join-Path $env:LOCALAPPDATA 'Dropbox\\Dropbox.exe'),
+            (Join-Path $env:ProgramFiles 'Dropbox\\Client\\Dropbox.exe'))) {
+            if (Test-Path -LiteralPath $p) { Start-Process -FilePath $p -ErrorAction SilentlyContinue; return }
+          }
+          return
+        }
+        'googledrivefs' {
+          foreach ($root in @(
+            (Join-Path $env:ProgramFiles 'Google\\Drive File Stream'),
+            (Join-Path $env:LOCALAPPDATA 'Google\\Drive File Stream'))) {
+            if (-not (Test-Path -LiteralPath $root)) { continue }
+            $x = Get-ChildItem -LiteralPath $root -Filter 'GoogleDriveFS.exe' -Recurse -Depth 3 -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($x) { Start-Process -FilePath $x.FullName -ErrorAction SilentlyContinue; return }
+          }
+          return
+        }
+      }
     }
+    foreach ($k in @(${killedPS})) { if ($k) { Start-VLAutoApp $k } }
     Write-Output 'ok'`;
 }
 
@@ -203,34 +298,136 @@ function autoStopScript(state) {
 // rodem ao mesmo tempo (o setInterval de 5 s não espera o anterior terminar).
 F.autoTick = async () => {
   if (autoBusy) return;
-  if (!auto.on && !auto.state) return;
+  if (!auto.on && !auto.state) {
+    if (auto.timer) { clearInterval(auto.timer); auto.timer = null; }
+    return;
+  }
   autoBusy = true;
   try {
     const games = F.runningGameIds(await F.runningProcs());
     const state = cleanAutoState(auto.state);
+    // Jogo trocou (ou sobrou um estado de restauração pendente) com um jogo
+    // novo aberto: restaura o estado antigo primeiro e só então o próximo tick
+    // aplica o perfil do jogo atual. Sem isto, a prioridade/timer ficaria no jogo
+    // errado até o próximo fechamento.
+    if (state && games.length && (!state.game || state.game !== games[0].id)) {
+      const boostRestore = await restaurarGameBoost(state.boost);
+      const basePS = await core.ps(autoStopScript(state), 30000);
+      const baseOk = !!(basePS && basePS.ok);
+      const boostOk = boostRestore.success !== false;
+      if (baseOk && boostOk) {
+        auto.state = null;
+        saveAutoState(null);
+        setTimeout(() => { F.autoTick(); }, 0);
+      } else {
+        auto.state = cleanAutoState({
+          game: baseOk ? null : state.game,
+          scheme: baseOk ? '' : state.scheme,
+          killed: baseOk ? [] : state.killed,
+          boost: boostOk ? null : state.boost,
+        });
+        saveAutoState(auto.state);
+      }
+      auto.lastAt = Date.now();
+      return;
+    }
     if (auto.on && games.length && !state) {
       const caps = await core.getCaps();
       const r = await core.ps(autoStartScript(caps), 30000);
       const m = /^VL_AUTO:\s*(.+)$/m.exec(r.out || '');
       let parsed = {};
       if (m) { try { parsed = JSON.parse(m[1]); } catch (e) { parsed = {}; } }
+
+      // O estado-base é salvo ANTES de aplicar o Game Boost. Se o app morrer no
+      // meio, o próximo start ainda sabe o que precisa restaurar.
+      auto.state = cleanAutoState({ ...parsed, game: games[0].id }) ||
+        { game: games[0].id, scheme: '', killed: [] };
+      if (!saveAutoState(auto.state)) {
+        // Sem estado gravado não há rollback confiável; desfaz a base agora e
+        // aborta o boost. Se o desfazer também falhar, NÃO some com o estado:
+        // guarda em memória para o before-quit/autoRestore tentar de novo.
+        const reverso = await core.ps(autoStopScript(auto.state), 30000).catch(() => null);
+        if (reverso && reverso.ok) {
+          auto.state = null;
+          saveAutoState(null);
+          F.autoNotify('Não consegui salvar o estado do modo automático; ajustes desfeitos.');
+        } else {
+          saveAutoState(auto.state);
+          F.autoNotify('Não consegui salvar o estado do modo automático nem desfazer tudo; vou tentar de novo na saída.');
+        }
+        return;
+      }
+
+      // Game Boost é opcional e roda depois do pacote base. Se uma ação falhar,
+      // o modo automático continua (o aviso aparece no resultado, não quebra o tick).
+      // O callback checkpoint() grava cada etapa no auto-state antes da seguinte.
+      const baseState = auto.state;
+      let partialBoost = null;
+      let boost = { state: null, warnings: [] };
+      try {
+        const profile = gameBoost.profileFor(games[0].id);
+        if (profile.enabled) {
+          boost = await gameBoost.apply(games[0].id, profile, (partial) => {
+            partialBoost = partial;
+            auto.state = cleanAutoState({ ...baseState, boost: partial });
+            if (!saveAutoState(auto.state)) throw new Error('não foi possível gravar o estado do Game Boost');
+          });
+        }
+      } catch (e) {
+        // Se já preparamos/alteramos algo antes do erro, o checkpoint tem o
+        // estado parcial; ele NÃO pode ser descartado, senão o rollback se perde.
+        boost = { state: partialBoost, warnings: ['Game Boost não pôde ser aplicado: ' + e.message] };
+      }
+
       // O GDZ faz `cleanAutoState({...parsed, game}) || {game, scheme:'', killed:[]}`.
       // O `||` nunca dispara lá (cleanAutoState({}) devolve objeto, não null), então
       // o fallback é inalcançável — mantido só como rede de segurança.
-      auto.state = cleanAutoState({ ...parsed, game: games[0].id }) ||
-        { game: games[0].id, scheme: '', killed: [] };
-      saveAutoState(auto.state);
+      auto.state = cleanAutoState({ ...baseState, boost: boost.state }) || baseState;
+      if (!saveAutoState(auto.state)) {
+        // Não deixa prioridade/timer aplicados sem um estado capaz de desfazer.
+        try { await restaurarGameBoost(boost.state); } catch (e) { }
+        try { await core.ps(autoStopScript(baseState), 30000); } catch (e) { }
+        auto.state = null;
+        saveAutoState(null);
+        F.autoNotify('Não consegui salvar o estado do Game Boost; os ajustes foram desfeitos.');
+        return;
+      }
       auto.lastAt = Date.now();
-      F.autoNotify('Modo automático ativo para ' + games[0].name + '.');
+      if (boost.warnings.length) F.autoNotify('Modo automático ativo para ' + games[0].name + '. Game Boost parcial: ' + boost.warnings[0]);
+      else F.autoNotify('Modo automático ativo para ' + games[0].name + '.');
     } else if (state && (!games.length || !auto.on)) {
-      await core.ps(autoStopScript(state), 30000);
-      auto.state = null;
-      saveAutoState(null);
+      const boostRestore = await restaurarGameBoost(state.boost);
+      const basePS = await core.ps(autoStopScript(state), 30000);
+      const baseOk = !!(basePS && basePS.ok);
+      const boostOk = boostRestore.success !== false;
+      if (!baseOk || !boostOk) {
+        // Mantém no estado exatamente o que ainda falta restaurar. A base
+        // (plano/apps) e o boost são independentes; nada é limpo no escuro.
+        auto.state = cleanAutoState({
+          game: baseOk ? null : state.game,
+          scheme: baseOk ? '' : state.scheme,
+          killed: baseOk ? [] : state.killed,
+          boost: boostOk ? null : state.boost,
+        });
+        saveAutoState(auto.state);
+      } else {
+        auto.state = null;
+        saveAutoState(null);
+      }
       auto.lastAt = Date.now();
+      if (!baseOk) F.autoNotify('Não foi possível restaurar o plano de energia/apps do modo automático. Vou tentar de novo.');
+      else if (!boostOk && boostRestore.warnings.length) F.autoNotify(boostRestore.warnings[0]);
     }
   } catch (e) {
   } finally {
     autoBusy = false;
+    if (autoRestorePending) {
+      autoRestorePending = false;
+      setTimeout(() => { F.autoTick(); }, 0);
+    } else if (!auto.on && !auto.state && auto.timer) {
+      clearInterval(auto.timer);
+      auto.timer = null;
+    }
   }
 };
 
@@ -258,12 +455,42 @@ F.__setAutoState = (s) => { auto.state = cleanAutoState(s); };
 // Chamado pelo "desfazer tudo" / saída do app: devolve o PC ao estado de antes
 // sem depender do próximo tick.
 F.autoRestore = async () => {
-  const state = cleanAutoState(auto.state);
-  if (!state) return { success: true };
-  await core.ps(autoStopScript(state), 30000);
-  auto.state = null;
-  saveAutoState(null);
-  return { success: true };
+  // Uma única transação por vez: espera o tick atual terminar e segura o lock
+  // enquanto restaura. Sem timeout que quebre a exclusão mútua; os comandos
+  // internos já têm timeout próprio.
+  while (autoBusy) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  autoBusy = true;
+  try {
+    const state = cleanAutoState(auto.state);
+    if (!state) return { success: true };
+    const boostRestore = await restaurarGameBoost(state.boost);
+    const basePS = await core.ps(autoStopScript(state), 30000);
+    const baseOk = !!(basePS && basePS.ok);
+    const boostOk = boostRestore.success !== false;
+    const warnings = (boostRestore.warnings || []).concat(baseOk ? [] : ['Não foi possível restaurar o modo automático.']);
+    if (!baseOk || !boostOk) {
+      // Mantém o que falhou para uma nova tentativa na próxima abertura do app.
+      auto.state = cleanAutoState({
+        game: baseOk ? null : state.game,
+        scheme: baseOk ? '' : state.scheme,
+        killed: baseOk ? [] : state.killed,
+        boost: boostOk ? null : state.boost,
+      });
+      if (!saveAutoState(auto.state)) warnings.push('Não consegui salvar o estado pendente de restauração.');
+    } else {
+      auto.state = null;
+      if (!saveAutoState(null)) warnings.push('Não consegui limpar o estado salvo; a próxima abertura tentará restaurar de novo (é seguro).');
+    }
+    return { success: baseOk && boostOk, warnings };
+  } finally {
+    autoBusy = false;
+    if (!auto.on && !auto.state && auto.timer) {
+      clearInterval(auto.timer);
+      auto.timer = null;
+    }
+  }
 };
 
 // ────────────────────────────── LIMPEZA DE RAM ──────────────────────────────

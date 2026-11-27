@@ -615,6 +615,8 @@ const CANAL_FEATURE = {
   'games-status': 'jogos',
   'game-clean': 'jogos',
   'shader-clean': 'jogos',
+  'game-boost-info': 'jogos',
+  'game-boost-set': 'otimizar',
   // Canais que MUDAM o PC e pertencem a páginas pagas. No GDZ eles simplesmente não
   // estão na lista de canais livres, então um cliente grátis não passa. Aqui o mapa
   // antigo só tinha os 19 de medição: dava para aplicar tweak, limpar RAM, rodar a
@@ -1020,6 +1022,8 @@ H('apps-remove-leftovers', (a) => ex.appsRemoveLeftovers(a));
 H('games-scan', async () => { const r = await ex.gamesScan(); const a = feat.autoState(); return { ...r, autoMode: a.on, autoGame: a.game }; });
 H('games-status', async () => { const r = await ex.gamesStatus(); const a = feat.autoState(); return { ...r, autoMode: a.on, autoGame: a.game }; });
 H('set-auto-mode', ({ on }) => feat.autoSet(on));
+H('game-boost-info', () => feat.gameBoostInfo());
+H('game-boost-set', (a) => feat.gameBoostSet(a));
 H('game-clean', (a) => ex.gameClean(a));
 H('shader-clean', () => ex.shaderClean());
 H('fivem-gfx-status', () => ex.fivemGfxStatus());
@@ -1462,9 +1466,19 @@ app.whenReady().then(async () => {
   // processo, que já está elevado — a mensagem nasce com o mesmo nível e atravessa.
   // app.exit(0) sai na hora, sem depender de fechar janela.
   try {
-    globalShortcut.register('Control+Shift+Q', () => {
+    globalShortcut.register('Control+Shift+Q', async () => {
       try { fs.appendFileSync(path.join(process.env.LOCALAPPDATA || os.homedir(), MARCA.nomeCurto, 'crash.log'), '[' + new Date().toISOString() + '] atalho Ctrl+Shift+Q: saindo' + String.fromCharCode(10)); } catch (e) { }
       app.isQuitting = true;
+      // app.exit(0) NÃO passa por before-quit. Restaura planos/prioridade/timer
+      // antes de sair. O teto duro impede que o atalho de EMERGÊNCIA fique
+      // esperando um PowerShell travado; o estado fica no disco para o próximo
+      // start terminar a restauração.
+      try {
+        await Promise.race([
+          Promise.resolve(feat.autoRestore()).catch(() => { }),
+          new Promise((resolve) => setTimeout(resolve, 10000)),
+        ]);
+      } catch (e) { }
       app.exit(0);
     });
   } catch (e) {}
@@ -1527,6 +1541,22 @@ setInterval(() => {
 // Marca que o app está fechando: usado pela recuperação de crash para não
 // recriar a janela no meio da saída.
 app.on('before-quit', () => { app.isQuitting = true; });
+
+// Se o app fechar com um jogo aberto, o modo automático/Game Boost precisa
+// restaurar plano, prioridade e timer ANTES de sair. O timeout evita prender o
+// fechamento para sempre se um comando do Windows travar.
+let _restaurandoNaSaida = false;
+app.on('before-quit', (e) => {
+  if (_restaurandoNaSaida) return;
+  let ativo = false;
+  try { ativo = feat.autoState().active === true; } catch (err) { ativo = false; }
+  if (!ativo) return;
+  _restaurandoNaSaida = true;
+  e.preventDefault();
+  const limite = new Promise((resolve) => setTimeout(resolve, 60000));
+  Promise.race([Promise.resolve(feat.autoRestore()).catch(() => { }), limite])
+    .finally(() => { try { app.isQuitting = true; } catch (err) { } app.quit(); });
+});
 
 // O `ex.pcLiveStop()` é o `app.on("will-quit", pcLiveStop)` do GDZ: derruba o
 // nvidia-smi e o laço do painel-live.ps1 na saída. Sem ele o laço ainda morreria
