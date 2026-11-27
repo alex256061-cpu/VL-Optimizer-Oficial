@@ -176,13 +176,13 @@ Function VLRestaurarBotoes
 FunctionEnd
 
 Function VLTimerBoasVindas
-  !insertmacro NSD_KillTimer VLTimerBoasVindas
+  ${NSD_KillTimer} VLTimerBoasVindas
   Call VLBotoesImagem
   Call VLTrazerBotoesFrente
 FunctionEnd
 
 Function VLTimerConclusao
-  !insertmacro NSD_KillTimer VLTimerConclusao
+  ${NSD_KillTimer} VLTimerConclusao
   Call VLBotoesImagem
   GetDlgItem $0 $HWNDPARENT 1
   StrCmp $0 0 vl_timer_sem_botao
@@ -198,7 +198,7 @@ Function VLCriarBoasVindas
   File /oname=$PLUGINSDIR\vl-welcome.bmp "${BUILD_RESOURCES_DIR}\vl-welcome.bmp"
   StrCpy $1 "$PLUGINSDIR\vl-welcome.bmp"
   Call VLPaginaComFundo
-  !insertmacro NSD_CreateTimer VLTimerBoasVindas 150
+  ${NSD_CreateTimer} VLTimerBoasVindas 150
   nsDialogs::Show
 FunctionEnd
 
@@ -207,7 +207,7 @@ Function VLCriarConclusao
   File /oname=$PLUGINSDIR\vl-finish.bmp "${BUILD_RESOURCES_DIR}\vl-finish.bmp"
   StrCpy $1 "$PLUGINSDIR\vl-finish.bmp"
   Call VLPaginaComFundo
-  !insertmacro NSD_CreateTimer VLTimerConclusao 150
+  ${NSD_CreateTimer} VLTimerConclusao 150
   nsDialogs::Show
 FunctionEnd
 
