@@ -10,6 +10,13 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.99': {
+    corrigido: [
+      'Remove a duplicacao do nome VL na barra de titulo e na sidebar: agora aparece apenas o logo VL + Optimizer, com os controles da janela a direita.',
+    ],
+    novo: [],
+  },
+
   '1.4.98': {
     corrigido: [
       'Instalador: remove a faixa que estava cobrindo os botoes na tela de boas-vindas e conclusao.',
