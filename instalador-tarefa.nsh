@@ -35,24 +35,8 @@
     GetDlgItem $1 $HWNDPARENT 2
     System::Call 'uxtheme::SetWindowTheme(i $1, w "", w "")'
     SetCtlColors $1 "F5F1F6" "1A0710"
-    ; faixa tecnologica do rodape, criada ANTES dos botoes/paginas
-    InitPluginsDir
-    File /oname=$PLUGINSDIR\vl-footer.bmp "${BUILD_RESOURCES_DIR}\vl-footer.bmp"
-    System::Call 'user32::CreateWindowEx(i 0, w "Static", w "", i 0x5000000E, i 0, i 0, i 1, i 1, i $HWNDPARENT, i 0, i 0, i 0) i .r2'
-    System::Call 'user32::LoadImage(i 0, w "$PLUGINSDIR\vl-footer.bmp", i 0, i 0, i 0, i 0x10) i .r3'
-    SendMessage $2 0x0172 0 $3
-    StrCpy $vlFooter $2
-    System::Call 'user32::SetWindowPos(i $2, i 1, i 0, i 314, i 497, i 44, i 0x0010)'
   FunctionEnd
 
-  !ifndef BUILD_UNINSTALLER
-  Function VLColocarRodapeAtras
-    GetDlgItem $0 $HWNDPARENT 2
-    StrCmp $0 0 vl_rodape_sem_cancel
-    System::Call 'user32::SetWindowPos(i $vlFooter, i r0, i 0, i 0, i 0, i 0, i 0x0013)'
-    vl_rodape_sem_cancel:
-  FunctionEnd
-  !endif
 !macroend
 
 !define MUI_BGCOLOR "0B0307"
@@ -136,6 +120,59 @@ Function VLPaginaComFundo
   IntOp $7 $7 - $5
   System::Call 'user32::SetWindowPos(i $2, i 0, i 0, i 0, i r6, i r7, i 0x0004)'
   System::Free $3
+  ; faixa tecnologica do rodape (so existe nesta pagina; sai no leave)
+  File /oname=$PLUGINSDIR\vl-footer.bmp "${BUILD_RESOURCES_DIR}\vl-footer.bmp"
+  System::Call 'user32::CreateWindowEx(i 0, w "Static", w "", i 0x5000000E, i 0, i 0, i 1, i 1, i $HWNDPARENT, i 0, i 0, i 0) i .r8'
+  System::Call 'user32::LoadImage(i 0, w "$PLUGINSDIR\vl-footer.bmp", i 0, i 0, i 0, i 0x10) i .r9'
+  SendMessage $8 0x0172 0 $9
+  StrCpy $vlFooter $8
+  System::Call 'user32::SetWindowPos(i $8, i 1, i 0, i 314, i 497, i 44, i 0x0010)'
+FunctionEnd
+
+Function VLTrazerBotoesFrente
+  GetDlgItem $0 $HWNDPARENT 1
+  StrCmp $0 0 vl_frente_sem1
+  System::Call 'user32::SetWindowPos(i $0, i 0, i 0, i 0, i 0, i 0, i 0x0013)'
+  vl_frente_sem1:
+  GetDlgItem $0 $HWNDPARENT 2
+  StrCmp $0 0 vl_frente_sem2
+  System::Call 'user32::SetWindowPos(i $0, i 0, i 0, i 0, i 0, i 0, i 0x0013)'
+  vl_frente_sem2:
+FunctionEnd
+
+Function VLBoasVindasLeave
+  Call VLRestaurarBotoes
+  StrCmp $vlFooter 0 vl_bv_sem_rodape
+  System::Call 'user32::DestroyWindow(i $vlFooter)'
+  StrCpy $vlFooter 0
+  vl_bv_sem_rodape:
+FunctionEnd
+
+Function VLConclusaoLeave
+  Call VLRestaurarBotoes
+  StrCmp $vlFooter 0 vl_cc_sem_rodape
+  System::Call 'user32::DestroyWindow(i $vlFooter)'
+  StrCpy $vlFooter 0
+  vl_cc_sem_rodape:
+FunctionEnd
+
+Function VLRestaurarBotoes
+  GetDlgItem $0 $HWNDPARENT 1
+  StrCmp $0 0 vl_rest_sem1
+  System::Call 'user32::GetWindowLong(i $0, i -16) i .r1'
+  IntOp $1 $1 & 0xFFFFFF7F
+  System::Call 'user32::SetWindowLong(i $0, i -16, i r1)'
+  SendMessage $0 0x00F7 0 0
+  System::Call 'user32::InvalidateRect(i $0, i 0, i 1)'
+  vl_rest_sem1:
+  GetDlgItem $0 $HWNDPARENT 2
+  StrCmp $0 0 vl_rest_sem2
+  System::Call 'user32::GetWindowLong(i $0, i -16) i .r1'
+  IntOp $1 $1 & 0xFFFFFF7F
+  System::Call 'user32::SetWindowLong(i $0, i -16, i r1)'
+  SendMessage $0 0x00F7 0 0
+  System::Call 'user32::InvalidateRect(i $0, i 0, i 1)'
+  vl_rest_sem2:
 FunctionEnd
 
 Function VLCriarBoasVindas
@@ -144,7 +181,7 @@ Function VLCriarBoasVindas
   StrCpy $1 "$PLUGINSDIR\vl-welcome.bmp"
   Call VLPaginaComFundo
   Call VLBotoesImagem
-  Call VLColocarRodapeAtras
+  Call VLTrazerBotoesFrente
   nsDialogs::Show
 FunctionEnd
 
@@ -161,16 +198,16 @@ Function VLCriarConclusao
   SendMessage $0 0x00F7 0 $2
   System::Call 'user32::InvalidateRect(i $0, i 0, i 1)'
   vl_conclui_sem_botao:
-  Call VLColocarRodapeAtras
+  Call VLTrazerBotoesFrente
   nsDialogs::Show
 FunctionEnd
 
 !macro customWelcomePage
-  Page custom VLCriarBoasVindas
+  Page custom VLCriarBoasVindas VLBoasVindasLeave
 !macroend
 
 !macro customFinishPage
-  Page custom VLCriarConclusao
+  Page custom VLCriarConclusao VLConclusaoLeave
 !macroend
 !endif
 
