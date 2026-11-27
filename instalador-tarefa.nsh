@@ -50,6 +50,7 @@
 ; Troca o desenho dos botoes nativos por imagens do VL, mantendo os mesmos IDs
 ; (o MUI continua controlando habilitar/desabilitar e a navegacao).
 !ifndef BUILD_UNINSTALLER
+Var vlFooter
 Function VLBotoesImagem
   InitPluginsDir
   File /oname=$PLUGINSDIR\vl-btn-next.bmp "${BUILD_RESOURCES_DIR}\btn-proximo.bmp"
@@ -118,6 +119,35 @@ Function VLPaginaComFundo
   IntOp $7 $7 - $5
   System::Call 'user32::SetWindowPos(i $2, i 0, i 0, i 0, i r6, i r7, i 0x0004)'
   System::Free $3
+  ; faixa tecnologica do rodape (sai no leave da pagina)
+  File /oname=$PLUGINSDIR\vl-footer.bmp "${BUILD_RESOURCES_DIR}\vl-footer.bmp"
+  System::Call 'user32::CreateWindowEx(i 0, w "Static", w "", i 0x5000000E, i 0, i 0, i 1, i 1, i $HWNDPARENT, i 0, i 0, i 0) i .r8'
+  System::Call 'user32::LoadImage(i 0, w "$PLUGINSDIR\vl-footer.bmp", i 0, i 0, i 0, i 0x10) i .r9'
+  SendMessage $8 0x0172 0 $9
+  StrCpy $vlFooter $8
+  System::Call 'user32::SetWindowPos(i $8, i 1, i 0, i 314, i 497, i 44, i 0x0010)'
+FunctionEnd
+Function VLTrazerBotoesFrente
+  GetDlgItem $0 $HWNDPARENT 1
+  StrCmp $0 0 vl_fr_sem1
+  System::Call 'user32::SetWindowPos(i $0, i 0, i 0, i 0, i 0, i 0, i 0x0013)'
+  vl_fr_sem1:
+  GetDlgItem $0 $HWNDPARENT 2
+  StrCmp $0 0 vl_fr_sem2
+  System::Call 'user32::SetWindowPos(i $0, i 0, i 0, i 0, i 0, i 0, i 0x0013)'
+  vl_fr_sem2:
+FunctionEnd
+Function VLBoasVindasLeave
+  StrCmp $vlFooter 0 vl_bv_sem
+  System::Call 'user32::DestroyWindow(i $vlFooter)'
+  StrCpy $vlFooter 0
+  vl_bv_sem:
+FunctionEnd
+Function VLConclusaoLeave
+  StrCmp $vlFooter 0 vl_cc_sem
+  System::Call 'user32::DestroyWindow(i $vlFooter)'
+  StrCpy $vlFooter 0
+  vl_cc_sem:
 FunctionEnd
 
 Function VLCriarBoasVindas
@@ -126,6 +156,7 @@ Function VLCriarBoasVindas
   StrCpy $1 "$PLUGINSDIR\vl-welcome.bmp"
   Call VLPaginaComFundo
   Call VLBotoesImagem
+  Call VLTrazerBotoesFrente
   nsDialogs::Show
 FunctionEnd
 
@@ -142,15 +173,16 @@ Function VLCriarConclusao
   SendMessage $0 0x00F7 0 $2
   System::Call 'user32::InvalidateRect(i $0, i 0, i 1)'
   vl_conclui_sem_botao:
+  Call VLTrazerBotoesFrente
   nsDialogs::Show
 FunctionEnd
 
 !macro customWelcomePage
-  Page custom VLCriarBoasVindas
+  Page custom VLCriarBoasVindas VLBoasVindasLeave
 !macroend
 
 !macro customFinishPage
-  Page custom VLCriarConclusao
+  Page custom VLCriarConclusao VLConclusaoLeave
 !macroend
 !endif
 

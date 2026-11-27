@@ -10,6 +10,13 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.97': {
+    corrigido: [],
+    novo: [
+      'Instalador com telas cheias de boas-vindas/conclusao e faixa tecnologica escura no rodape, mantendo os botoes visiveis.',
+    ],
+  },
+
   '1.4.96': {
     corrigido: [],
     novo: [
