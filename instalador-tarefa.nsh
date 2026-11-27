@@ -91,13 +91,11 @@ FunctionEnd
 !macro customWelcomePage
   !define MUI_PAGE_CUSTOMFUNCTION_SHOW VLBoasVindasShow
   !insertmacro MUI_PAGE_WELCOME
-  !undef MUI_PAGE_CUSTOMFUNCTION_SHOW
 !macroend
 
 !macro customFinishPage
   !define MUI_PAGE_CUSTOMFUNCTION_SHOW VLConclusaoShow
   !insertmacro MUI_PAGE_FINISH
-  !undef MUI_PAGE_CUSTOMFUNCTION_SHOW
 !macroend
 !endif
 
