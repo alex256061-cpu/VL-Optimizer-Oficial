@@ -39,6 +39,7 @@
     "escrever-settings.js",
     "gdz-launch.js",
     "features.js",
+    "game-boost.js",
     "elevacao.js",
     "notas-versao.js",
     "foto-sistema.js",
