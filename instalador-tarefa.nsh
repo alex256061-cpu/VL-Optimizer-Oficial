@@ -52,11 +52,20 @@
 ; (o MUI continua controlando habilitar/desabilitar e a navegacao).
 !ifndef BUILD_UNINSTALLER
 Var vlFooter
-Function VLExtrairBotoes
+Var vlImgNext
+Var vlImgCancel
+Var vlImgFinish
+Function VLCarregarImagensBotoes
   InitPluginsDir
   File /oname=$PLUGINSDIR\vl-btn-next.bmp "${BUILD_RESOURCES_DIR}\btn-proximo.bmp"
   File /oname=$PLUGINSDIR\vl-btn-cancel.bmp "${BUILD_RESOURCES_DIR}\btn-cancelar.bmp"
   File /oname=$PLUGINSDIR\vl-btn-finish.bmp "${BUILD_RESOURCES_DIR}\btn-concluir.bmp"
+  System::Call 'user32::LoadImage(i 0, w "$PLUGINSDIR\vl-btn-next.bmp", i 0, i 0, i 0, i 0x10) i .r0'
+  StrCpy $vlImgNext $0
+  System::Call 'user32::LoadImage(i 0, w "$PLUGINSDIR\vl-btn-cancel.bmp", i 0, i 0, i 0, i 0x10) i .r0'
+  StrCpy $vlImgCancel $0
+  System::Call 'user32::LoadImage(i 0, w "$PLUGINSDIR\vl-btn-finish.bmp", i 0, i 0, i 0, i 0x10) i .r0'
+  StrCpy $vlImgFinish $0
 FunctionEnd
 
 Function VLBotoesImagem
@@ -67,8 +76,7 @@ Function VLBotoesImagem
   IntOp $1 $1 | 0x80
   System::Call 'user32::SetWindowLong(i $0, i -16, i r1)'
   SendMessage $0 0x000C 0 0
-  System::Call 'user32::LoadImage(i 0, w "$PLUGINSDIR\vl-btn-next.bmp", i 0, i 0, i 0, i 0x10) i .r2'
-  SendMessage $0 0x00F7 0 $2
+  SendMessage $0 0x00F7 0 $vlImgNext
   System::Call 'user32::InvalidateRect(i $0, i 0, i 1)'
   vl_btn_sem_next:
 
@@ -78,8 +86,7 @@ Function VLBotoesImagem
   IntOp $1 $1 | 0x80
   System::Call 'user32::SetWindowLong(i $0, i -16, i r1)'
   SendMessage $0 0x000C 0 0
-  System::Call 'user32::LoadImage(i 0, w "$PLUGINSDIR\vl-btn-cancel.bmp", i 0, i 0, i 0, i 0x10) i .r2'
-  SendMessage $0 0x00F7 0 $2
+  SendMessage $0 0x00F7 0 $vlImgCancel
   System::Call 'user32::InvalidateRect(i $0, i 0, i 1)'
   vl_btn_sem_cancel:
 FunctionEnd
@@ -188,8 +195,7 @@ Function VLTimerConclusao
   Call VLBotoesImagem
   GetDlgItem $0 $HWNDPARENT 1
   StrCmp $0 0 vl_timer_sem_botao
-  System::Call 'user32::LoadImage(i 0, w "$PLUGINSDIR\vl-btn-finish.bmp", i 0, i 0, i 0, i 0x10) i .r2'
-  SendMessage $0 0x00F7 0 $2
+  SendMessage $0 0x00F7 0 $vlImgFinish
   System::Call 'user32::InvalidateRect(i $0, i 0, i 1)'
   vl_timer_sem_botao:
   Call VLTrazerBotoesFrente
@@ -197,7 +203,7 @@ FunctionEnd
 
 Function VLCriarBoasVindas
   InitPluginsDir
-  Call VLExtrairBotoes
+  Call VLCarregarImagensBotoes
   File /oname=$PLUGINSDIR\vl-welcome.bmp "${BUILD_RESOURCES_DIR}\vl-welcome.bmp"
   StrCpy $1 "$PLUGINSDIR\vl-welcome.bmp"
   Call VLPaginaComFundo
@@ -207,7 +213,7 @@ FunctionEnd
 
 Function VLCriarConclusao
   InitPluginsDir
-  Call VLExtrairBotoes
+  Call VLCarregarImagensBotoes
   File /oname=$PLUGINSDIR\vl-finish.bmp "${BUILD_RESOURCES_DIR}\vl-finish.bmp"
   StrCpy $1 "$PLUGINSDIR\vl-finish.bmp"
   Call VLPaginaComFundo
