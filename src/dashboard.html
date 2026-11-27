@@ -1681,11 +1681,11 @@
 
                   <span style="font-size:11px;font-weight:700;color:var(--text3)">FPS alvo</span>
 
-                  <span style="font-size:13px;font-weight:900;color:var(--purple);font-family:'JetBrains Mono',monospace" id="ls-target-val">300</span>
+                  <span style="font-size:13px;font-weight:900;color:var(--purple);font-family:'JetBrains Mono',monospace" id="ls-target-val">60</span>
 
                 </div>
 
-                <input type="range" id="ls-target-fps" min="30" max="300" step="1" value="300"
+                <input type="range" id="ls-target-fps" min="30" max="240" step="5" value="60"
 
                   oninput="document.getElementById('ls-target-val').textContent=this.value"
 
@@ -1885,11 +1885,11 @@
 
                 <span style="font-size:11px;font-weight:700;color:var(--text3)">Nitidez</span>
 
-                <span style="font-size:13px;font-weight:900;color:var(--purple);font-family:'JetBrains Mono',monospace" id="ls-sharp-val">0</span>
+                <span style="font-size:13px;font-weight:900;color:var(--purple);font-family:'JetBrains Mono',monospace" id="ls-sharp-val">50</span>
 
               </div>
 
-              <input type="range" id="ls-sharpness" min="0" max="100" value="0"
+              <input type="range" id="ls-sharpness" min="0" max="100" value="50"
 
                 oninput="document.getElementById('ls-sharp-val').textContent=this.value"
 
@@ -2026,6 +2026,15 @@
 
               <div class="toggle" id="ls-hdr-toggle" onclick="this.classList.toggle('on')" style="-webkit-app-region:no-drag"></div>
 
+            </div>
+
+            <!-- Optimized version toggle -->
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-top:1px solid var(--border)">
+              <div>
+                <div style="font-size:12px;font-weight:700;color:var(--text2)">Versão otimizada (FSR)</div>
+                <div style="font-size:10.5px;color:var(--text3)">Usa o FSRType OPTIMIZED, igual ao GDZ</div>
+              </div>
+              <div class="toggle on" id="ls-optimized-toggle" onclick="this.classList.toggle('on')" style="-webkit-app-region:no-drag"></div>
             </div>
 
             <!-- Resize before scale toggle -->
@@ -3818,6 +3827,8 @@
 
     sel('ls-fsr-type', LS_FROM_XML.FSRType[p.FSRType]);
 
+    tog('ls-optimized-toggle', p.FSRType === 'OPTIMIZED');
+
     rng('ls-sharpness', p.Sharpness == null ? null : Number(p.Sharpness) * 10, 'ls-sharp-val');
 
     sel('ls-scale-mode', p.ScalingMode === 'Custom' ? 'custom' : 'auto');
@@ -3874,7 +3885,7 @@
 
       lsfg3Multiplier: parseInt(document.getElementById('ls-multiplier')?.value || '2'),
 
-      lsfg3Target:    parseInt(document.getElementById('ls-target-fps')?.value || '300'),
+      lsfg3Target:    parseInt(document.getElementById('ls-target-fps')?.value || '60'),
 
       lsfg2Mode:      g('ls-lsfg2-mode'),
 
@@ -3892,13 +3903,15 @@
 
       fsrType:        g('ls-fsr-type'),
 
-      sharpness:      parseInt(document.getElementById('ls-sharpness')?.value || '0'),
+      sharpness:      parseInt(document.getElementById('ls-sharpness')?.value || '50'),
 
       scaleMode:      g('ls-scale-mode'),
 
       scaleFactor:    parseFloat(document.getElementById('ls-scale-factor')?.value || '1.5'),
 
       fitMode:        g('ls-fit-mode'),
+
+      optimized:      tog('ls-optimized-toggle'),
 
       windowedMode:   tog('ls-windowed-toggle'),
 

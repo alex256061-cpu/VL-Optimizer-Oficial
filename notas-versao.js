@@ -10,6 +10,14 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.102': {
+    corrigido: [
+      'VL Scaling: dashboard e janela separada agora usam o mesmo fluxo ls-launch do GDZ e o toggle Versao otimizada (FSRType=OPTIMIZED).',
+      'Defaults alinhados ao GDZ: painel com alvo 60 e nitidez 50; janela separada com alvo 100. O launch espera 9 s e confirma processo e Settings.xml antes de mostrar Ativo.',
+    ],
+    novo: [],
+  },
+
   '1.4.101': {
     corrigido: [
       'VL Scaling alinhado ao GDZ: a tela usa ls-launch, o toggle Versao otimizada grava FSRType=OPTIMIZED, o alvo padrao e 100 e o launch confirma o motor 9 s depois antes de marcar Ativo.',
