@@ -41,7 +41,15 @@
     System::Call 'user32::CreateWindowEx(i 0, w "Static", w "", i 0x5000000E, i 0, i 0, i 1, i 1, i $HWNDPARENT, i 0, i 0, i 0) i .r2'
     System::Call 'user32::LoadImage(i 0, w "$PLUGINSDIR\vl-footer.bmp", i 0, i 0, i 0, i 0x10) i .r3'
     SendMessage $2 0x0172 0 $3
+    StrCpy $vlFooter $2
     System::Call 'user32::SetWindowPos(i $2, i 1, i 0, i 314, i 497, i 44, i 0x0010)'
+  FunctionEnd
+
+  Function VLColocarRodapeAtras
+    GetDlgItem $0 $HWNDPARENT 2
+    StrCmp $0 0 vl_rodape_sem_cancel
+    System::Call 'user32::SetWindowPos(i $vlFooter, i r0, i 0, i 0, i 0, i 0, i 0x0013)'
+    vl_rodape_sem_cancel:
   FunctionEnd
 !macroend
 
@@ -53,6 +61,7 @@
 !define MUI_ABORTWARNING
 !define MUI_FINISHPAGE_TITLE "VL Optimizer instalado"
 !define MUI_FINISHPAGE_TEXT "O VL Optimizer esta pronto. Abra pelo atalho da Area de Trabalho ou pelo menu Iniciar e comece a otimizar."
+Var vlFooter
 
 ; Troca o desenho dos botoes nativos por imagens do VL, mantendo os mesmos IDs
 ; (o MUI continua controlando habilitar/desabilitar e a navegacao).
@@ -133,6 +142,7 @@ Function VLCriarBoasVindas
   StrCpy $1 "$PLUGINSDIR\vl-welcome.bmp"
   Call VLPaginaComFundo
   Call VLBotoesImagem
+  Call VLColocarRodapeAtras
   nsDialogs::Show
 FunctionEnd
 
@@ -149,6 +159,7 @@ Function VLCriarConclusao
   SendMessage $0 0x00F7 0 $2
   System::Call 'user32::InvalidateRect(i $0, i 0, i 1)'
   vl_conclui_sem_botao:
+  Call VLColocarRodapeAtras
   nsDialogs::Show
 FunctionEnd
 
