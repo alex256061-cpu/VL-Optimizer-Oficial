@@ -10,6 +10,15 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.98': {
+    corrigido: [
+      'Instalador: remove a faixa que estava cobrindo os botoes na tela de boas-vindas e conclusao.',
+    ],
+    novo: [
+      'Telas cheias do instalador com a arte tecnologica do VL e botoes personalizados PROXIMO/CANCELAR/CONCLUIR funcionando.',
+    ],
+  },
+
   '1.4.97': {
     corrigido: [],
     novo: [
