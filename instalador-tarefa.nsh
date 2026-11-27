@@ -52,12 +52,14 @@
 ; (o MUI continua controlando habilitar/desabilitar e a navegacao).
 !ifndef BUILD_UNINSTALLER
 Var vlFooter
-Function VLBotoesImagem
+Function VLExtrairBotoes
   InitPluginsDir
   File /oname=$PLUGINSDIR\vl-btn-next.bmp "${BUILD_RESOURCES_DIR}\btn-proximo.bmp"
   File /oname=$PLUGINSDIR\vl-btn-cancel.bmp "${BUILD_RESOURCES_DIR}\btn-cancelar.bmp"
   File /oname=$PLUGINSDIR\vl-btn-finish.bmp "${BUILD_RESOURCES_DIR}\btn-concluir.bmp"
+FunctionEnd
 
+Function VLBotoesImagem
   ; botoes 1 (Proximo/Concluir) e 2 (Cancelar)
   GetDlgItem $0 $HWNDPARENT 1
   StrCmp $0 0 vl_btn_sem_next
@@ -195,6 +197,7 @@ FunctionEnd
 
 Function VLCriarBoasVindas
   InitPluginsDir
+  Call VLExtrairBotoes
   File /oname=$PLUGINSDIR\vl-welcome.bmp "${BUILD_RESOURCES_DIR}\vl-welcome.bmp"
   StrCpy $1 "$PLUGINSDIR\vl-welcome.bmp"
   Call VLPaginaComFundo
@@ -204,6 +207,7 @@ FunctionEnd
 
 Function VLCriarConclusao
   InitPluginsDir
+  Call VLExtrairBotoes
   File /oname=$PLUGINSDIR\vl-finish.bmp "${BUILD_RESOURCES_DIR}\vl-finish.bmp"
   StrCpy $1 "$PLUGINSDIR\vl-finish.bmp"
   Call VLPaginaComFundo
