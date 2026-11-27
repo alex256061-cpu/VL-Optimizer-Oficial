@@ -57,6 +57,7 @@ Function VLBotoesImagem
 
   ; botoes 1 (Proximo/Concluir) e 2 (Cancelar)
   GetDlgItem $0 $HWNDPARENT 1
+  StrCmp $0 0 vl_btn_sem_next
   System::Call 'user32::GetWindowLong(i $0, i -16) i .r1'
   IntOp $1 $1 | 0x80
   System::Call 'user32::SetWindowLong(i $0, i -16, i r1)'
@@ -64,8 +65,10 @@ Function VLBotoesImagem
   System::Call 'user32::LoadImage(i 0, w "$PLUGINSDIR\vl-btn-next.bmp", i 0, i 0, i 0, i 0x10) i .r2'
   SendMessage $0 0x00F7 0 $2
   System::Call 'user32::InvalidateRect(i $0, i 0, i 1)'
+  vl_btn_sem_next:
 
   GetDlgItem $0 $HWNDPARENT 2
+  StrCmp $0 0 vl_btn_sem_cancel
   System::Call 'user32::GetWindowLong(i $0, i -16) i .r1'
   IntOp $1 $1 | 0x80
   System::Call 'user32::SetWindowLong(i $0, i -16, i r1)'
@@ -73,29 +76,59 @@ Function VLBotoesImagem
   System::Call 'user32::LoadImage(i 0, w "$PLUGINSDIR\vl-btn-cancel.bmp", i 0, i 0, i 0, i 0x10) i .r2'
   SendMessage $0 0x00F7 0 $2
   System::Call 'user32::InvalidateRect(i $0, i 0, i 1)'
+  vl_btn_sem_cancel:
 FunctionEnd
 
-Function VLBoasVindasShow
+; Preenche a pagina com um bitmap de fundo em tamanho cheio.
+Function VLPaginaComFundo
+  ; $0 = pagina, $1 = caminho do bmp
+  nsDialogs::Create 1018
+  Pop $0
+  ${NSD_CreateBitmap} 0 0 1 1 ""
+  Pop $2
+  System::Call 'user32::LoadImage(i 0, w r1, i 0, i 0, i 0, i 0x10) i .r3'
+  SendMessage $2 0x0172 0 $3
+  System::Alloc 16
+  Pop $3
+  System::Call 'user32::GetClientRect(i $0, i r3)'
+  System::Call '*$3(i .r4, i .r5, i .r6, i .r7)'
+  IntOp $6 $6 - $4
+  IntOp $7 $7 - $5
+  System::Call 'user32::SetWindowPos(i $2, i 0, i 0, i 0, i r6, i r7, i 0x0004)'
+  System::Free $3
+FunctionEnd
+
+Function VLCriarBoasVindas
+  InitPluginsDir
+  File /oname=$PLUGINSDIR\vl-welcome.bmp "${BUILD_RESOURCES_DIR}\vl-welcome.bmp"
+  StrCpy $1 "$PLUGINSDIR\vl-welcome.bmp"
+  Call VLPaginaComFundo
   Call VLBotoesImagem
+  nsDialogs::Show
 FunctionEnd
 
-Function VLConclusaoShow
+Function VLCriarConclusao
+  InitPluginsDir
+  File /oname=$PLUGINSDIR\vl-finish.bmp "${BUILD_RESOURCES_DIR}\vl-finish.bmp"
+  StrCpy $1 "$PLUGINSDIR\vl-finish.bmp"
+  Call VLPaginaComFundo
   Call VLBotoesImagem
   ; na conclusao o botao 1 vira "Concluir"
   GetDlgItem $0 $HWNDPARENT 1
+  StrCmp $0 0 vl_conclui_sem_botao
   System::Call 'user32::LoadImage(i 0, w "$PLUGINSDIR\vl-btn-finish.bmp", i 0, i 0, i 0, i 0x10) i .r2'
   SendMessage $0 0x00F7 0 $2
   System::Call 'user32::InvalidateRect(i $0, i 0, i 1)'
+  vl_conclui_sem_botao:
+  nsDialogs::Show
 FunctionEnd
 
 !macro customWelcomePage
-  !define MUI_PAGE_CUSTOMFUNCTION_SHOW VLBoasVindasShow
-  !insertmacro MUI_PAGE_WELCOME
+  Page custom VLCriarBoasVindas
 !macroend
 
 !macro customFinishPage
-  !define MUI_PAGE_CUSTOMFUNCTION_SHOW VLConclusaoShow
-  !insertmacro MUI_PAGE_FINISH
+  Page custom VLCriarConclusao
 !macroend
 !endif
 

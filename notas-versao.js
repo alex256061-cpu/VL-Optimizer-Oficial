@@ -10,6 +10,13 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.94': {
+    corrigido: [],
+    novo: [
+      'Boas-vindas e conclusao do instalador viraram telas cheias com arte tecnologica propria do VL, no lugar do layout padrao do NSIS.',
+    ],
+  },
+
   '1.4.93': {
     corrigido: [],
     novo: [
