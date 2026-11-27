@@ -82,9 +82,22 @@ FunctionEnd
 
 ; Preenche a pagina com um bitmap de fundo em tamanho cheio.
 Function VLPaginaComFundo
-  ; $0 = pagina, $1 = caminho do bmp
-  nsDialogs::Create 1018
+  ; $1 = caminho do bmp
+  nsDialogs::Create 1044
   Pop $0
+  ; esconde cabecalho, marca e linhas do MUI: o fundo e a arte da pagina
+  ShowWindow $mui.Header.Text ${SW_HIDE}
+  ShowWindow $mui.Header.SubText ${SW_HIDE}
+  ShowWindow $mui.Header.Background ${SW_HIDE}
+  ShowWindow $mui.Header.Image ${SW_HIDE}
+  ShowWindow $mui.Branding.Text ${SW_HIDE}
+  ShowWindow $mui.Branding.Background ${SW_HIDE}
+  ShowWindow $mui.Line.Standard ${SW_HIDE}
+  ShowWindow $mui.Line.FullWindow ${SW_NORMAL}
+  ; fundo escuro tambem no rodape da pagina personalizada
+  System::Call 'gdi32::CreateSolidBrush(i 0x0007030B) i .r8'
+  System::Call 'user32::SetClassLong(i $0, i -10, i r8)'
+  System::Call 'user32::SetClassLong(i $HWNDPARENT, i -10, i r8)'
   ${NSD_CreateBitmap} 0 0 1 1 ""
   Pop $2
   System::Call 'user32::LoadImage(i 0, w r1, i 0, i 0, i 0, i 0x10) i .r3'
