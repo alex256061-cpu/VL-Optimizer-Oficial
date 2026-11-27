@@ -19,9 +19,21 @@
 
 !macro customHeader
   Function VLDarkWindow
+    ; barra de titulo escura (Windows 10/11)
     System::Call 'dwmapi::DwmSetWindowAttribute(i $HWNDPARENT, i 20, *i 1, i 4)'
     System::Call 'dwmapi::DwmSetWindowAttribute(i $HWNDPARENT, i 19, *i 1, i 4)'
-    SetCtlColors $HWNDPARENT "F5F1F6" "0B0307"
+    ; fundo do rodape (a faixa onde ficam os botoes)
+    System::Call 'gdi32::CreateSolidBrush(i 0x0007030B) i .r0'
+    System::Call 'user32::SetClassLong(i $HWNDPARENT, i -10, i r0)'
+    System::Call 'user32::InvalidateRect(i $HWNDPARENT, i 0, i 1)'
+    ; botoes nativos no tema escuro
+    System::Call 'uxtheme::SetWindowTheme(i $HWNDPARENT, w "", w "")'
+    GetDlgItem $1 $HWNDPARENT 1
+    System::Call 'uxtheme::SetWindowTheme(i $1, w "", w "")'
+    SetCtlColors $1 "F5F1F6" "1A0710"
+    GetDlgItem $1 $HWNDPARENT 2
+    System::Call 'uxtheme::SetWindowTheme(i $1, w "", w "")'
+    SetCtlColors $1 "F5F1F6" "1A0710"
   FunctionEnd
 !macroend
 

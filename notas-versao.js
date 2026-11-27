@@ -10,6 +10,13 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.92': {
+    corrigido: [],
+    novo: [
+      'Rodape do instalador e botoes no tema escuro do VL, sem a faixa branca nativa.',
+    ],
+  },
+
   '1.4.91': {
     corrigido: [],
     novo: [
