@@ -35,6 +35,13 @@
     GetDlgItem $1 $HWNDPARENT 2
     System::Call 'uxtheme::SetWindowTheme(i $1, w "", w "")'
     SetCtlColors $1 "F5F1F6" "1A0710"
+    ; faixa tecnologica do rodape, criada ANTES dos botoes/paginas
+    InitPluginsDir
+    File /oname=$PLUGINSDIR\vl-footer.bmp "${BUILD_RESOURCES_DIR}\vl-footer.bmp"
+    System::Call 'user32::CreateWindowEx(i 0, w "Static", w "", i 0x5000000E, i 0, i 0, i 1, i 1, i $HWNDPARENT, i 0, i 0, i 0) i .r2'
+    System::Call 'user32::LoadImage(i 0, w "$PLUGINSDIR\vl-footer.bmp", i 0, i 0, i 0, i 0x10) i .r3'
+    SendMessage $2 0x0172 0 $3
+    System::Call 'user32::SetWindowPos(i $2, i 1, i 0, i 314, i 497, i 44, i 0x0010)'
   FunctionEnd
 !macroend
 
@@ -118,12 +125,6 @@ Function VLPaginaComFundo
   IntOp $7 $7 - $5
   System::Call 'user32::SetWindowPos(i $2, i 0, i 0, i 0, i r6, i r7, i 0x0004)'
   System::Free $3
-  ; faixa tecnologica do rodape, atras dos botoes
-  File /oname=$PLUGINSDIR\vl-footer.bmp "${BUILD_RESOURCES_DIR}\vl-footer.bmp"
-  System::Call 'user32::CreateWindowEx(i 0, w "Static", w "", i 0x5000000E, i 0, i 0, i 1, i 1, i $HWNDPARENT, i 0, i 0, i 0) i .r2'
-  System::Call 'user32::LoadImage(i 0, w "$PLUGINSDIR\vl-footer.bmp", i 0, i 0, i 0, i 0x10) i .r3'
-  SendMessage $2 0x0172 0 $3
-  System::Call 'user32::SetWindowPos(i $2, i 1, i 0, i 314, i 497, i 44, i 0x0010)'
 FunctionEnd
 
 Function VLCriarBoasVindas
