@@ -48,8 +48,7 @@
 
 ; Troca o desenho dos botoes nativos por imagens do VL, mantendo os mesmos IDs
 ; (o MUI continua controlando habilitar/desabilitar e a navegacao).
-!pragma warning push
-!pragma warning disable 6010
+!ifndef BUILD_UNINSTALLER
 Function VLBotoesImagem
   InitPluginsDir
   File /oname=$PLUGINSDIR\vl-btn-next.bmp "${BUILD_RESOURCES_DIR}\btn-proximo.bmp"
@@ -88,7 +87,6 @@ Function VLConclusaoShow
   SendMessage $0 0x00F7 0 $2
   System::Call 'user32::InvalidateRect(i $0, i 0, i 1)'
 FunctionEnd
-!pragma warning pop
 
 !macro customWelcomePage
   !define MUI_PAGE_CUSTOMFUNCTION_SHOW VLBoasVindasShow
@@ -101,6 +99,7 @@ FunctionEnd
   !insertmacro MUI_PAGE_FINISH
   !undef MUI_PAGE_CUSTOMFUNCTION_SHOW
 !macroend
+!endif
 
 ; Pula a pagina padrao "escolha uma opcao de instalacao".
 !macro customInstallmode
