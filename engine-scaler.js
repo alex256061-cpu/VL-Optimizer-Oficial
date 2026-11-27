@@ -231,23 +231,31 @@ function mountScaler(ex) {
       scaleFactor: c.scaleFactor,
       sharpness: c.sharpness,
       frameGeneration: c.fgType || c.frameGeneration,
+      lsfg2Mode: c.lsfg2Mode,
       multiplier: c.lsfg3Multiplier || 2,
       targetFps: c.lsfg3Target,
       flowScale: c.flowScale,
+      perfMode: !!c.perfMode,
       queueTarget: c.queueTarget,
       maxFrameLatency: c.maxFrameLatency,
+      scaleMode: c.scaleMode,
+      fitMode: c.fitMode,
+      windowedMode: !!c.windowedMode,
       syncMode: c.syncMode,
       captureApi: c.captureApi,
       lsfg3Mode: c.lsfg3Mode,
       resizeBefore: !!c.resizeBefore,
       hdrCompat: !!c.hdrCompat,
-      scaleCursor: !!c.scaleCursor,
+      scaleCursor: c.scaleCursor,
       vrs: c.vrs !== false,
       autoScale: !!c.autoScale,
       autoDelay: c.autoDelay,
+      startAsAdmin: !!c.startAsAdmin,
+      startMinimized: !!c.startMinimized,
+      drawFps: !!c.drawFps,
+      optimized: !!c.optimized,
     });
     if (!result.ok) return { success: false, error: result.error || result.message };
-    // dispara o atalho que faz o Lossless comecar a capturar
     const hotkey = pressStartHotkey();
     return {
       success: true,

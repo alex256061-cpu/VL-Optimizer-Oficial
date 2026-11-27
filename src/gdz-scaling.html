@@ -1175,100 +1175,35 @@ function setStatus(active, msg) {
 
 
 async function doLaunch() {
-
   const btn = document.getElementById('btn-launch');
-
   btn.disabled = true;
-
   btn.innerHTML = '<div class="spin"></div>Starting...';
-
   try {
-
-    const r = await ipcRenderer.invoke('gdz-scaling-apply', getConfig());
-
+    const r = await ipcRenderer.invoke('ls-launch', getConfig());
     btn.disabled = false;
-
     btn.textContent = 'Scale';
-
-    if (r && r.success) {
-
-      setStatus(true, r.embedded ? 'Ativo · FSR 1 interno' : 'Ativo');
-
-    } else {
-
-      // sem motor embutido: se o Lossless estiver instalado, usa ele como fallback
-      const caps = await ipcRenderer.invoke('gdz-scaling-caps').catch(() => null);
-
-      if (caps && !caps.ok) {
-
-        const ls = await ipcRenderer.invoke('ls-launch', getConfig()).catch(() => null);
-
-        if (ls && ls.success) { setStatus(true, 'Ativo · Lossless'); return; }
-
-      }
-
-      setStatus(false, r?.error ? r.error.split('\n')[0] : 'Error');
-
-    }
-
-  } catch(e) {
-
+    if (r && r.success) setStatus(true, 'Ativo');
+    else setStatus(false, r && r.error ? String(r.error).split('\n')[0] : 'Error');
+  } catch (e) {
     btn.disabled = false;
-
     btn.textContent = 'Scale';
-
     setStatus(false, e.message);
-
   }
-
 }
-
-
 
 async function doStop() {
-
-  try {
-
-    await ipcRenderer.invoke('gdz-scaling-revert');
-
-  } catch(e) {}
-
-  try {
-
-    await ipcRenderer.invoke('ls-stop');
-
-  } catch(e) {}
-
+  try { await ipcRenderer.invoke('ls-stop'); } catch (e) {}
   setStatus(false, 'Inativo');
-
   const btn = document.getElementById('btn-launch');
-
   btn.disabled = false;
-
   btn.textContent = 'Scale';
-
 }
 
 
-
-// init
 
 onFGTypeChange();
 
 onScaleTypeChange();
-
-// motor embutido: o cliente não instala nem paga nada
-(async function initScaler() {
-
-  try {
-
-    const caps = await ipcRenderer.invoke('gdz-scaling-caps');
-
-    if (caps) setStatus(false, caps.ok ? 'Motor FSR 1 interno pronto' : (caps.message || 'Motor indisponível'));
-
-  } catch (e) {}
-
-})();
 
 </script>
 
@@ -1292,4 +1227,3 @@ onScaleTypeChange();
 </body>
 
 </html>
-

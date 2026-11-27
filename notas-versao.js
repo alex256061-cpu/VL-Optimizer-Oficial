@@ -10,6 +10,14 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.100': {
+    corrigido: [
+      'VL Scaling: o botao Scale estava usando o fluxo antigo gdz-scaling-apply, que marcava Ativo sem aplicar a configuracao completa. Agora usa ls-launch, igual ao GDZ, gravando redimensionamento, Frame Generation, DrawFps e demais campos no motor Lossless.',
+      'O status nao mostra mais Ativo - FSR 1 interno quando o motor real nao foi configurado.',
+    ],
+    novo: [],
+  },
+
   '1.4.99': {
     corrigido: [
       'Remove a duplicacao do nome VL na barra de titulo e na sidebar: agora aparece apenas o logo VL + Optimizer, com os controles da janela a direita.',
