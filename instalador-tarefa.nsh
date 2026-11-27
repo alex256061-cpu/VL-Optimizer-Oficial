@@ -46,8 +46,57 @@
 !define MUI_FINISHPAGE_TITLE "VL Optimizer instalado"
 !define MUI_FINISHPAGE_TEXT "O VL Optimizer esta pronto. Abra pelo atalho da Area de Trabalho ou pelo menu Iniciar e comece a otimizar."
 
+; Troca o desenho dos botoes nativos por imagens do VL, mantendo os mesmos IDs
+; (o MUI continua controlando habilitar/desabilitar e a navegacao).
+Function VLBotoesImagem
+  InitPluginsDir
+  File /oname=$PLUGINSDIR\vl-btn-next.bmp "instalador\btn-proximo.bmp"
+  File /oname=$PLUGINSDIR\vl-btn-cancel.bmp "instalador\btn-cancelar.bmp"
+  File /oname=$PLUGINSDIR\vl-btn-finish.bmp "instalador\btn-concluir.bmp"
+
+  ; botoes 1 (Proximo/Concluir) e 2 (Cancelar)
+  GetDlgItem $0 $HWNDPARENT 1
+  System::Call 'user32::GetWindowLong(i $0, i -16) i .r1'
+  IntOp $1 $1 | 0x80
+  System::Call 'user32::SetWindowLong(i $0, i -16, i r1)'
+  SendMessage $0 0x000C 0 0
+  System::Call 'user32::LoadImage(i 0, w "$PLUGINSDIR\vl-btn-next.bmp", i 0, i 0, i 0, i 0x10) i .r2'
+  SendMessage $0 0x00F7 0 $2
+  System::Call 'user32::InvalidateRect(i $0, i 0, i 1)'
+
+  GetDlgItem $0 $HWNDPARENT 2
+  System::Call 'user32::GetWindowLong(i $0, i -16) i .r1'
+  IntOp $1 $1 | 0x80
+  System::Call 'user32::SetWindowLong(i $0, i -16, i r1)'
+  SendMessage $0 0x000C 0 0
+  System::Call 'user32::LoadImage(i 0, w "$PLUGINSDIR\vl-btn-cancel.bmp", i 0, i 0, i 0, i 0x10) i .r2'
+  SendMessage $0 0x00F7 0 $2
+  System::Call 'user32::InvalidateRect(i $0, i 0, i 1)'
+FunctionEnd
+
+Function VLBoasVindasShow
+  Call VLBotoesImagem
+FunctionEnd
+
+Function VLConclusaoShow
+  Call VLBotoesImagem
+  ; na conclusao o botao 1 vira "Concluir"
+  GetDlgItem $0 $HWNDPARENT 1
+  System::Call 'user32::LoadImage(i 0, w "$PLUGINSDIR\vl-btn-finish.bmp", i 0, i 0, i 0, i 0x10) i .r2'
+  SendMessage $0 0x00F7 0 $2
+  System::Call 'user32::InvalidateRect(i $0, i 0, i 1)'
+FunctionEnd
+
 !macro customWelcomePage
+  !define MUI_PAGE_CUSTOMFUNCTION_SHOW VLBoasVindasShow
   !insertmacro MUI_PAGE_WELCOME
+  !undef MUI_PAGE_CUSTOMFUNCTION_SHOW
+!macroend
+
+!macro customFinishPage
+  !define MUI_PAGE_CUSTOMFUNCTION_SHOW VLConclusaoShow
+  !insertmacro MUI_PAGE_FINISH
+  !undef MUI_PAGE_CUSTOMFUNCTION_SHOW
 !macroend
 
 ; Pula a pagina padrao "escolha uma opcao de instalacao".

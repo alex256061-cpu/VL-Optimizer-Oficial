@@ -10,6 +10,13 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.93': {
+    corrigido: [],
+    novo: [
+      'Botoes Proximo/Cancelar/Concluir do instalador com o visual do VL, no lugar dos botoes cinza padrao do Windows.',
+    ],
+  },
+
   '1.4.92': {
     corrigido: [],
     novo: [
