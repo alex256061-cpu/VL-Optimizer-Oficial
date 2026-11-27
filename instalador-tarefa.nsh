@@ -47,11 +47,11 @@
 !define MUI_ABORTWARNING
 !define MUI_FINISHPAGE_TITLE "VL Optimizer instalado"
 !define MUI_FINISHPAGE_TEXT "O VL Optimizer esta pronto. Abra pelo atalho da Area de Trabalho ou pelo menu Iniciar e comece a otimizar."
-Var vlFooter
 
 ; Troca o desenho dos botoes nativos por imagens do VL, mantendo os mesmos IDs
 ; (o MUI continua controlando habilitar/desabilitar e a navegacao).
 !ifndef BUILD_UNINSTALLER
+Var vlFooter
 Function VLBotoesImagem
   InitPluginsDir
   File /oname=$PLUGINSDIR\vl-btn-next.bmp "${BUILD_RESOURCES_DIR}\btn-proximo.bmp"
