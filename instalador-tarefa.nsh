@@ -50,9 +50,9 @@
 ; (o MUI continua controlando habilitar/desabilitar e a navegacao).
 Function VLBotoesImagem
   InitPluginsDir
-  File /oname=$PLUGINSDIR\vl-btn-next.bmp "instalador\btn-proximo.bmp"
-  File /oname=$PLUGINSDIR\vl-btn-cancel.bmp "instalador\btn-cancelar.bmp"
-  File /oname=$PLUGINSDIR\vl-btn-finish.bmp "instalador\btn-concluir.bmp"
+  File /oname=$PLUGINSDIR\vl-btn-next.bmp "${BUILD_RESOURCES_DIR}\btn-proximo.bmp"
+  File /oname=$PLUGINSDIR\vl-btn-cancel.bmp "${BUILD_RESOURCES_DIR}\btn-cancelar.bmp"
+  File /oname=$PLUGINSDIR\vl-btn-finish.bmp "${BUILD_RESOURCES_DIR}\btn-concluir.bmp"
 
   ; botoes 1 (Proximo/Concluir) e 2 (Cancelar)
   GetDlgItem $0 $HWNDPARENT 1
