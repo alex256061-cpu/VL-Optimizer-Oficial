@@ -45,12 +45,14 @@
     System::Call 'user32::SetWindowPos(i $2, i 1, i 0, i 314, i 497, i 44, i 0x0010)'
   FunctionEnd
 
+  !ifndef BUILD_UNINSTALLER
   Function VLColocarRodapeAtras
     GetDlgItem $0 $HWNDPARENT 2
     StrCmp $0 0 vl_rodape_sem_cancel
     System::Call 'user32::SetWindowPos(i $vlFooter, i r0, i 0, i 0, i 0, i 0, i 0x0013)'
     vl_rodape_sem_cancel:
   FunctionEnd
+  !endif
 !macroend
 
 !define MUI_BGCOLOR "0B0307"
