@@ -605,7 +605,7 @@
 
               </div>
 
-              <input type="range" id="ls-target" min="30" max="300" step="1" value="300"
+              <input type="range" id="ls-target" min="30" max="300" step="1" value="100"
 
                 oninput="document.getElementById('ls-target-val').textContent=this.value">
 
@@ -918,6 +918,13 @@
           </div>
           <div class="frow">
 
+            <span class="flbl">Versão otimizada (FSR)</span>
+
+            <div class="toggle on" id="ls-optimized" onclick="this.classList.toggle('on')"></div>
+
+          </div>
+          <div class="frow">
+
             <span class="flbl">Sombreamento variável (VRS)</span>
 
             <div class="toggle" id="ls-vrs" onclick="this.classList.toggle('on')"></div>
@@ -1137,6 +1144,8 @@ function getConfig() {
     fitMode:         'fullscreen',
 
     syncMode:        document.getElementById('ls-sync').value,
+
+    optimized:       tog('ls-optimized'),
 
     drawFps:         tog('ls-drawfps'),
 

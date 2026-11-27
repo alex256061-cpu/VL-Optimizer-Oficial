@@ -145,6 +145,7 @@ function normalize(cfg) {
     perfMode: c.perfMode,
     scaleType: c.scaleType,
     fsrType: c.fsrType,
+    optimized: c.optimized,
     scaleFactor: num(c.scaleFactor),
     sharpness: num(c.sharpness),
     fitMode: c.fitMode,
@@ -244,7 +245,10 @@ function gravar(cfgBruto) {
 
   // Escala
   if (c.scaleType != null) put('ScalingType', LS_SCALING[String(c.scaleType).toLowerCase()]);
-  if (c.fsrType != null) put('FSRType', LS_FSR[String(c.fsrType).toLowerCase()]);
+  // No GDZ o toggle "Optimized version" é o FSRType: ligado = OPTIMIZED, desligado = ORIGINAL.
+  // O select fsrType só escolhe entre FSR 1/2/3 e, no schema real, todos gravam ORIGINAL.
+  if (c.optimized != null) put('FSRType', c.optimized ? 'OPTIMIZED' : 'ORIGINAL');
+  else if (c.fsrType != null) put('FSRType', LS_FSR[String(c.fsrType).toLowerCase()]);
   if (c.scaleFactor != null) put('ScaleFactor', clampTag('ScaleFactor', c.scaleFactor));
   if (c.sharpness != null) put('Sharpness', clampTag('Sharpness', Number(c.sharpness) / 10));
   if (c.fitMode != null) put('ScalingFitMode', LS_FIT[String(c.fitMode).toLowerCase()]);

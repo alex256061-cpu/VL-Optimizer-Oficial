@@ -71,7 +71,7 @@ function buildSettings(config) {
   const c = config && typeof config === 'object' ? config : {};
   const type = SCALING_TYPE[String(c.scaleType || 'fsr').toLowerCase()] || 'FSR';
   const fg = FRAME_GENERATION[String(c.frameGeneration || 'off').toLowerCase()] || 'OFF';
-  const fsr = FSR_TYPE[String(c.fsrType || 'fsr1').toLowerCase()] || 'ORIGINAL';
+  const fsr = c.optimized ? 'OPTIMIZED' : (FSR_TYPE[String(c.fsrType || 'fsr1').toLowerCase()] || 'ORIGINAL');
   const sync = SYNC_MODE[String(c.syncMode || 'standard').toLowerCase()] || 'DEFAULT';
   const api = CAPTURE_API[String(c.captureApi || 'dxgi').toLowerCase()] || 'DXGI';
 

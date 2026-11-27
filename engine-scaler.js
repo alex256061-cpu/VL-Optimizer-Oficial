@@ -257,6 +257,27 @@ function mountScaler(ex) {
     });
     if (!result.ok) return { success: false, error: result.error || result.message };
     const hotkey = pressStartHotkey();
+
+    // Igual ao GDZ: espera o motor subir e confere se ele aceitou o Settings.xml.
+    // Antes a tela marcava "Ativo" só porque o processo foi chamado, mesmo que o motor
+    // tivesse voltado ao config antigo.
+    await new Promise((resolve) => setTimeout(resolve, 9000));
+
+    const st = engine.status();
+    if (!st.running) {
+      return { success: false, error: 'O VLScaling não ficou aberto. Veja se o antivírus bloqueou o motor ou execute o app como administrador.' };
+    }
+
+    let lido = null;
+    try { lido = engine.lerGravado(); } catch (e) { lido = null; }
+    const mapa = (lido && lido.settings) ? lido.settings : lido;
+    const esperado = result.settings || {};
+    const chaves = ['ScalingType', 'FrameGeneration', 'ResizeBeforeScaling', 'FSRType', 'ScaleFactor'];
+    const recusados = chaves.filter((k) => esperado[k] != null && mapa && mapa[k] != null && String(esperado[k]) !== String(mapa[k]));
+    if (recusados.length) {
+      return { success: false, error: 'O motor abriu, mas não aceitou a configuração: ' + recusados.join(', ') + '.' };
+    }
+
     return {
       success: true,
       engine: 'lossless',

@@ -10,6 +10,14 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const NOTAS = {
+  '1.4.101': {
+    corrigido: [
+      'VL Scaling alinhado ao GDZ: a tela usa ls-launch, o toggle Versao otimizada grava FSRType=OPTIMIZED, o alvo padrao e 100 e o launch confirma o motor 9 s depois antes de marcar Ativo.',
+      'lsLaunch agora repassa Draw FPS, resize, Start minimizado/admin e os demais campos; antes varios controles nao chegavam ao Settings.xml.',
+    ],
+    novo: [],
+  },
+
   '1.4.100': {
     corrigido: [
       'VL Scaling: o botao Scale estava usando o fluxo antigo gdz-scaling-apply, que marcava Ativo sem aplicar a configuracao completa. Agora usa ls-launch, igual ao GDZ, gravando redimensionamento, Frame Generation, DrawFps e demais campos no motor Lossless.',
